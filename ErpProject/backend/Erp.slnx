@@ -1,0 +1,18 @@
+<Solution>
+  <Project Path="Erp.Api/Erp.Api.csproj" />
+  <Project Path="Erp.Application/Erp.Application.csproj" />
+  <Project Path="Erp.Domain/Erp.Domain.csproj" />
+  <Project Path="Erp.Infrastructure/Erp.Infrastructure.csproj" />
+  <Project Path="Modules/Inventory/Domain/Erp.Modules.Inventory.Domain.csproj" />
+  <Project Path="Modules/Inventory/Application/Erp.Modules.Inventory.Application.csproj" />
+  <Project Path="Modules/Inventory/Infrastructure/Erp.Modules.Inventory.Infrastructure.csproj" />
+  <Project Path="Modules/Inventory/Api/Erp.Modules.Inventory.Api.csproj" />
+  <Project Path="Modules/Billing/Domain/Erp.Modules.Billing.Domain.csproj" />
+  <Project Path="Modules/Billing/Application/Erp.Modules.Billing.Application.csproj" />
+  <Project Path="Modules/Billing/Infrastructure/Erp.Modules.Billing.Infrastructure.csproj" />
+  <Project Path="Modules/Billing/Api/Erp.Modules.Billing.Api.csproj" />
+  <Project Path="Modules/Crm/Domain/Erp.Modules.Crm.Domain.csproj" />
+  <Project Path="Modules/Crm/Application/Erp.Modules.Crm.Application.csproj" />
+  <Project Path="Modules/Crm/Infrastructure/Erp.Modules.Crm.Infrastructure.csproj" />
+  <Project Path="Modules/Crm/Api/Erp.Modules.Crm.Api.csproj" />
+</Solution>

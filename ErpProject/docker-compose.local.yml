@@ -1,0 +1,22 @@
+# Override para desarrollo LOCAL
+# Uso: docker-compose -f docker-compose.yml -f docker-compose.local.yml up -d
+#
+# Diferencias vs producción:
+#  - nginx: sin SSL, acceso en http://localhost
+#  - backend: puerto 8080 expuesto directamente (para Swagger sin nginx)
+#  - ASPNETCORE_ENVIRONMENT: Development (activa seed de datos)
+
+services:
+  backend:
+    ports:
+      - "8081:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+
+  nginx:
+    volumes:
+      - ./deploy/nginx/erp.local.conf:/etc/nginx/conf.d/default.conf:ro
+      - uploads:/app/uploads:ro
+    # Sobreescribir para quitar el mount de SSL (que no existe en local)
+    ports:
+      - "80:80"

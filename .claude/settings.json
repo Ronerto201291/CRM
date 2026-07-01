@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet ef migrations add AddAuditLogEntityIdAndHash --project Erp.Infrastructure/Erp.Infrastructure.csproj --startup-project Erp.Api/Erp.Api.csproj --context ErpDbContext)",
+      "Bash(docker exec erpproject-postgres-1 psql -U erp_admin -d erp_saas_db -c ':*)",
+      "Bash(docker exec:*)",
+      "Bash(xargs cat)",
+      "Bash(xargs grep -l \"IEmailService\\\\|EmailService\\\\|SendEmail\")",
+      "Bash(dotnet build Modules/Billing/Infrastructure/Erp.Modules.Billing.Infrastructure.csproj --no-restore -v q)",
+      "Bash(dotnet build Erp.Application/Erp.Application.csproj --no-restore -v q)",
+      "Bash(docker-compose -f docker-compose.yml -f docker-compose.local.yml build frontend)",
+      "Bash(docker info:*)",
+      "Bash(docker context:*)",
+      "Bash(node_modules/.bin/next build:*)",
+      "Bash(grep -r \"class.*Controller\" /c/CRM/ErpProject/backend/Modules/*/Api/Controllers/ --include=\"*.cs\")",
+      "Bash(xargs basename:*)",
+      "Bash(wc -l /c/CRM/ErpProject/backend/Modules/Accounting/Api/Controllers/*.cs)",
+      "Bash(grep -n \"// TODO\\\\|// FIXME\\\\|NotImplemented\\\\|hardcoded\\\\|stub\" /c/CRM/ErpProject/backend/Modules/Crm/Application/Features/Crm/Handlers/*.cs)",
+      "Bash(grep -n \"CashFlowForecast \" c:/CRM/ErpProject/backend/Modules/Treasury/Domain/Entities/*.cs)"
+    ]
+  }
+}

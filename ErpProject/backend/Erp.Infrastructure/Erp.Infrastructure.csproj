@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Erp.Application\Erp.Application.csproj" />
+    <ProjectReference Include="..\Modules\Inventory\Application\Erp.Modules.Inventory.Application.csproj" />
+    <ProjectReference Include="..\Modules\Billing\Application\Erp.Modules.Billing.Application.csproj" />
+    <ProjectReference Include="..\Modules\Crm\Application\Erp.Modules.Crm.Application.csproj" />
+    <ProjectReference Include="..\Modules\Accounting\Application\Erp.Modules.Accounting.Application.csproj" />
+    <ProjectReference Include="..\Modules\Expenses\Application\Erp.Modules.Expenses.Application.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Hangfire.PostgreSql" Version="1.21.1" />
+    <PackageReference Include="MimeKit" Version="4.9.0" />
+    <PackageReference Include="RabbitMQ.Client" Version="7.0.0" />
+    <PackageReference Include="Otp.NET" Version="1.4.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.3" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.3" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="9.3.0" />
+    <PackageReference Include="StackExchange.Redis" Version="2.11.8" />
+    <PackageReference Include="Stripe.net" Version="47.2.0" />
+    <PackageReference Include="System.Security.Cryptography.Xml" Version="9.0.0" />
+    <PackageReference Include="QRCoder" Version="1.6.0" />
+    <PackageReference Include="Minio" Version="6.0.4" />
+    <PackageReference Include="MailKit" Version="4.9.0" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+</Project>

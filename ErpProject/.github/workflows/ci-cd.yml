@@ -1,0 +1,89 @@
+name: ERP CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore backend/Erp.slnx
+        working-directory: ./ErpProject
+
+      - name: Build
+        run: dotnet build backend/Erp.slnx --no-restore -c Release
+        working-directory: ./ErpProject
+
+      - name: Test
+        run: dotnet test backend/Erp.slnx --no-build -c Release
+        working-directory: ./ErpProject
+
+      - name: Build Docker Image
+        if: github.ref == 'refs/heads/main'
+        run: docker build -t erp-api:${{ github.sha }} -f backend/Dockerfile .
+        working-directory: ./ErpProject
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: ErpProject/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ./ErpProject/frontend
+
+      - name: Build
+        run: npm run build
+        working-directory: ./ErpProject/frontend
+
+      - name: Build Docker Image
+        if: github.ref == 'refs/heads/main'
+        run: docker build -t erp-frontend:${{ github.sha }} -f frontend/Dockerfile .
+        working-directory: ./ErpProject
+
+  deploy:
+    needs: [backend-build, frontend-build]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    steps:
+      - name: Deploy to Hetzner via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          port: ${{ secrets.HETZNER_SSH_PORT || '22' }}
+          script: |
+            set -e
+            cd /opt/erp
+
+            # Pull latest code
+            git pull origin main
+
+            # Pull updated images and recreate changed containers
+            docker compose pull
+            docker compose up -d --remove-orphans
+
+            # Remove dangling images to save disk space
+            docker image prune -f
+
+            echo "Deploy completed at $(date -u)"

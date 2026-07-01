@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Asp.Versioning.Mvc" Version="8.1.0" />
+    <PackageReference Include="Asp.Versioning.Mvc.ApiExplorer" Version="8.1.0" />
+    <PackageReference Include="Hangfire.AspNetCore" Version="1.8.23" />
+    <PackageReference Include="Hangfire.PostgreSql" Version="1.21.1" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.3" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.3">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.3" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+    <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Erp.Application\Erp.Application.csproj" />
+    <ProjectReference Include="..\Erp.Infrastructure\Erp.Infrastructure.csproj" />
+    <ProjectReference Include="..\Modules\Inventory\API\Erp.Modules.Inventory.Api.csproj" />
+    <ProjectReference Include="..\Modules\Billing\Application\Erp.Modules.Billing.Application.csproj" />
+    <ProjectReference Include="..\Modules\Crm\Application\Erp.Modules.Crm.Application.csproj" />
+    <ProjectReference Include="..\Modules\Billing\Api\Erp.Modules.Billing.Api.csproj" />
+    <ProjectReference Include="..\Modules\Crm\Api\Erp.Modules.Crm.Api.csproj" />
+    <ProjectReference Include="..\Modules\Accounting\Api\Erp.Modules.Accounting.Api.csproj" />
+    <ProjectReference Include="..\Modules\Expenses\Api\Erp.Modules.Expenses.Api.csproj" />
+    <!-- Per-module Infrastructure (DbContexts + DI) -->
+    <ProjectReference Include="..\Modules\Billing\Infrastructure\Erp.Modules.Billing.Infrastructure.csproj" />
+    <ProjectReference Include="..\Modules\Crm\Infrastructure\Erp.Modules.Crm.Infrastructure.csproj" />
+    <ProjectReference Include="..\Modules\Inventory\Infrastructure\Erp.Modules.Inventory.Infrastructure.csproj" />
+    <ProjectReference Include="..\Modules\Accounting\Infrastructure\Erp.Modules.Accounting.Infrastructure.csproj" />
+    <ProjectReference Include="..\Modules\Expenses\Infrastructure\Erp.Modules.Expenses.Infrastructure.csproj" />
+    <ProjectReference Include="..\Modules\Purchasing\Erp.Modules.Purchasing.Infrastructure.csproj" />
+    <ProjectReference Include="..\Modules\Sales\Erp.Modules.Sales.Infrastructure.csproj" />
+    <!-- Treasury module -->
+    <ProjectReference Include="..\Modules\Treasury\Application\Erp.Modules.Treasury.Application.csproj" />
+    <ProjectReference Include="..\Modules\Treasury\Api\Erp.Modules.Treasury.Api.csproj" />
+    <ProjectReference Include="..\Modules\Treasury\Infrastructure\Erp.Modules.Treasury.Infrastructure.csproj" />
+    <ProjectReference Include="..\Modules\Payroll\Api\Erp.Modules.Payroll.Api.csproj" />
+    <ProjectReference Include="..\Modules\Payroll\Infrastructure\Erp.Modules.Payroll.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,125 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: erp-api
+  labels:
+    app: erp-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: erp-api
+  template:
+    metadata:
+      labels:
+        app: erp-api
+    spec:
+      containers:
+        - name: erp-api
+          image: erp-api:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: ConnectionStrings__DefaultConnection
+              valueFrom:
+                secretKeyRef:
+                  name: erp-secrets
+                  key: db-connection
+            - name: ConnectionStrings__Redis
+              value: "erp-redis:6379"
+            - name: Jwt__Secret
+              valueFrom:
+                secretKeyRef:
+                  name: erp-secrets
+                  key: jwt-secret
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: erp-api
+spec:
+  selector:
+    app: erp-api
+  ports:
+    - port: 80
+      targetPort: 8080
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: erp-frontend
+  labels:
+    app: erp-frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: erp-frontend
+  template:
+    metadata:
+      labels:
+        app: erp-frontend
+    spec:
+      containers:
+        - name: erp-frontend
+          image: erp-frontend:latest
+          ports:
+            - containerPort: 3000
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: erp-frontend
+spec:
+  selector:
+    app: erp-frontend
+  ports:
+    - port: 80
+      targetPort: 3000
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: erp-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+    - host: erp.yourdomain.com
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: erp-api
+                port:
+                  number: 80
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: erp-frontend
+                port:
+                  number: 80

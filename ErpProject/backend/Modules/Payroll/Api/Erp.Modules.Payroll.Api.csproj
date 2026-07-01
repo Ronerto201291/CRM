@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.3" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Application\Erp.Modules.Payroll.Application.csproj" />
+    <ProjectReference Include="..\..\Accounting\Application\Erp.Modules.Accounting.Application.csproj" />
+    <ProjectReference Include="..\..\..\Erp.Infrastructure\Erp.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

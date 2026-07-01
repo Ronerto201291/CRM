@@ -1,0 +1,44 @@
+"use client";
+import React, { useState } from "react";
+export default function SerialsPage() {
+  const [serials, setSerials] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const fetchSerials = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/v1/inventory/serials`);
+      const data = await res.json();
+      setSerials(data || []);
+    } finally {
+      setLoading(false);
+    }
+  };
+  React.useEffect(() => { fetchSerials(); }, []);
+  return (
+    <div>
+      <h1 className="text-2xl font-bold mb-4">Serial Numbers</h1>
+      {loading && <p>Loading...</p>}
+      <a href="/inventory/serials/new" className="px-4 py-2 bg-blue-600 text-white rounded">New Serial</a>
+      <table className="w-full border mt-4">
+        <thead>
+          <tr className="bg-gray-200">
+            <th className="border p-2">Serial</th>
+            <th className="border p-2">Product</th>
+            <th className="border p-2">Status</th>
+            <th className="border p-2">Sold Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          {serials.map(s => (
+            <tr key={s.id}>
+              <td className="border p-2">{s.serial}</td>
+              <td className="border p-2">{s.productId}</td>
+              <td className="border p-2">{s.status}</td>
+              <td className="border p-2">{s.soldDate || '-'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
