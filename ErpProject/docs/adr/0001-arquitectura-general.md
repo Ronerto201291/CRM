@@ -243,30 +243,19 @@ dominio sin acoplarse directamente a otros módulos. La resolución de
 
 ## Consecuencias
 - **`backend/Erp.slnx` no refleja todos los módulos activos.** El archivo
-  de solución solo registra explícitamente los proyectos de Inventory,
-  Billing y CRM:
-  ```xml
-  <Solution>
-    <Project Path="Erp.Api/Erp.Api.csproj" />
-    <Project Path="Erp.Application/Erp.Application.csproj" />
-    <Project Path="Erp.Domain/Erp.Domain.csproj" />
-    <Project Path="Erp.Infrastructure/Erp.Infrastructure.csproj" />
-    <Project Path="Modules/Inventory/..." />  (Domain/Application/Infrastructure/Api)
-    <Project Path="Modules/Billing/..." />    (Domain/Application/Infrastructure/Api)
-    <Project Path="Modules/Crm/..." />        (Domain/Application/Infrastructure/Api)
-  </Solution>
-  ```
-  Sin embargo, `Program.cs` referencia y registra explícitamente además
-  Accounting, Expenses, Treasury, Payroll, Purchasing y Sales — módulos que
-  existen como carpetas de proyecto completas bajo `backend/Modules/` con
-  su propio `.csproj`, y que compilan porque `Erp.Api.csproj` los
-  referencia directamente (no depende del `.slnx` para resolver
-  dependencias de proyecto). Esto es una **inconsistencia de tooling**: IDEs
-  que abran la solución vía `Erp.slnx` (Visual Studio, Rider) no mostrarán
-  seis de los nueve módulos de negocio, lo que puede llevar a
-  desincronización al añadir archivos nuevos o a confusión sobre qué
-  módulos existen. Conviene reconciliar `Erp.slnx` para que liste los
-  cuatro proyectos de cada uno de los nueve módulos.
+  de solución solo registra explícitamente los cuatro proyectos de
+  Inventory, Billing y CRM (además de los cuatro núcleo). Sin embargo,
+  `Program.cs` referencia y registra explícitamente además Accounting,
+  Expenses, Treasury, Payroll, Purchasing y Sales — módulos que existen
+  como carpetas de proyecto completas bajo `backend/Modules/` con su
+  propio `.csproj`, y que compilan porque `Erp.Api.csproj` los referencia
+  directamente (no depende del `.slnx` para resolver dependencias de
+  proyecto). Esto es una **inconsistencia de tooling**: IDEs que abran la
+  solución vía `Erp.slnx` (Visual Studio, Rider) no mostrarán seis de los
+  nueve módulos de negocio, lo que puede llevar a desincronización al
+  añadir archivos nuevos o a confusión sobre qué módulos existen. Conviene
+  reconciliar `Erp.slnx` para que liste los cuatro proyectos de cada uno
+  de los nueve módulos.
 - El **outbox** garantiza entrega at-least-once pero no order-preserving
   entre distintos tipos de evento; los consumidores deben ser idempotentes.
 - El interceptor de auditoría transversal (`AuditInterceptor.cs`) está
