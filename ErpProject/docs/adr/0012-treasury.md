@@ -181,9 +181,20 @@ otro módulo, no vía evento — acoplamiento real, no solo de lectura trivial.
   de la conciliación posterior. Cualquier feature que necesite tesorería en
   tiempo real debe tenerlo en cuenta.
 - `ConsolidationController.ConsolidateGroup` es, en la práctica, un stub:
-  valida la existencia del grupo pero no genera `ConsolidatedFinancialStatement`
-  reales ni aplica `ConsolidationAdjustments` — la consolidación de grupos
-  multi-sociedad está solo parcialmente implementada.
+  valida la existencia del grupo y responde `"Consolidated"`, pero no genera
+  `ConsolidatedFinancialStatement` reales ni aplica `ConsolidationAdjustments`
+  — confirmado que esa tabla **nunca se escribe en ningún punto del código**,
+  así que `GetFinancialStatements` (que lee de ahí) siempre devuelve vacío.
+  La consolidación de grupos multi-sociedad no está implementada, solo
+  aparenta estarlo (ver catálogo de mock en ADR-0018, ítem 15 del backlog).
+- `ExchangeRateRefreshJob` (actualización diaria de tipos de cambio desde el
+  BCE) nunca hace nada en la práctica: corre como `BackgroundService` fuera
+  de un request HTTP, y `TenantContext.TenantId` solo lo puebla
+  `TenantResolverMiddleware` por petición — fuera de ese contexto siempre es
+  `null`, así que el job hace no-op silencioso todos los días, sin log ni
+  error. `EcbExchangeRateProvider` (el cliente HTTP real contra el BCE) está
+  bien implementado pero es inalcanzable en producción tal como está cableado
+  (ver ADR-0018, ítem 16 del backlog).
 - La conciliación bancaria automática es heurística (coincidencia de importe
   + fecha/regex de referencia) y no criptográficamente determinista; en
   cuentas con muchos movimientos del mismo importe y fecha puede producir

@@ -47,7 +47,7 @@ varios módulos tienen hallazgos así (ver tabla).
 | [0015](adr/0015-automatizacion.md) | Automatización | Motor de reglas no funcional: no persiste, ni frontend ni job están conectados |
 | [0016](adr/0016-api-publica-keys.md) | API Pública y API Keys | Dos sistemas de API Key en paralelo y desconectados |
 | [0017](adr/0017-audit-logs.md) | Audit Logs | El interceptor que debería auditar cambios nunca se invoca |
-| [0018](adr/0018-calidad-arquitectura.md) | Calidad arquitectónica (transversal) | 26/43 controllers bypasean CQRS con lógica de negocio inline; core depende de 5 módulos (dirección invertida); duplicado VAT sin corregir |
+| [0018](adr/0018-calidad-arquitectura.md) | Calidad arquitectónica (transversal) | Backlog de remediación (5/19 corregidos); catálogo completo de datos mock; credenciales hardcodeadas documentadas aparte (última prioridad) |
 
 ## Cómo usar esta carpeta
 

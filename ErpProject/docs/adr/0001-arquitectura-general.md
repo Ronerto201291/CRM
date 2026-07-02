@@ -280,3 +280,11 @@ incumple en 26 de 43 controllers de todo el backend (ver ADR-0018 §5 y §7).
   mayor riesgo estructural del repositorio: cualquier refactor amplio
   (p. ej. tocar `ModuleDbContextBase` o el pipeline de MediatR) solo puede
   validarse manualmente o mediante build + smoke test.
+- Existen **dos implementaciones distintas del procesador de outbox**:
+  `Erp.Infrastructure/Services/OutboxProcessorJob.cs` (la real, registrada
+  en `Program.cs:322`, con `SELECT ... FOR UPDATE SKIP LOCKED` para escalado
+  horizontal) y `Erp.Infrastructure/BackgroundJobs/OutboxMessageProcessorJob.cs`
+  (completa y correcta, pero huérfana — nunca se registra en Hangfire).
+  Cualquiera que audite el patrón outbox debe saber cuál de las dos es la
+  que realmente corre (ver catálogo de mock/código muerto en ADR-0018, ítem
+  19 del backlog).

@@ -206,3 +206,9 @@ Creación y bloqueo de una factura, con propagación a Accounting:
   InvoiceSequecing) que sugieren una migración incompleta hacia un modelo
   más granular; cualquier trabajo futuro en esa área debe empezar
   comprobando si siguen desconectadas del `DbContext`.
+- `frontend/src/app/billing/facturae/page.tsx` es una página 100% estática
+  (array hardcodeado, sin ninguna llamada `fetch`) con los 5 botones
+  ("Descargar XML", "Firmar Digitalmente", "Enviar a VERI\*FACTU"...) sin
+  `onClick` — a pesar de que el backend (`FacturaEController`) sí genera XML
+  real. Es puramente un hueco de frontend, no de backend (ver catálogo de
+  mock en ADR-0018, ítem 17 del backlog).

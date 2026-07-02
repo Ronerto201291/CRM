@@ -245,3 +245,9 @@ Accounting. `VatController.DeclareModelo330` sigue siendo un stub sin tocar.
   nombres de campo del frontend (es una calculadora manual: el usuario
   introduce los ingresos, no se derivan de `VatTransactions`) y corrige ese
   bug real de contrato, además de la duplicación de lógica.
+- `frontend/src/app/accounting/iva-registers/page.tsx` es una página 100%
+  estática: cifras de cabecera hardcodeadas que ni siquiera coinciden con
+  las de la tabla que muestra debajo, y botones "Descargar .TXT"/"Enviar a
+  SII" sin `onClick`. Es el contrapunto de frontend al ya conocido
+  `IvaManagementController` (backend) mock (ver catálogo de mock en
+  ADR-0018, ítem 18 del backlog).

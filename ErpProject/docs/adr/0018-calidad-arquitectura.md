@@ -16,6 +16,14 @@ checklist que resume queda incorporado de forma permanente en
 `0000-template.md`, para que cualquier ADR nuevo (módulo o revisión) se
 evalúe siempre contra los mismos siete puntos.
 
+Además de la auditoría arquitectónica, este ADR mantiene dos catálogos
+transversales que se actualizan a medida que se encuentran o corrigen
+hallazgos: un **catálogo de datos y lógica simulada (mock)** — qué partes
+del sistema aparentan funcionar pero no hacen lo que dicen — y una lista
+separada de **credenciales/secretos hardcodeados**, deliberadamente fuera
+del backlog de remediación por ser deuda de seguridad/configuración, no de
+arquitectura.
+
 ## Decisión
 
 ### 1. SOLID
@@ -321,6 +329,11 @@ medida que se completa cada uno.
 | 12 | Sales y Purchasing: un solo assembly, sin frontera de capas real | Purchasing / Sales | Pendiente |
 | 13 | `Erp.Infrastructure` depende de 5 módulos (dirección invertida) | Core | Pendiente |
 | 14 | Entidades núcleo de Inventory fuera de `Modules/Inventory/Domain` | Inventory | Pendiente |
+| 15 | `ConsolidationController.ConsolidateGroup` responde éxito sin consolidar nada; `ConsolidatedFinancialStatements` nunca se escribe | Treasury | Pendiente |
+| 16 | `ExchangeRateRefreshJob` no hace nada nunca: corre fuera de contexto HTTP y `TenantContext.TenantId` siempre es `null` ahí, sin log ni error | Treasury | Pendiente |
+| 17 | `frontend/billing/facturae/page.tsx` — página 100% mock, botones sin `onClick`, mientras el backend (`FacturaEController`) sí es real | Billing (frontend) | Pendiente |
+| 18 | `frontend/accounting/iva-registers/page.tsx` — página 100% mock con cifras inconsistentes entre cabecera y tabla | Accounting (frontend) | Pendiente |
+| 19 | `OutboxMessageProcessorJob.cs` — implementación completa y correcta del procesador de Outbox, pero huérfana: nunca se registra, existe un duplicado distinto que sí corre (`OutboxProcessorJob.cs`) | Core | Pendiente |
 
 Los ítems 13 y 14 son los de mayor riesgo/alcance (tocan la dirección de
 dependencias del monolito modular entero) y deberían abordarse solo después
@@ -340,3 +353,65 @@ implementación "real" con la que unificar. Migrarlos a CQRS solo tiene
 sentido cuando se implemente la lógica fiscal real correspondiente — hacerlo
 antes sería una abstracción prematura. Se dejan documentados como mock en
 ADR-0006 y fuera de este barrido de "controllers delgados".
+
+## Catálogo de datos y lógica simulada (mock)
+
+Barrido dedicado (dos agentes de investigación en paralelo, sin reutilizar
+solo lo ya sabido) para responder una pregunta concreta: **¿qué partes del
+sistema aparentan funcionar pero no hacen lo que dicen hacer?** Cada fila
+está verificada leyendo el código citado — no es una sospecha, es un hecho
+confirmado. Los ítems marcados "→ backlog #N" ya están en la tabla de
+Próximos pasos; el resto son hallazgos nuevos de este barrido, añadidos como
+ítems 15-19 arriba.
+
+| Módulo | Qué aparenta hacer | Qué hace en realidad | Ref. |
+|---|---|---|---|
+| Accounting | `AeatModelsController`, `IvaManagementController`, `InversionSujetoActivoController`, `FinancialStatementsController`, `AgingController` calculan/declaran modelos fiscales reales | Devuelven cifras fijas hardcodeadas, sin persistencia ni cálculo real | ADR-0006, backlog #3c |
+| Accounting | `ViesController` valida NIF-IVA contra el registro VIES de la UE | Diccionario estático de 4 NIFs de prueba; el válido de verdad está en `Erp.Api/TaxController` | ADR-0006/0013, backlog #5 |
+| Accounting (frontend) | `iva-registers/page.tsx` muestra libros de IVA reales exportables a SII | Página 100% estática; cifras de cabecera y de la tabla ni siquiera coinciden entre sí; botones "Descargar .TXT"/"Enviar a SII" sin `onClick` | **Nuevo → backlog #18** |
+| Billing (frontend) | `billing/facturae/page.tsx` gestiona documentos FacturaE reales (firmar, enviar a VERI\*FACTU) | Página 100% estática con array hardcodeado; los 5 botones no tienen `onClick`. El backend (`FacturaEController`) sí es real — es solo el frontend el que está desconectado | **Nuevo → backlog #17** |
+| Treasury | `ConsolidationController.ConsolidateGroup` consolida estados financieros de un grupo empresarial | Solo comprueba que el grupo existe y responde `"Consolidated"`; no agrega nada. `ConsolidatedFinancialStatements` (la tabla que lee `GetFinancialStatements`) nunca se escribe en ningún sitio del código — es una tabla de solo lectura que siempre estará vacía | **Nuevo → backlog #15** |
+| Treasury | `ExchangeRateRefreshJob` actualiza tipos de cambio a diario desde el BCE (`EcbExchangeRateProvider`, que sí está bien implementado) | El job corre como `BackgroundService` fuera de contexto HTTP, así que `TenantContext.TenantId` siempre es `null` ahí (solo lo puebla `TenantResolverMiddleware` por request) — el job hace no-op silencioso todos los días, para siempre, sin log ni error visible | **Nuevo → backlog #16** |
+| Automatización | Motor de reglas evalúa condiciones y ejecuta acciones automáticas | `CreateRuleCommand` nunca persiste, el frontend (`settings/automation`) es JSX estático sin `fetch`, y el único job real (`RuleEvaluatorJob`) nunca se registra en Hangfire | ADR-0015, backlog (ver ADR-0015) |
+| API pública | Sistema unificado de API Keys con rate limiting | Dos sistemas paralelos y desconectados; `PublicApiController` depende de un validator no registrado en DI | ADR-0016 |
+| Audit Logs | Interceptor de `SaveChangesAsync` audita todos los cambios automáticamente | El interceptor existe pero nunca se invoca desde ningún `SaveChangesAsync` — `AuditLogsController` consulta una tabla que en la práctica no se puebla | ADR-0017 |
+| Suscripciones | `Subscription.ActiveModules` (JSONB) determina qué módulos tiene activos un tenant | Se escribe al dar de alta, pero el gating real (`ModuleAuthorizationHandler`) usa exclusivamente `TenantModules`/`Plan.PlanModules` — ese JSONB es dato muerto | ADR-0014 |
+| Core (Outbox) | `OutboxMessageProcessorJob.cs` procesa el outbox transaccional | Implementación completa y correcta, pero **huérfana**: nunca se registra en Hangfire. El que realmente corre es un archivo distinto, `OutboxProcessorJob.cs` (registrado en `Program.cs:322`, con `SELECT ... FOR UPDATE SKIP LOCKED` para escalado horizontal) — dos implementaciones del mismo concepto, una muerta | **Nuevo → backlog #19** |
+
+**Módulos confirmados sin datos simulados** (verificado explícitamente, no
+solo "no se encontró nada"): CRM (Clients/Contacts/Leads/Suppliers/Alerts/Notes
+son CRUD real), Payroll (real, y sus exports TC1/TC2/RED se auto-etiquetan
+honestamente como "documento orientativo" vía `FiscalExportHeaders.MarkAsNonOfficial`
+— no es un mock oculto, es un disclaimer explícito), Expenses (OCR con
+Tesseract real), Inventory, Sales y Purchasing (CRUD real en sus
+controllers), y el resto de Treasury (`GuaranteesController`,
+`FinancingController`, `CurrenciesController`, `TreasuryController`).
+
+## Credenciales y secretos hardcodeados
+
+> **Esto es lo último de lo último a corregir.** No forma parte de la tabla
+> de Próximos pasos: es deuda de seguridad/configuración, no de arquitectura,
+> y su prioridad de negocio la decide el usuario, no este ADR. Se documenta
+> aquí únicamente para que quede registrado y nadie asuma que no existe.
+
+Barrido dedicado sobre todo el repo (backend, frontend, docker-compose,
+`deploy/`, CI/CD, `k8s/`). El patrón general del proyecto es correcto —
+CI/CD usa `${{ secrets.* }}`, Kubernetes usa `secretKeyRef`, `.env.example`
+solo tiene nombres de variable vacíos con instrucciones para generarlas, y
+no hay ningún `.env` real commiteado. Los hallazgos reales están todos
+concentrados en `appsettings.Development.json` y dos *fallbacks* de código:
+
+| Severidad | Archivo | Qué hay |
+|---|---|---|
+| **Alta** | `backend/Erp.Api/appsettings.Development.json:14` | Connection string de Postgres apuntando a una IP externa real (`89.167.102.120:5433`), usuario `postgres`, contraseña `123456` |
+| **Alta** | `backend/Erp.Api/appsettings.Development.json:18` | Contraseña del admin semilla, `DevChangeMe2026!!` (usada por `Program.cs` para crear `admin@devcorp.com` vía BCrypt si la BD está vacía y `ASPNETCORE_ENVIRONMENT=Development`) |
+| Media | `backend/Erp.Api/Controllers/AdminController.cs:28` | El acceso de super-admin está gateado a un email literal (`admin@devcorp.com`) en vez de un rol/claim — no se puede rotar sin redeploy, y combinado con la fila anterior es una credencial completa conocida |
+| Media | `backend/Erp.Api/Program.cs:405-414` | Mismo email `admin@devcorp.com` hardcodeado en la lógica de seed |
+| Media | `backend/Erp.Infrastructure/Messaging/RabbitMqConnectionFactory.cs:37` | Fallback silencioso a las credenciales por defecto de RabbitMQ (`guest:guest`) si no se configura `RabbitMQ:Uri` — mitigado porque RabbitMQ está deshabilitado por defecto |
+| Media | `backend/Erp.Infrastructure/Services/Storage/MinioFileStorageService.cs:32-33` | Fallback silencioso a las credenciales por defecto de MinIO (`minioadmin`/`minioadmin`) si no se configuran `Storage:AccessKey`/`Storage:SecretKey` |
+
+El resto de valores encontrados (Stripe `sk_test_dummy`, SMTP `dummy`/`dummy`,
+JWT secret de `appsettings.Development.json` autoetiquetado "change-in-prod-via-env",
+connection string `localhost`/`postgres`/`postgres` de dev) son placeholders
+obviamente falsos o correctamente vacíos en el template de producción — no
+se listan como hallazgo porque no representan una credencial real filtrada.
