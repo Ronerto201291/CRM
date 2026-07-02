@@ -335,10 +335,36 @@ medida que se completa cada uno.
 | 18 | `frontend/accounting/iva-registers/page.tsx` — página 100% mock con cifras inconsistentes entre cabecera y tabla | Accounting (frontend) | Pendiente |
 | 19 | `OutboxMessageProcessorJob.cs` — implementación completa y correcta del procesador de Outbox, pero huérfana: nunca se registra, existe un duplicado distinto que sí corre (`OutboxProcessorJob.cs`) | Core | Pendiente |
 
-Los ítems 13 y 14 son los de mayor riesgo/alcance (tocan la dirección de
-dependencias del monolito modular entero) y deberían abordarse solo después
-de validar los anteriores, con más contexto y posiblemente en su propia
-rama/PR dedicado — no como parte de este barrido incremental.
+**Ítems 20+: mejoras funcionales (nivel producto).** A diferencia de 1-19
+(deuda de código: duplicación, CQRS, estructura), estos son huecos
+funcionales — el ERP hace CRUD correcto por módulo pero no los conecta como
+procesos de negocio reales, o tiene funcionalidad fiscal/financiera
+simulada en vez de real. Alcance y esfuerzo mayores; no son "arreglar algo
+roto" sino "construir la integración/lógica que falta". Priorizados por
+relación esfuerzo/impacto (los primeros reutilizan código que ya existe).
+
+| # | Mejora | Módulos | Prioridad |
+|---|---|---|---|
+| 20 | `GoodsReceipt` (Purchasing) no incrementa stock en Inventory al recibir mercancía — sin esto, "recepción de compra" no tiene efecto real en el almacén | Purchasing → Inventory | Alta |
+| 21 | `DeliveryNote` (Sales) no decrementa stock en Inventory al entregar — sin esto, "entrega de pedido" no descuenta existencias | Sales → Inventory | Alta |
+| 22 | `Sales.CustomerInvoice` y `Billing.Invoice` son dos sistemas de facturación de cliente paralelos y desconectados; hay que decidir cuál es la fuente de verdad fiscal (Billing tiene hash-chain/cumplimiento antifraude, Sales no) y conectar Sales a Billing en vez de duplicar | Sales ↔ Billing | Alta |
+| 23 | `SalesOrder.ClientId`/`ClientName` es texto suelto sin FK real a `Crm.Client` — Sales no está realmente integrado con CRM | Sales ↔ Crm | Media |
+| 24 | Implementar Modelo 303 (IVA trimestral) real a partir de `VatTransaction`/`JournalEntry`, sustituyendo el stub de `AeatModelsController` | Accounting | Alta (es la declaración que más pymes presentan) |
+| 25 | Implementar Modelo 347 (operaciones anuales >3.005,06€) real, sustituyendo el stub | Accounting | Media |
+| 26 | Estados financieros reales (cash-flow, cuenta de resultados) generados desde `JournalEntry`/`JournalEntryLine`, sustituyendo `FinancialStatementsController` | Accounting | Media |
+| 27 | Activar el motor de automatización: registrar `RuleEvaluatorJob` en Hangfire, hacer que `CreateRuleCommand` persista, conectar `settings/automation` al backend — la lógica de negocio (facturas vencidas, stock bajo) ya existe, solo falta cablearla | Core/Automatización | Alta (bajo esfuerzo, ya construido) |
+| 28 | Sustituir la importación manual de CSV bancario por integración de banca abierta (PSD2) para conciliación en tiempo real | Treasury | Media |
+| 29 | Payroll: integración real con Sistema RED/Seguridad Social, más allá de los exports TC1/TC2 "orientativos" actuales | Payroll | Media |
+| 30 | Flujos de aprobación (pedidos de compra o gastos por encima de un umbral, antes de confirmar/contabilizar) — no existe ningún mecanismo de aprobación en el código hoy | Purchasing/Expenses | Media |
+| 31 | Conectar el interceptor de Audit Log (`AuditInterceptor.cs`, ya documentado como código muerto en el catálogo de mock de arriba) — de cara al usuario el sistema aparenta tener auditoría inmutable y hoy no la tiene | Core | Alta (credibilidad del producto, no solo código) |
+
+Los ítems 13 y 14 son los de mayor riesgo/alcance dentro de la deuda de
+código (tocan la dirección de dependencias del monolito modular entero) y
+deberían abordarse solo después de validar los anteriores, con más contexto
+y posiblemente en su propia rama/PR dedicado — no como parte de este barrido
+incremental. Los ítems 20-31 son de otra naturaleza (funcional, no solo de
+código) y requieren decisión de producto/negocio antes de empezar a
+implementar, no solo luz verde técnica.
 
 **Nota sobre el ítem 3c (deprioritizado):** `AeatModelsController`,
 `IvaManagementController`, `InversionSujetoActivoController`,
