@@ -1,13 +1,22 @@
+# Erp.Api.csproj tiene ~30 ProjectReference hacia backend/Modules/*/*.csproj
+# (monolito modular): dotnet restore necesita ver todos esos .csproj para
+# resolver las referencias, pero copiar también el código fuente (.cs) en
+# este punto invalidaría la capa de restore en cada cambio de código, aunque
+# no cambie ningún .csproj. Este stage aísla solo los .csproj (preservando su
+# estructura de carpetas) para que la capa de restore solo se invalide cuando
+# cambian las referencias/paquetes, no en cada edición de código.
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS csproj-only
+WORKDIR /src
+COPY backend/ .
+RUN find . -type f ! -name '*.csproj' -delete && find . -type d -empty -delete
+
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
-
-# Erp.Api.csproj tiene ~30 ProjectReference hacia backend/Modules/*/*.csproj
-# (monolito modular) - un restore parcial copiando solo los 4 csproj del core
-# falla porque dotnet restore no puede resolver esas referencias de proyecto.
-# Se copia todo el código fuente antes de restaurar (se sacrifica la capa de
-# caché de "solo csproj", pero garantiza que el restore funcione).
-COPY backend/ .
+COPY --from=csproj-only /src .
 RUN dotnet restore "Erp.Api/Erp.Api.csproj"
+
+# Ahora sí se copia el código fuente completo para compilar/publicar.
+COPY backend/ .
 
 WORKDIR "/src/Erp.Api"
 RUN dotnet build "Erp.Api.csproj" -c Release -o /app/build

@@ -440,11 +440,19 @@ en producción potencial**, no solo deuda de diseño — se marcan explícitamen
    core antes de `dotnet restore "Erp.Api/Erp.Api.csproj"`, pero
    `Erp.Api.csproj` tiene ~30 `ProjectReference` hacia
    `backend/Modules/*/*.csproj` (monolito modular) — el restore fallaba
-   porque no podía resolver esas referencias. ✅ Corregido: se copia todo
-   `backend/` antes de restaurar (se sacrifica la capa de caché de "solo
-   csproj" a cambio de que el restore funcione). Verificado con
-   `docker build --target build` real, build completo hasta
-   `/app/publish/Erp.Api.dll`.
+   porque no podía resolver esas referencias. ✅ Corregido en dos pasos:
+   primero copiando todo `backend/` antes de restaurar (funcional, pero
+   invalidaba la caché de restore en cada cambio de `.cs`); después
+   optimizado con un stage `csproj-only` que aísla solo los `.csproj`
+   (preservando su estructura de carpetas vía `find ... -delete`) antes del
+   stage de `build`, para que la capa de `dotnet restore` solo se invalide
+   cuando cambian referencias/paquetes, no en cada edición de código.
+   Verificado con `docker build --target build` real (build completo hasta
+   `/app/publish/Erp.Api.dll`) y verificado explícitamente el efecto de la
+   caché: tras tocar solo un `.cs` (`Erp.Api/Program.cs`) y reconstruir, el
+   paso `RUN dotnet restore` sale `CACHED` en el log de BuildKit — confirma
+   que el stage `csproj-only` produce contenido idéntico cuando no cambia
+   ningún `.csproj`, y BuildKit reutiliza esa capa aunque el `.cs` cambiara.
 2. **8 páginas del frontend con encoding roto (Windows-1252/ISO-8859 en vez
    de UTF-8) rompían el build de producción entero.** `npm run build`
    (Turbopack) fallaba con "Reading source code for parsing failed...
