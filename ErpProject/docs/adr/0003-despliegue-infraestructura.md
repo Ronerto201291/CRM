@@ -13,6 +13,16 @@ Esta ADR documenta, a partir del código de infraestructura real
 despliega y respalda el sistema, y señala las inconsistencias detectadas
 entre las distintas piezas.
 
+> **Actualización de contexto**: el VPS sobre el que se diseñó originalmente
+> este despliegue ya no existe. Hasta nuevo aviso, el objetivo real es
+> **Docker Compose en local con base de datos también en local**
+> (`docker-compose.yml` + `docker-compose.local.yml`, sin `deploy/setup-vps.sh`
+> ni el nginx de producción); el despliegue en servidor se retoma más
+> adelante. Todo lo que sigue en esta ADR describe el diseño "as-built" tal
+> como está en el repo (incluye la parte de VPS, que se mantiene documentada
+> para cuando se retome), pero el trabajo activo debe centrarse en que el
+> camino local funcione de punta a punta (ver ADR-0018, ítem 65).
+
 ## Decisión
 
 ### Backend (contenedor)

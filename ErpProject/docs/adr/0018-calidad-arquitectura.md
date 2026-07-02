@@ -406,21 +406,33 @@ CI/CD, nginx, backups), mismo nivel de evidencia que backend/frontend. A
 diferencia de las anteriores, aquí varios hallazgos son **bugs confirmados
 en producción potencial**, no solo deuda de diseño — se marcan explícitamente.
 
+> **Actualización de contexto (post-auditoría): ya no hay VPS.** El servidor
+> Hetzner sobre el que se diseñó originalmente este despliegue ya no existe.
+> El objetivo actual, hasta nuevo aviso, es **Docker Compose en local con
+> base de datos también en local** (contenedor Postgres, sin servidor
+> remoto) — el despliegue en servidor real se retoma más adelante. Los
+> ítems marcados **"Aparcado"** son específicos del VPS (TLS/Let's Encrypt,
+> firewall, backups offsite, script de aprovisionamiento) y no tienen
+> cabida ahora mismo; se quedan documentados para cuando se retome esa
+> parte, no se eliminan. Los que siguen aplicando a un entorno Docker local
+> se mantienen con su prioridad normal.
+
 | # | Mejora | Evidencia | Prioridad |
 |---|---|---|---|
-| 52 | **Bug confirmado**: el health-check post-deploy nunca puede tener éxito. `deploy/deploy.sh` hace `curl http://localhost:5000/health/live`, pero el backend escucha en el puerto 8080 (`backend/Dockerfile:39-40`) y `docker-compose.yml` no publica ningún puerto para el servicio `backend` — no hay nada que responder en `localhost:5000` desde el host. Como el script no comprueba el código de salida del curl, el deploy siempre imprime "éxito" aunque el backend esté caído | `deploy/deploy.sh:28-29`, `backend/Dockerfile:39-43`, duplicado en `.github/workflows/ci-cd.yml:139-146` | **Alta** |
-| 53 | **Bug confirmado**: TLS está desactivado en el nginx de producción (`ssl_certificate` comentado, sin bloque `listen 443`) pese a que el README y el ADR-0003 afirman "Let's Encrypt" — pero el mismo archivo sigue enviando `Strict-Transport-Security` con `max-age=31536000`. Un cliente que reciba ese header quedará bloqueado a HTTPS durante un año aunque el sitio ya no sirva HTTPS | `deploy/nginx/erp.conf:5,8-10,16` | **Alta** |
-| 54 | **Bug confirmado**: el script de arranque (`setup-vps.sh`) instala nginx a nivel de SO para terminar TLS en 80/443, y luego las instrucciones piden `docker compose up -d`, que arranca un contenedor nginx que también intenta publicar 80/443 en el host — dos procesos nginx no pueden compartir esos puertos; el segundo en arrancar falla | `deploy/setup-vps.sh:20,49-50` + `docker-compose.yml:88-89` | Alta |
-| 55 | Postgres publica el puerto 5432 a `0.0.0.0` (`docker-compose.yml:16-17`); `setup-vps.sh` abre ufw solo para 22/80/443 pero no bloquea explícitamente 5432, y Docker manipula iptables directamente (interacción conocida Docker+ufw que puede saltarse las reglas INPUT de ufw) — exposición real de la base de datos a internet, no solo teórica | `docker-compose.yml:16-17`, `deploy/setup-vps.sh:29-32` | **Alta** |
-| 56 | Backups solo en disco local del mismo VPS que alojan (sin copia externa/offsite), sin script ni prueba de restauración documentada en ningún sitio del repo — un fallo del VPS pierde datos y backups a la vez | `deploy/backup.sh:32-40` | Alta |
-| 57 | El pipeline de CI/CD nunca hace escaneo de vulnerabilidades (dependencias ni imagen de contenedor) — cero Dependabot, Trivy, Snyk, CodeQL o similar en ningún workflow | `.github/workflows/ci-cd.yml` (ambas versiones) | Media |
-| 58 | Deploy sin estrategia zero-downtime: `deploy/deploy.sh` hace `docker compose down` completo (para nginx, backend y frontend a la vez) antes de reconstruir — cualquier despliegue implica caída total, no solo del servicio actualizado | `deploy/deploy.sh:16-18` | Media |
-| 59 | Dos workflows de CI/CD divergentes y parcialmente rotos: el de `ErpProject/.github/` construye imágenes locales (`erp-api:${sha}`) que **nunca se suben a ningún registro**, y luego el deploy hace `docker compose pull`, que no tiene nada que descargar para `backend`/`frontend` (se definen con `build:`, no `image:`, en `docker-compose.yml`) — las imágenes que CI construye y las que el deploy realmente usa están desconectadas | `.github/workflows/ci-cd.yml` (ambos), `docker-compose.yml` | Media |
-| 60 | Sin monitorización externa de ningún tipo: no hay agregación de logs (ELK/Loki), alertas (Slack/PagerDuty) ni uptime monitoring en ningún archivo del repo — el único healthcheck vive dentro de Docker/ASP.NET, invisible desde fuera | — (ausencia confirmada por barrido completo) | Media |
-| 61 | Renovación de certificados Let's Encrypt no automatizada — `certbot --nginx` es un paso manual único en las instrucciones, sin cron/systemd timer para `certbot renew` | `deploy/setup-vps.sh:50` | Media |
-| 62 | El manifiesto de k8s (`k8s/deployment.yaml`) está obsoleto y nunca se ha usado realmente: no modela Postgres/Redis/Hangfire, le faltan variables reales (`Sii__CertPath`, volumen de `uploads`), su `readinessProbe` apunta a `/health` en vez de `/health/ready` y no tiene `livenessProbe` — un proceso colgado nunca se reiniciaría | `k8s/deployment.yaml` completo | Baja (vestigial, no se usa) |
-| 63 | Sin infraestructura como código (Terraform/Ansible/Pulumi) — todo el despliegue son scripts de shell imperativos; `setup-vps.sh` está escrito para una VM virgen ("Run once on fresh Hetzner VPS") y no está pensado ni probado para volver a ejecutarse sobre un host ya configurado o con drift | `deploy/setup-vps.sh` completo | Baja |
-| 64 | Todo corre en un único VPS sin redundancia: una sola instancia de Postgres (sin réplica/failover), un solo nginx, cero balanceo de carga — cualquier caída de esa máquina es una caída total de la plataforma | `docker-compose.yml` completo | Media (es una decisión de escala, no un bug, pero condiciona todo lo demás) |
+| 52 | Health-check post-deploy roto (puerto 5000 vs. 8080 real, sin puerto publicado) — solo relevante para el script `deploy/deploy.sh` orientado a servidor | `deploy/deploy.sh:28-29`, `backend/Dockerfile:39-43` | Aparcado — sin servidor |
+| 53 | TLS desactivado en nginx de producción con HSTS activo (footgun) — solo aplica cuando haya un dominio/servidor real sirviendo HTTPS | `deploy/nginx/erp.conf:5,8-10,16` | Aparcado — sin servidor |
+| 54 | Nginx de host y de contenedor compitiendo por 80/443 — parte de `setup-vps.sh`, no del flujo local | `deploy/setup-vps.sh:20,49-50` + `docker-compose.yml:88-89` | Aparcado — sin servidor |
+| 55 | Postgres publicado a `0.0.0.0:5432` sin bloqueo de firewall — en local (sin IP pública) no es una exposición real; revisar de nuevo al desplegar en servidor | `docker-compose.yml:16-17` | Aparcado — sin servidor |
+| 56 | Backups solo en disco local sin copia offsite — no aplica sin un servidor que respaldar; en local el propio equipo del usuario es el "backup" | `deploy/backup.sh:32-40` | Aparcado — sin servidor |
+| 57 | El pipeline de CI/CD nunca hace escaneo de vulnerabilidades (dependencias ni imagen de contenedor) — sigue teniendo sentido aunque no haya despliegue activo, es higiene de repositorio | `.github/workflows/ci-cd.yml` (ambas versiones) | Media |
+| 58 | Deploy sin estrategia zero-downtime (`docker compose down` completo) — solo relevante para el script de servidor | `deploy/deploy.sh:16-18` | Aparcado — sin servidor |
+| 59 | Dos workflows de CI/CD divergentes; imágenes que CI construye nunca llegan a desplegarse — vale la pena simplificar a un único workflow aunque hoy no despliegue a ningún sitio, para no arrastrar confusión cuando se retome servidor | `.github/workflows/ci-cd.yml` (ambos), `docker-compose.yml` | Media |
+| 60 | Sin monitorización externa (logs/alertas/uptime) — solo tiene sentido con algo desplegado que monitorizar | — | Aparcado — sin servidor |
+| 61 | Renovación de certificados Let's Encrypt no automatizada — no aplica sin dominio/servidor real | `deploy/setup-vps.sh:50` | Aparcado — sin servidor |
+| 62 | El manifiesto de k8s está obsoleto y nunca se ha usado — al no haber servidor tampoco hay presión por mantenerlo; valorar si retirarlo del repo o dejarlo como referencia futura | `k8s/deployment.yaml` completo | Baja |
+| 63 | Sin infraestructura como código; `setup-vps.sh` no es re-ejecutable de forma segura — irrelevante mientras no haya VPS que aprovisionar | `deploy/setup-vps.sh` completo | Aparcado — sin servidor |
+| 64 | Todo pensado para un único VPS sin redundancia — la pregunta de redundancia/HA no aplica a un entorno Docker local de desarrollo | `docker-compose.yml` completo | Aparcado — sin servidor |
+| 65 | **Prioridad actual real**: verificar que `docker compose -f docker-compose.yml -f docker-compose.local.yml up` levanta el stack completo en local (Postgres + Redis + backend + frontend), aplica migraciones, siembra el usuario admin de desarrollo, y ambos servicios pasan sus healthchecks — es el único camino de despliegue que importa ahora mismo, y no está confirmado que funcione de punta a punta tal como está | `docker-compose.yml` + `docker-compose.local.yml` | **Alta — es lo único que importa ahora** |
 
 **Nota sobre el estado real del pipeline:** `git log --oneline main` muestra
 21 commits, todos `docs:`/`fix:`/`chore:` sobre ADRs y código de aplicación
