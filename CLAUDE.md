@@ -48,10 +48,11 @@ Todo ADR incluye una sección **"Evaluación de calidad arquitectónica"**
 de considerar terminada una implementación en un módulo:
 - Los controllers nuevos/modificados son delgados: construyen un
   Command/Query y llaman a `_mediator.Send(...)`, sin lógica de negocio ni
-  acceso a datos inline (26 de 43 controllers ya incumplen esto — no sumar
-  más).
-- No se duplica lógica que ya existe en un Command/Handler (patrón repetido:
-  VIES ya corregido, VAT pendiente — ver ADR-0018 §4).
+  acceso a datos inline (24 de 43 controllers todavía incumplen esto — no
+  sumar más; ver backlog de remediación en ADR-0018).
+- No se duplica lógica que ya existe en un Command/Handler (patrón repetido
+  y ya corregido en VIES, VAT y Prorrata — ver ADR-0018 §4 antes de crear un
+  segundo cálculo/consulta que ya exista).
 - Si el módulo usa CQRS, cualquier flujo nuevo pasa por MediatR; si el
   módulo no tiene CQRS (caso Payroll), no asumir que existe sin comprobar.
 - Los endpoints de listado paginan; no se añaden queries dentro de bucles.
