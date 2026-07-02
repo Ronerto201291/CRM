@@ -64,6 +64,16 @@ de considerar terminada una implementación en un módulo:
   enteras que son mock puro, ver ADR-0018 catálogo de mock). No se cierra un
   cambio dejando el backend arreglado pero el frontend correspondiente
   todavía desconectado o con botones sin `onClick`.
+- **No regresión sobre ítems ya cerrados**: ADR-0018 mantiene una lista de
+  ítems marcados ✅ Corregido (deuda ya arreglada y verificada). Antes de
+  dar por terminado cualquier cambio nuevo, comprueba que no reintroduce un
+  problema ya cerrado (ej.: no volver a duplicar un cálculo que ya se
+  unificó, no repetir un `ProjectReference` en la dirección incorrecta que
+  ya se corrigió, no romper un merge de Compose ya arreglado). Si un cambio
+  toca un archivo que aparece como evidencia de un ítem ✅ Corregido,
+  reléelo antes de modificarlo. El objetivo es que la deuda técnica sea
+  monótonamente decreciente: cada corrección debe quedar protegida, no
+  solo hecha una vez.
 
 ## Comandos básicos
 
@@ -79,9 +89,11 @@ npm install
 npm run dev                          # :3000
 npm run lint
 
-# Stack completo
+# Stack completo (local, con BBDD en Docker — sin servidor)
 cd ErpProject
-docker compose up -d                 # frontend :3000, backend+swagger :5000
+cp .env.example .env                  # rellena POSTGRES_PASSWORD y JWT_SECRET
+docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+# frontend :3000 (vía nginx :80), backend+swagger :8081, postgres :5432
 ```
 
 ## Huecos conocidos
