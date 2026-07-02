@@ -157,10 +157,11 @@ el flujo es autocontenido dentro de `SalesDbContext`.
 
 Igual que Purchasing, Sales compila como un único assembly
 (`Erp.Modules.Sales.Infrastructure.csproj`) sin frontera real de compilador
-entre `Api/Application/Domain/Infrastructure`. `CreateDeliveryNoteHandler.cs`
-tiene el mismo patrón N+1 que Purchasing: `await _context.SalesOrderLines.FindAsync(...)`
-dentro de un `foreach` por línea en vez de una carga batch. `SalesOrdersController`
-tampoco usa `IMediator`. Sales sí pagina correctamente sus queries de listado
+entre `Api/Application/Domain/Infrastructure`. **Corregido:**
+`CreateDeliveryNoteHandler.cs` tenía el mismo patrón N+1 que Purchasing —
+`await _context.SalesOrderLines.FindAsync(...)` dentro de un `foreach` por
+línea — sustituido por una carga batch previa al bucle. `SalesOrdersController`
+sigue sin usar `IMediator` (ver ADR-0018). Sales sí pagina correctamente sus queries de listado
 (`GetAllCustomerInvoicesQuery`, `GetDeliveryNotesQueries` devuelven
 `Paginated...Result`) — es el patrón de paginación a copiar en el resto del
 backend (ver ADR-0018 §6).

@@ -2,6 +2,7 @@ using Erp.Modules.Sales.Application.Features.Deliveries.Commands;
 using Erp.Modules.Sales.Application.Interfaces;
 using Erp.Modules.Sales.Domain.Entities;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Erp.Modules.Sales.Application.Features.Deliveries.Handlers
 {
@@ -24,6 +25,11 @@ namespace Erp.Modules.Sales.Application.Features.Deliveries.Handlers
                 DeliveryDate = request.DeliveryDate
             };
 
+            var lineIds = request.Lines.Select(l => l.SalesOrderLineId).ToList();
+            var salesOrderLines = await _context.SalesOrderLines
+                .Where(sol => lineIds.Contains(sol.Id))
+                .ToDictionaryAsync(sol => sol.Id, cancellationToken);
+
             foreach (var l in request.Lines)
             {
                 var line = new DeliveryNoteLine
@@ -37,8 +43,8 @@ namespace Erp.Modules.Sales.Application.Features.Deliveries.Handlers
                 _context.DeliveryNoteLines.Add(line);
 
                 // Update SO line delivered quantity
-                var sol = await _context.SalesOrderLines.FindAsync(new object[] { l.SalesOrderLineId }, cancellationToken);
-                if (sol != null) sol.DeliveredQuantity += l.ShippedQuantity;
+                if (salesOrderLines.TryGetValue(l.SalesOrderLineId, out var sol))
+                    sol.DeliveredQuantity += l.ShippedQuantity;
             }
 
             // Update SO status

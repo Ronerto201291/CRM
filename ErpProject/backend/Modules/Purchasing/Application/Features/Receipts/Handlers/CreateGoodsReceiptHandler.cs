@@ -2,6 +2,7 @@ using Erp.Modules.Purchasing.Application.Features.Receipts.Commands;
 using Erp.Modules.Purchasing.Application.Interfaces;
 using Erp.Modules.Purchasing.Domain.Entities;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Erp.Modules.Purchasing.Application.Features.Receipts.Handlers;
 
@@ -29,10 +30,15 @@ public class CreateGoodsReceiptHandler : IRequestHandler<CreateGoodsReceiptComma
             ReceiptDate = request.ReceiptDate
         };
 
+        var lineIds = request.Lines.Select(l => l.PurchaseOrderLineId).ToList();
+        var purchaseOrderLines = await _context.PurchaseOrderLines
+            .Where(pol => lineIds.Contains(pol.Id))
+            .ToDictionaryAsync(pol => pol.Id, cancellationToken);
+
         foreach (var l in request.Lines)
         {
-            var pol = await _context.PurchaseOrderLines.FindAsync(new object[] { l.PurchaseOrderLineId }, cancellationToken);
-            if (pol == null) throw new InvalidOperationException("Purchase order line not found");
+            if (!purchaseOrderLines.TryGetValue(l.PurchaseOrderLineId, out var pol))
+                throw new InvalidOperationException("Purchase order line not found");
             if (pol.PurchaseOrderId != request.PurchaseOrderId)
                 throw new InvalidOperationException("Purchase order line does not belong to this order");
             if (l.QuantityReceived > pol.Quantity)

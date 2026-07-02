@@ -194,10 +194,11 @@ existen en el código pero **nunca se ejecutan en runtime** (`IValidator<T>`
 nunca se resuelve para ellas).
 
 ### 6. Escalabilidad
-- **N+1 confirmado** en `Modules/Purchasing/Application/Features/Receipts/Handlers/CreateGoodsReceiptHandler.cs`
+- **Corregido** — N+1 en `Modules/Purchasing/Application/Features/Receipts/Handlers/CreateGoodsReceiptHandler.cs`
   y `Modules/Sales/Application/Features/Deliveries/Handlers/CreateDeliveryNoteHandler.cs`:
-  ambos hacen `await _context.Xxx.FindAsync(...)` dentro de un `foreach` por
-  línea del documento, en vez de una única consulta batch.
+  ambos hacían `await _context.Xxx.FindAsync(...)` dentro de un `foreach` por
+  línea del documento; ahora cargan todas las líneas necesarias en una única
+  consulta batch (`Where(...).ToDictionaryAsync(...)`) antes del bucle.
 - **Paginación ausente** en la mayoría de `Get*Query` de CRM, Accounting,
   Treasury, Billing e Inventory (listas sin `Skip`/`Take`). Sales sí pagina
   bien (`GetAllCustomerInvoicesQuery`, `GetDeliveryNotesQueries` devuelven un
@@ -241,7 +242,7 @@ secundarios ocultos ni commands mal nombrados como getters. Pero:
 - **ADR-0008** (Inventory): entidades núcleo fuera de `Modules/Inventory/Domain`.
 - **ADR-0009** (Payroll): ausencia total de CQRS.
 - **ADR-0010 / ADR-0011** (Purchasing/Sales): un solo assembly, sin frontera
-  de capas real; N+1 en ambos módulos.
+  de capas real; N+1 en ambos módulos (corregido).
 - **ADR-0012** (Treasury): los 5 controllers sin MediatR, acoplamiento a
   Accounting.
 
@@ -308,7 +309,7 @@ medida que se completa cada uno.
 | 4 | `AccountingExportController` (SRP, 1362 líneas, 6 módulos inyectados) | Accounting | Pendiente |
 | 5 | `ViesController` (Accounting) sigue duplicando lo que ya resuelve `Erp.Api/TaxController` | Accounting | Pendiente |
 | 6 | Validators de FluentValidation nunca registrados por módulo (`AddValidatorsFromAssembly` ausente) | Todos | Pendiente |
-| 7 | N+1 en `CreateGoodsReceiptHandler` / `CreateDeliveryNoteHandler` | Purchasing / Sales | Pendiente |
+| 7 | N+1 en `CreateGoodsReceiptHandler` / `CreateDeliveryNoteHandler` | Purchasing / Sales | ✅ Corregido |
 | 8 | Paginación ausente en `Get*Query` (CRM, Accounting, Treasury, Billing, Inventory) | Varios | Pendiente |
 | 9 | Los 5 controllers de Treasury sin `IMediator` (incluye parser CSV inline) | Treasury | Pendiente |
 | 10 | Payroll sin capa CQRS/MediatR | Payroll | Pendiente |

@@ -218,10 +218,11 @@ Purchasing es, junto con Sales, el único módulo con un solo `.csproj`
 (`Erp.Modules.Purchasing.Infrastructure.csproj`) compilando las cuatro
 carpetas lógicas como un mismo assembly — sin la frontera de compilador que
 separa Domain de Infrastructure en los otros 7 módulos (riesgo latente, no
-observado hoy). `CreateGoodsReceiptHandler.cs` tiene un N+1 confirmado:
+observado hoy). **Corregido:** `CreateGoodsReceiptHandler.cs` tenía un N+1 —
 `await _context.PurchaseOrderLines.FindAsync(...)` dentro de un `foreach` por
-línea del recibo, en vez de una carga batch. `PurchaseOrdersController` es de
-los 26 controllers del backend que no usa `IMediator`.
+línea del recibo — sustituido por una carga batch (`Where(...).ToDictionaryAsync(...)`)
+antes del bucle. `PurchaseOrdersController` sigue siendo uno de los
+controllers del backend que no usa `IMediator` (ver ADR-0018).
 
 ## Buenas prácticas aplicables
 - El "three-way match" en `ThreeWayMatchValidator` es el patrón de control
