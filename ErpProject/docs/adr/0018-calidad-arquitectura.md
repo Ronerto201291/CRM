@@ -358,13 +358,32 @@ relación esfuerzo/impacto (los primeros reutilizan código que ya existe).
 | 30 | Flujos de aprobación (pedidos de compra o gastos por encima de un umbral, antes de confirmar/contabilizar) — no existe ningún mecanismo de aprobación en el código hoy | Purchasing/Expenses | Media |
 | 31 | Conectar el interceptor de Audit Log (`AuditInterceptor.cs`, ya documentado como código muerto en el catálogo de mock de arriba) — de cara al usuario el sistema aparenta tener auditoría inmutable y hoy no la tiene | Core | Alta (credibilidad del producto, no solo código) |
 
+**Ítems 32+: mejoras adicionales de plataforma y producto**, identificadas al
+cierre de esta auditoría (no se derivan de un hallazgo puntual del código,
+sino de comparar el estado actual contra lo que exigiría un ERP de clase
+mundial). Mezcla código/plataforma (32-37) y producto (38-42).
+
+| # | Mejora | Módulos | Prioridad |
+|---|---|---|---|
+| 32 | Cero tests automatizados en todo el repo — priorizar tests de integración sobre los flujos críticos (facturación, asientos automáticos, aislamiento multi-tenant) antes que cobertura exhaustiva | Todos | Alta |
+| 33 | No existe middleware global de manejo de excepciones — cualquier excepción no controlada (incluida la `ValidationException` de FluentValidation recién activada en CRM) se filtra como un 500 crudo sin `ProblemDetails` ni contrato de error consistente | Core | Alta |
+| 34 | Aislamiento multi-tenant a un solo nivel de defensa (global query filters de EF Core); añadir Row-Level Security de Postgres como segunda barrera — el fallo más grave posible en un SaaS es fuga de datos entre empresas | Core | Alta |
+| 35 | Ninguna de las 19 violaciones de arquitectura de este ADR se detecta automáticamente en CI; añadir tests de arquitectura (tipo NetArchTest: "ningún controller referencia DbContext directamente", "Domain no depende de Infrastructure") para que las reglas se apliquen solas en cada PR | Core/CI | Media |
+| 36 | Sin observabilidad real: no hay logging estructurado, tracing distribuido ni métricas en ningún módulo — depurar producción (p. ej. por qué se atascó el outbox) hoy depende de logs de consola sueltos | Core | Media |
+| 37 | Frontend con muy poca reutilización: solo 5 componentes genéricos compartidos, la mayoría de la lógica de UI vive inline en cada página — mismo problema que los "controllers gordos" del backend, en la otra capa | Frontend | Media |
+| 38 | Multi-moneda real en Billing (facturar en divisa distinta del euro con conversión automática usando los tipos de cambio de Treasury) — hoy no está claro que Billing soporte esto | Billing ↔ Treasury | Media |
+| 39 | Portal de autoservicio para cliente/proveedor (ver y pagar facturas, subir facturas de proveedor) — hoy todo el flujo es interno, sin reenvío manual de PDFs | Billing/Purchasing | Baja |
+| 40 | Funciones asistidas por IA sobre los datos ya capturados: detección de anomalías en gastos, previsión de tesorería, categorización automática — extensión natural del OCR real que ya existe en Expenses | Expenses/Treasury | Baja |
+| 41 | Asistente de alta/onboarding: plantillas de plan contable por sector, importación desde Excel/otro ERP — hoy el alta de empresa no tiene ninguna ayuda guiada | Core | Baja |
+| 42 | Notificaciones proactivas (email/push) de facturas vencidas, stock bajo, aprobaciones pendientes — depende directamente de activar el motor de automatización (ítem 27) | Core/Automatización | Media |
+
 Los ítems 13 y 14 son los de mayor riesgo/alcance dentro de la deuda de
 código (tocan la dirección de dependencias del monolito modular entero) y
 deberían abordarse solo después de validar los anteriores, con más contexto
 y posiblemente en su propia rama/PR dedicado — no como parte de este barrido
-incremental. Los ítems 20-31 son de otra naturaleza (funcional, no solo de
-código) y requieren decisión de producto/negocio antes de empezar a
-implementar, no solo luz verde técnica.
+incremental. Los ítems 20-42 son de otra naturaleza (funcional/plataforma,
+no solo deuda de código puntual) y requieren decisión de producto/negocio
+antes de empezar a implementar, no solo luz verde técnica.
 
 **Nota sobre el ítem 3c (deprioritizado):** `AeatModelsController`,
 `IvaManagementController`, `InversionSujetoActivoController`,
