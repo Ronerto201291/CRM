@@ -159,6 +159,20 @@ dominio, sin intervención manual):
   `ICrmDbContext` e `IPayrollDbContext` para Modelo 347 y Modelo 190/111
   respectivamente (retenciones a trabajadores vía nóminas).
 
+## Evaluación de calidad arquitectónica
+> Metodología completa y hallazgos transversales en `ADR-0018`.
+
+Este es el módulo con más incumplimientos del checklist: `AccountingExportController.cs`
+(1362 líneas, 19 endpoints, inyecta contexts de 6 módulos) es una violación
+clara de SRP; `IAccountingDbContext` expone 29 DbSets (ISP, ver
+`GetFiscalPeriodsHandler` que solo usa uno); y 10 de sus 16 controllers no
+usan `IMediator` — tienen lógica de negocio inline (los ya documentados como
+mock: AeatModels, Vat, Vies, IvaManagement, InversionSujetoActivo, Prorrata,
+Recargo, FinancialStatements, Aging, más `AccountingExportController`). Además
+`VatController.cs` duplica tasas/cálculo de IVA que ya existen, correctamente,
+en `CalculateVatCommand.cs` — el mismo patrón que ya se corrigió para VIES
+(ver más abajo) sigue sin corregirse aquí.
+
 ## Buenas prácticas aplicables
 - Todo asiento generado automáticamente debe validar `Σ Debe == Σ Haber`
   antes de `SaveChangesAsync`, siguiendo el patrón de

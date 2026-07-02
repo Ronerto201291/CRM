@@ -211,6 +211,18 @@ exactamente esas columnas). `PurchaseOrder` tiene un índice único
   patrón Outbox en todo `backend/Modules/Purchasing/`). Registrar una
   recepción de mercancía no actualiza el stock de Inventario.
 
+## Evaluación de calidad arquitectónica
+> Metodología completa y hallazgos transversales en `ADR-0018`.
+
+Purchasing es, junto con Sales, el único módulo con un solo `.csproj`
+(`Erp.Modules.Purchasing.Infrastructure.csproj`) compilando las cuatro
+carpetas lógicas como un mismo assembly — sin la frontera de compilador que
+separa Domain de Infrastructure en los otros 7 módulos (riesgo latente, no
+observado hoy). `CreateGoodsReceiptHandler.cs` tiene un N+1 confirmado:
+`await _context.PurchaseOrderLines.FindAsync(...)` dentro de un `foreach` por
+línea del recibo, en vez de una carga batch. `PurchaseOrdersController` es de
+los 26 controllers del backend que no usa `IMediator`.
+
 ## Buenas prácticas aplicables
 - El "three-way match" en `ThreeWayMatchValidator` es el patrón de control
   a preservar si se añaden nuevos flujos de facturación: validar

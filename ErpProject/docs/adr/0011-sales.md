@@ -152,6 +152,19 @@ el flujo es autocontenido dentro de `SalesDbContext`.
   una entrega — a diferencia de Billing/Expenses, que sí incluyen DTOs de
   líneas pensados para esa integración.
 
+## Evaluación de calidad arquitectónica
+> Metodología completa y hallazgos transversales en `ADR-0018`.
+
+Igual que Purchasing, Sales compila como un único assembly
+(`Erp.Modules.Sales.Infrastructure.csproj`) sin frontera real de compilador
+entre `Api/Application/Domain/Infrastructure`. `CreateDeliveryNoteHandler.cs`
+tiene el mismo patrón N+1 que Purchasing: `await _context.SalesOrderLines.FindAsync(...)`
+dentro de un `foreach` por línea en vez de una carga batch. `SalesOrdersController`
+tampoco usa `IMediator`. Sales sí pagina correctamente sus queries de listado
+(`GetAllCustomerInvoicesQuery`, `GetDeliveryNotesQueries` devuelven
+`Paginated...Result`) — es el patrón de paginación a copiar en el resto del
+backend (ver ADR-0018 §6).
+
 ## Buenas prácticas aplicables
 - No asumir que facturar en Sales (`CustomerInvoice`) genera efectos
   fiscales o contables: no dispara asientos en Accounting ni cumple ninguno

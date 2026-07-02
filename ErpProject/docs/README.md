@@ -15,12 +15,16 @@ antes de tocar código en ese módulo.
 - `0001`-`0003` — arquitectura general, autenticación/multi-tenant y
   despliegue: transversales a todos los módulos de negocio.
 - `0004`-`0017` — un ADR por módulo de negocio o pieza de plataforma.
+- `0018` — auditoría transversal de calidad arquitectónica (SOLID, Clean
+  Architecture, CQRS, duplicación, escalabilidad): la metodología que la
+  sección "Evaluación de calidad arquitectónica" de cada ADR aplica.
 
 Cada ADR sigue la misma estructura: Estado, Contexto, Decisión (Backend /
 Frontend / Modelo de datos / Flujo end-to-end), Relación con otros módulos,
-Buenas prácticas aplicables y Consecuencias. Cuando el código tiene huecos,
-deuda técnica o partes sin conectar, el ADR lo dice explícitamente en vez de
-asumir que todo funciona — varios módulos tienen hallazgos así (ver tabla).
+Evaluación de calidad arquitectónica, Buenas prácticas aplicables y
+Consecuencias. Cuando el código tiene huecos, deuda técnica o partes sin
+conectar, el ADR lo dice explícitamente en vez de asumir que todo funciona —
+varios módulos tienen hallazgos así (ver tabla).
 
 ## Índice
 
@@ -43,6 +47,7 @@ asumir que todo funciona — varios módulos tienen hallazgos así (ver tabla).
 | [0015](adr/0015-automatizacion.md) | Automatización | Motor de reglas no funcional: no persiste, ni frontend ni job están conectados |
 | [0016](adr/0016-api-publica-keys.md) | API Pública y API Keys | Dos sistemas de API Key en paralelo y desconectados |
 | [0017](adr/0017-audit-logs.md) | Audit Logs | El interceptor que debería auditar cambios nunca se invoca |
+| [0018](adr/0018-calidad-arquitectura.md) | Calidad arquitectónica (transversal) | 26/43 controllers bypasean CQRS con lógica de negocio inline; core depende de 5 módulos (dirección invertida); duplicado VAT sin corregir |
 
 ## Cómo usar esta carpeta
 

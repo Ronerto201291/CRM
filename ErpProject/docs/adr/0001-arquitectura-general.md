@@ -219,6 +219,20 @@ dominio sin acoplarse directamente a otros módulos. La resolución de
 `CompanyId` (multi-tenancy) y de permisos, aunque se apoya en el mismo
 `ModuleDbContextBase`, se documenta en detalle en ADR-0002.
 
+## Evaluación de calidad arquitectónica
+> Metodología completa y hallazgos transversales en `ADR-0018`.
+
+La dirección de dependencias prevista aquí (core → nada, módulos → core) se
+incumple en la práctica: `backend/Erp.Infrastructure.csproj` referencia las
+capas Application de 5 módulos (Inventory, Billing, Crm, Accounting,
+Expenses), y `PgcSeeder.cs` (core) inyecta `IAccountingDbContext`. El patrón
+de "ancla de assembly" para registrar `AddMediatR` por módulo en `Program.cs`
+es frágil (Payroll no tiene el bloque porque no tiene handlers, y nadie lo
+detectó) y depende de que exista al menos un tipo en cada módulo, lo que en
+CRM llevó a mantener un archivo de handlers muertos solo para ese propósito
+(ver ADR-0004). El patrón CQRS que aquí se describe como estándar se
+incumple en 26 de 43 controllers de todo el backend (ver ADR-0018 §5 y §7).
+
 ## Buenas prácticas aplicables
 - Todo módulo nuevo debe seguir la misma subestructura de cuatro proyectos
   (`Api`/`Application`/`Domain`/`Infrastructure`) y su propio DbContext

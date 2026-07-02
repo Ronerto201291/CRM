@@ -143,6 +143,19 @@ contabilidad:
   se detectó lógica automática que cree órdenes de pago desde esos módulos —
   la creación es manual vía `POST payment-orders`.
 
+## Evaluación de calidad arquitectónica
+> Metodología completa y hallazgos transversales en `ADR-0018`.
+
+Los 5 controllers de Treasury, sin excepción, bypasean MediatR: inyectan
+`ITreasuryDbContext` directamente, con lógica de negocio inline —
+`TreasuryController.cs` incluye un parser CSV completo de extractos
+bancarios (construcción de entidades EF y `SaveChangesAsync`) dentro de la
+acción del controller. El guard clause de `tenantId` está copy-pegado seis
+veces solo en ese archivo en vez de centralizarse. `ITreasuryDbContext`
+expone 20 DbSets (ISP). La dependencia de `BankReconciliationService` sobre
+`IAccountingDbContext` (ver Relación con otros módulos) es acceso directo a
+otro módulo, no vía evento — acoplamiento real, no solo de lectura trivial.
+
 ## Buenas prácticas aplicables
 - Cualquier nuevo cruce de datos de Treasury contra Accounting debe seguir el
   patrón de `BankReconciliationService`: inyectar `IAccountingDbContext`

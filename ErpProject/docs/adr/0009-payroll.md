@@ -136,6 +136,19 @@ Cierre de una liquidación mensual y su reflejo contable:
 - No hay export SII/VeriFactu (ADR-0013) porque la nómina no genera
   facturas.
 
+## Evaluación de calidad arquitectónica
+> Metodología completa y hallazgos transversales en `ADR-0018`.
+
+Payroll es el único módulo sin CQRS: `Application/` solo tiene
+`Interfaces/IPayrollDbContext.cs`, sin `Features`/`Commands`/`Queries`/`Handlers`,
+y `Program.cs` no registra ningún `AddMediatR` para este módulo. El único
+`PayrollController` inyecta `IPayrollDbContext` y hasta
+`AccountingService` (de otro módulo) directamente, con toda la lógica de
+altas, liquidaciones y exportación TC1/TC2/RED implementada inline en el
+controller — incumple tanto CQRS como "controllers delgados" en su forma más
+extrema dentro del backend. Cualquier trabajo nuevo en este módulo debería
+plantear migrar a CQRS en vez de seguir ampliando el controller.
+
 ## Buenas prácticas aplicables
 - Cualquier extensión de este módulo (p. ej. activar
   `PayrollDeduction`/`SocialSecurityContribution`/`TaxableBase`/`PayrollTemplate`)
