@@ -130,13 +130,15 @@ Desviaciones:
   corrigió que `CalculateVatCommand.CompanyId` viniera del body (el cliente
   podía enviar cualquier tenant) — ahora se resuelve del `ITenantContext`
   del handler, igual que el resto de comandos de Accounting.
-- `backend/Modules/Crm/Application/Handlers/ClientHandlers.cs`: set completo
-  de queries/commands (`GetClientsModuleQuery`, `CreateClientModuleCommand`,
-  etc.) que ningún controller referencia — el path real es
-  `Application/Features/Crm/*`. Particularidad: `Program.cs` usa un tipo de
-  este archivo como "ancla" de assembly para registrar MediatR de todo el
-  módulo CRM, así que el archivo es código muerto pero estructuralmente
-  necesario tal cual está montado hoy.
+- **Corregido** — `backend/Modules/Crm/Application/Handlers/ClientHandlers.cs`
+  era un set completo de queries/commands (`GetClientsModuleQuery`,
+  `CreateClientModuleCommand`, etc.) que ningún controller referenciaba — el
+  path real es `Application/Features/Crm/*`. La particularidad era que
+  `Program.cs` usaba un tipo de ese archivo como "ancla" de assembly para
+  registrar MediatR de todo el módulo CRM, así que el archivo era código
+  muerto pero estructuralmente necesario tal cual estaba montado. Se eliminó
+  el archivo y el ancla pasó a `Features/Crm/Handlers/GetClientsHandler`
+  (handler real, usado por `ClientsController`).
 - Guard clauses de `tenantId` (`_tenant.TenantId ?? throw new InvalidOperationException(...)`)
   copiadas decenas de veces por controller en vez de centralizarse (ejemplo:
   seis copias solo en `TreasuryController.cs`).
@@ -219,7 +221,7 @@ secundarios ocultos ni commands mal nombrados como getters. Pero:
   dependencias (`Erp.Infrastructure` → 5 módulos) y el patrón de "ancla de
   assembly" para `AddMediatR` son extensiones directas de lo ya descrito ahí.
 - **ADR-0004** (CRM): `ClientHandlers.cs` como código muerto/ancla de
-  assembly.
+  assembly (corregido).
 - **ADR-0006** (Accounting): `AccountingExportController` (SRP), duplicado
   VatController/CalculateVatCommand (corregido), `IAccountingDbContext` de 29 DbSets
   (ISP), controllers sin MediatR.
@@ -286,7 +288,7 @@ medida que se completa cada uno.
 | # | Hallazgo | Módulo | Estado |
 |---|---|---|---|
 | 1 | Duplicado VatController/CalculateVatCommand | Accounting | ✅ Corregido |
-| 2 | `ClientHandlers.cs` código muerto usado como ancla de assembly de MediatR | Crm | Pendiente |
+| 2 | `ClientHandlers.cs` código muerto usado como ancla de assembly de MediatR | Crm | ✅ Corregido |
 | 3 | `RecargoController`, `AeatModelsController`, `IvaManagementController`, `InversionSujetoActivoController`, `ProrrataController`, `FinancialStatementsController`, `AgingController` sin `IMediator` | Accounting | Pendiente |
 | 4 | `AccountingExportController` (SRP, 1362 líneas, 6 módulos inyectados) | Accounting | Pendiente |
 | 5 | `ViesController` (Accounting) sigue duplicando lo que ya resuelve `Erp.Api/TaxController` | Accounting | Pendiente |

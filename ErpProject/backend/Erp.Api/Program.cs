@@ -178,7 +178,7 @@ builder.Services.AddMediatR(cfg =>
 // Register CRM module MediatR handlers
 builder.Services.AddMediatR(cfg =>
     cfg.RegisterServicesFromAssembly(
-        typeof(Erp.Modules.Crm.Application.Handlers.GetClientsModuleHandler).Assembly));
+        typeof(Erp.Modules.Crm.Application.Features.Crm.Handlers.GetClientsHandler).Assembly));
 
 // Register Accounting module MediatR handlers (includes Phase 1, 2, 3)
 builder.Services.AddMediatR(cfg =>
