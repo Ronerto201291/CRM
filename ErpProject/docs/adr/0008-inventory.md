@@ -248,24 +248,16 @@ Entrada de stock al aprobar un gasto de compra (Expenses → Inventory):
   convención de carpetas que conviene corregir en una futura limpieza para
   no confundir a quien navegue el repo o escriba scripts sensibles a
   mayúsculas/minúsculas.
-- **Entidades núcleo repartidas entre dos proyectos**: `Product`,
-  `Warehouse`, `Stock` y `StockMovement` están físicamente en
-  `backend/Erp.Domain/Modules/Inventory/Entities/` (compiladas dentro del
-  módulo vía `ProjectReference` a `Erp.Domain.csproj`, namespace
-  `Erp.Modules.Inventory.Domain.Entities`), mientras que `Lot` y
-  `SerialNumber` están correctamente en
-  `backend/Modules/Inventory/Domain/Entities/Lot.cs`. Confirmado que las
-  primeras **no son código muerto** (están mapeadas por
-  `InventoryDbContext`, tienen migraciones aplicadas y tablas reales en
-  `inventory`), pero la ubicación mezclada es una deuda técnica: dificulta
-  saber, sin comprobarlo como se ha hecho aquí, qué contiene realmente el
-  módulo. La ruta tampoco sigue el precedente de Accounting (ADR-0006, que
-  usa `Erp.Domain/Entities/Accounting/`), así que ni siquiera hay una
-  convención uniforme para este patrón entre módulos. Se recomienda mover
-  `Product`, `Warehouse`, `Stock` y `StockMovement` a
-  `backend/Modules/Inventory/Domain/Entities/` junto a `Lot`/`SerialNumber`
-  en una futura tarea de limpieza (cambio mecánico: mismo namespace, solo
-  cambia la ruta física).
+- **Entidades núcleo repartidas entre dos proyectos**: como se detalla en
+  Modelo de datos, `Product`/`Warehouse`/`Stock`/`StockMovement` viven fuera
+  del módulo (en `Erp.Domain`) mientras que `Lot`/`SerialNumber` viven
+  dentro. No es código muerto, pero es deuda técnica: dificulta saber, sin
+  comprobarlo como se ha hecho aquí, qué contiene realmente el módulo. La
+  ruta tampoco sigue el precedente de Accounting (ADR-0006, que usa
+  `Erp.Domain/Entities/Accounting/`), así que ni siquiera hay una convención
+  uniforme para este patrón entre módulos. Se recomienda mover las cuatro
+  entidades a `backend/Modules/Inventory/Domain/Entities/` en una futura
+  limpieza (cambio mecánico: mismo namespace, solo cambia la ruta física).
 - **Inconsistencia interna de estilo entre controllers**: `Products`,
   `Warehouses` y `Stock` usan CQRS/MediatR, rutas sin versionar
   (`api/inventory/...`) y `[Authorize, RequiredModule("Inventory")]`; en
