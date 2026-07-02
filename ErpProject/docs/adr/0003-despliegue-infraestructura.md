@@ -171,6 +171,28 @@ los módulos en la misma instancia (ver ADR-0001, sección "Modelo de
 datos"). El volumen `/opt/erp/certs` montado en el backend se usa para los
 certificados de firma electrónica de SII/VeriFactu (ADR-0013).
 
+## Evaluación de calidad arquitectónica
+> Metodología completa y hallazgos transversales en `ADR-0018`.
+
+Auditoría dedicada de infraestructura (ADR-0018 §"Ítems 52-64") encontró
+varios **bugs confirmados**, no solo deuda de diseño: el health-check
+post-deploy (`deploy/deploy.sh`) apunta al puerto 5000 pero el backend
+escucha en 8080 y no publica ningún puerto en `docker-compose.yml`, así que
+el deploy siempre "tiene éxito" aunque el backend esté caído (ítem 52); TLS
+está desactivado en `deploy/nginx/erp.conf` (sin `listen 443`) pese a que
+este ADR y el README afirman Let's Encrypt, pero el mismo archivo sigue
+enviando el header `Strict-Transport-Security` — cualquier cliente que lo
+reciba queda bloqueado a HTTPS durante un año sobre un sitio que no la sirve
+(ítem 53); y el propio `setup-vps.sh` instala nginx a nivel de SO para TLS y
+luego pide arrancar el nginx en contenedor, que intenta publicar los mismos
+puertos 80/443 — configuración auto-contradictoria (ítem 54). Además,
+Postgres publica el 5432 a `0.0.0.0` sin que `setup-vps.sh` lo bloquee
+explícitamente en el firewall (ítem 55), y las imágenes que construye CI
+nunca llegan a ningún registro ni se conectan con lo que el deploy real
+descarga (ítem 59). `git log` confirma que ningún commit ha tocado
+`deploy/`, `docker-compose.yml` ni `.github/workflows/` desde `FirstVersion`
+— es infraestructura nunca ejercitada contra un cambio real.
+
 ## Buenas prácticas aplicables
 - Cualquier módulo nuevo que añada un esquema Postgres propio debería
   añadirse también a `deploy/postgres/init-schemas.sql` para mantener ese

@@ -32,7 +32,7 @@ varios módulos tienen hallazgos así (ver tabla).
 |---|---|---|
 | [0001](adr/0001-arquitectura-general.md) | Arquitectura general | Modular monolith + Clean Architecture, CQRS/MediatR, patrón Outbox. Sin tests automatizados en todo el repo. |
 | [0002](adr/0002-multitenancy-auth.md) | Multi-tenancy y autenticación | JWT+refresh, 2FA, RBAC/ABAC, `CompanyId` como aislamiento de tenant |
-| [0003](adr/0003-despliegue-infraestructura.md) | Despliegue e infraestructura | Docker Compose (VPS Hetzner) y manifiesto k8s en paralelo; CI/CD |
+| [0003](adr/0003-despliegue-infraestructura.md) | Despliegue e infraestructura | Health-check post-deploy roto (puerto equivocado), TLS desactivado con HSTS activo, Postgres expuesto a internet — ver ADR-0018 |
 | [0004](adr/0004-crm.md) | CRM | Clients, Contacts, Leads, Suppliers, Notes, Alerts |
 | [0005](adr/0005-billing.md) | Billing (Facturación) | Invoices, Quotes, FacturaE, hash-chain, normativa antifraude |
 | [0006](adr/0006-accounting.md) | Accounting (Contabilidad) | Varios controllers (AEAT, VAT, VIES, Prorrata...) devuelven datos mock, sin persistencia real |
@@ -47,7 +47,7 @@ varios módulos tienen hallazgos así (ver tabla).
 | [0015](adr/0015-automatizacion.md) | Automatización | Motor de reglas no funcional: no persiste, ni frontend ni job están conectados |
 | [0016](adr/0016-api-publica-keys.md) | API Pública y API Keys | Dos sistemas de API Key en paralelo y desconectados |
 | [0017](adr/0017-audit-logs.md) | Audit Logs | El interceptor que debería auditar cambios nunca se invoca |
-| [0018](adr/0018-calidad-arquitectura.md) | Calidad arquitectónica (transversal) | Backlog de remediación (5/19 corregidos); catálogo completo de datos mock; credenciales hardcodeadas documentadas aparte (última prioridad) |
+| [0018](adr/0018-calidad-arquitectura.md) | Calidad arquitectónica (transversal) | Backlog de 64 ítems (código, funcional, frontend, infraestructura); 5 ya corregidos; catálogo de datos mock; credenciales hardcodeadas aparte (última prioridad) |
 
 ## Cómo usar esta carpeta
 
