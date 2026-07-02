@@ -1,4 +1,6 @@
+using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using Erp.Modules.Accounting.Application.Features.Vat;
 
 namespace Erp.Modules.Accounting.Api.Controllers;
 
@@ -6,34 +8,19 @@ namespace Erp.Modules.Accounting.Api.Controllers;
 [Route("api/v1/accounting/vat")]
 public class VatController : ControllerBase
 {
-    [HttpPost("calculate")]
-    public IActionResult CalculateVat([FromBody] CalculateVatRequest request)
-    {
-        var vatAmount = request.Amount * request.VatRate;
-        var total = request.Amount + vatAmount;
+    private readonly IMediator _mediator;
 
-        return Ok(new
-        {
-            id = Guid.NewGuid(),
-            amount = request.Amount,
-            vatRate = request.VatRate,
-            vatAmount = vatAmount,
-            total = total,
-            status = "Calculated"
-        });
+    public VatController(IMediator mediator) => _mediator = mediator;
+
+    [HttpPost("calculate")]
+    public async Task<IActionResult> CalculateVat([FromBody] CalculateVatCommand command, CancellationToken ct)
+    {
+        var result = await _mediator.Send(command, ct);
+        return Ok(result);
     }
 
     [HttpGet("rates")]
-    public IActionResult GetVatRates()
-    {
-        return Ok(new[]
-        {
-            new { type = "Standard", rate = 0.21m, applies = "General supplies" },
-            new { type = "Reduced", rate = 0.10m, applies = "Food, books" },
-            new { type = "SuperReduced", rate = 0.04m, applies = "Essential goods" },
-            new { type = "Zero", rate = 0m, applies = "Exports" }
-        });
-    }
+    public IActionResult GetVatRates() => Ok(SpanishVatRates.All);
 
     [HttpPost("declare/modelo330")]
     public IActionResult DeclareModelo330([FromBody] object dto)
@@ -46,11 +33,5 @@ public class VatController : ControllerBase
             message = "Modelo 330 declarado exitosamente"
         });
     }
-}
-
-public class CalculateVatRequest
-{
-    public decimal Amount { get; set; }
-    public decimal VatRate { get; set; } = 0.21m;
 }
 

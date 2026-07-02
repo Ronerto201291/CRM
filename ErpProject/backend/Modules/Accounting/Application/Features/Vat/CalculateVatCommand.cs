@@ -1,4 +1,5 @@
 using MediatR;
+using Erp.Application.Common.Interfaces;
 using Erp.Modules.Accounting.Application.Interfaces;
 using Erp.Modules.Accounting.Domain.Entities;
 
@@ -6,7 +7,6 @@ namespace Erp.Modules.Accounting.Application.Features.Vat;
 
 public class CalculateVatCommand : IRequest<CalculateVatResponse>
 {
-    public Guid CompanyId { get; set; }
     public decimal Amount { get; set; }
     public string VatType { get; set; } = "Standard";
     public bool IsIntraEU { get; set; }
@@ -17,16 +17,13 @@ public class CalculateVatCommand : IRequest<CalculateVatResponse>
 public class CalculateVatHandler : IRequestHandler<CalculateVatCommand, CalculateVatResponse>
 {
     private readonly IAccountingDbContext _context;
+    private readonly ITenantContext _tenant;
 
-    private static readonly Dictionary<string, decimal> VatRates = new()
+    public CalculateVatHandler(IAccountingDbContext context, ITenantContext tenant)
     {
-        { "Standard", 0.21m },
-        { "Reduced", 0.10m },
-        { "SuperReduced", 0.04m },
-        { "Zero", 0m }
-    };
-
-    public CalculateVatHandler(IAccountingDbContext context) => _context = context;
+        _context = context;
+        _tenant = tenant;
+    }
 
     public async Task<CalculateVatResponse> Handle(CalculateVatCommand request, CancellationToken cancellationToken)
     {
@@ -62,10 +59,11 @@ public class CalculateVatHandler : IRequestHandler<CalculateVatCommand, Calculat
 
         response.Total = request.Amount + response.VatAmount + response.RecargoAmount;
 
-        // Guardar transacción
+        var companyId = _tenant.TenantId ?? throw new InvalidOperationException("Tenant no resuelto.");
+
         var vatTransaction = new VatTransaction
         {
-            CompanyId = request.CompanyId,
+            CompanyId = companyId,
             TransactionDate = DateTime.UtcNow,
             PaymentDate = DateTime.UtcNow.AddDays(30),
             Direction = "Outbound",
@@ -84,10 +82,7 @@ public class CalculateVatHandler : IRequestHandler<CalculateVatCommand, Calculat
         return response;
     }
 
-    private static decimal GetVatRate(string vatType)
-    {
-        return VatRates.TryGetValue(vatType, out var rate) ? rate : 0.21m;
-    }
+    private static decimal GetVatRate(string vatType) => SpanishVatRates.GetRate(vatType);
 
     private static decimal GetRecargoRate(string vatType)
     {

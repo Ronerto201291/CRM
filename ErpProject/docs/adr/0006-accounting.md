@@ -75,20 +75,23 @@ Los 16 controladores de `Api/Controllers/` se agrupan así:
   inverso a cuenta 795 (Exceso de provisiones).
 
 **IVA, modelos AEAT y fiscalidad especial (mayoritariamente stubs/mock):**
-`AeatModelsController`, `VatController`, `ViesController`,
-`RecargoController`, `IvaManagementController`, `InversionSujetoActivoController`
-y `ProrrataController` (rutas bajo `api/v1/accounting/{aeat,vat,vies,recargo,
+`AeatModelsController`, `ViesController`, `RecargoController`,
+`IvaManagementController`, `InversionSujetoActivoController` y
+`ProrrataController` (rutas bajo `api/v1/accounting/{aeat,vies,recargo,
 iva,isp,prorrata}`) exponen endpoints de cálculo/consulta, pero la mayoría
 **devuelven datos simulados hardcodeados** (`Guid.NewGuid()`, importes fijos,
 un diccionario VIES estático con 4 NIFs de prueba) en lugar de persistir o
 leer del DbContext — son claramente placeholders pendientes de conectar a
 datos reales. La excepción parcial es `RecargoController`, cuyo `GetAll`/
 `GetById`/`modelo303` sí consultan `IBillingDbContext.Invoices` reales
-filtrando por `SurchargeRate > 0`. El endpoint real y fiable de validación
-VIES está en `Erp.Api/Controllers/TaxController.cs` (`api/tax/vies/validate`,
-ver ADR-0013), no en `ViesController` del módulo Accounting.
-`FinancialStatementsController` (`cash-flow`, `equity`) y `AgingController`
-(`receivables`, `payables`) también devuelven datos fijos de ejemplo.
+filtrando por `SurchargeRate > 0`. `VatController.CalculateVat` dejó de ser
+mock (ver Evaluación de calidad arquitectónica más abajo); su endpoint
+`declare/modelo330` sigue siendo un stub. El endpoint real y fiable de
+validación VIES está en `Erp.Api/Controllers/TaxController.cs`
+(`api/tax/vies/validate`, ver ADR-0013), no en `ViesController` del módulo
+Accounting. `FinancialStatementsController` (`cash-flow`, `equity`) y
+`AgingController` (`receivables`, `payables`) también devuelven datos fijos
+de ejemplo.
 
 ### Frontend
 `frontend/src/app/accounting/` contiene subrutas para cada área: `aeat`,
@@ -165,13 +168,21 @@ dominio, sin intervención manual):
 Este es el módulo con más incumplimientos del checklist: `AccountingExportController.cs`
 (1362 líneas, 19 endpoints, inyecta contexts de 6 módulos) es una violación
 clara de SRP; `IAccountingDbContext` expone 29 DbSets (ISP, ver
-`GetFiscalPeriodsHandler` que solo usa uno); y 10 de sus 16 controllers no
-usan `IMediator` — tienen lógica de negocio inline (los ya documentados como
-mock: AeatModels, Vat, Vies, IvaManagement, InversionSujetoActivo, Prorrata,
-Recargo, FinancialStatements, Aging, más `AccountingExportController`). Además
-`VatController.cs` duplica tasas/cálculo de IVA que ya existen, correctamente,
-en `CalculateVatCommand.cs` — el mismo patrón que ya se corrigió para VIES
-(ver más abajo) sigue sin corregirse aquí.
+`GetFiscalPeriodsHandler` que solo usa uno); y 9 de sus 16 controllers todavía
+no usan `IMediator` — tienen lógica de negocio inline (los ya documentados
+como mock: AeatModels, Vies, IvaManagement, InversionSujetoActivo, Prorrata,
+Recargo, FinancialStatements, Aging, más `AccountingExportController`).
+
+**Corregido:** `VatController.cs` duplicaba tasas/cálculo de IVA que ya
+existían, correctamente, en `CalculateVatCommand.cs` — el mismo patrón que ya
+se había corregido para VIES. Ahora `VatController.CalculateVat` despacha
+`CalculateVatCommand` vía `IMediator` (controller delgado, cumple CQRS) y
+`GetVatRates` lee de `SpanishVatRates` (`Application/Features/Vat/VatRates.cs`),
+la misma fuente de datos que usa el handler — ya no hay dos tablas de tasas
+independientes. De paso, `CalculateVatCommand` dejó de aceptar `CompanyId`
+como campo del body (el cliente podía enviar cualquier tenant) y ahora lo
+resuelve del `ITenantContext` del handler, igual que el resto de comandos de
+Accounting. `VatController.DeclareModelo330` sigue siendo un stub sin tocar.
 
 ## Buenas prácticas aplicables
 - Todo asiento generado automáticamente debe validar `Σ Debe == Σ Haber`
@@ -183,11 +194,12 @@ en `CalculateVatCommand.cs` — el mismo patrón que ya se corrigió para VIES
 - Las cuentas contables se resuelven siempre por `CompanyId` + `Code`
   (multi-tenant); nunca hardcodear un `AccountId`.
 - Antes de extender los controladores "stub" (`AeatModelsController`,
-  `VatController`, `ViesController`, `IvaManagementController`,
+  `ViesController`, `IvaManagementController`,
   `InversionSujetoActivoController`, `ProrrataController`,
   `FinancialStatementsController`, `AgingController`), verificar si ya existe
   lógica real equivalente en `AccountingExportController` o en
-  `Erp.Api/Controllers/TaxController.cs` para no duplicar.
+  `Erp.Api/Controllers/TaxController.cs` para no duplicar. `VatController` ya
+  no está en esta lista (ver Evaluación de calidad arquitectónica).
 - Respetar el prefijo `FiscalExportHeaders.MarkAsNonOfficial` en cualquier
   exportación fiscal nueva, para no inducir a pensar que sustituye la
   presentación oficial ante la AEAT.

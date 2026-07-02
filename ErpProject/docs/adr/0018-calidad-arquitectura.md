@@ -118,12 +118,18 @@ Desviaciones:
   raíz del módulo en vez de bajo `Infrastructure/Migrations/`.
 
 ### 4. Código duplicado
-- **El mismo patrón corregido en VIES (ver ADR-0006) se repite sin corregir
+- **Corregido — el mismo patrón corregido en VIES (ver ADR-0006) se repetía
   en VAT**: `backend/Modules/Accounting/Api/Controllers/VatController.cs`
-  tiene su propio diccionario de tasas de IVA y cálculo inline, totalmente
-  independiente de `CalculateVatCommand.cs` (que tiene otro diccionario con
+  tenía su propio diccionario de tasas de IVA y cálculo inline, totalmente
+  independiente de `CalculateVatCommand.cs` (que tenía otro diccionario con
   las mismas tasas más lógica real de ISP/intracomunitario/recargo y
-  persistencia en `VatTransactions`). Ninguno de los dos llama al otro.
+  persistencia en `VatTransactions`). Ahora `VatController.CalculateVat`
+  despacha `CalculateVatCommand` vía `IMediator`, y ambos (controller y
+  handler) leen las tasas de una única fuente,
+  `Application/Features/Vat/VatRates.cs` (`SpanishVatRates`). De paso se
+  corrigió que `CalculateVatCommand.CompanyId` viniera del body (el cliente
+  podía enviar cualquier tenant) — ahora se resuelve del `ITenantContext`
+  del handler, igual que el resto de comandos de Accounting.
 - `backend/Modules/Crm/Application/Handlers/ClientHandlers.cs`: set completo
   de queries/commands (`GetClientsModuleQuery`, `CreateClientModuleCommand`,
   etc.) que ningún controller referencia — el path real es
@@ -136,14 +142,14 @@ Desviaciones:
   seis copias solo en `TreasuryController.cs`).
 
 ### 5. Código limpio — "nada de lógica en los controllers"
-**26 de 43 controllers en todo el backend no inyectan `IMediator`/`ISender`**
-y en su lugar inyectan el DbContext del módulo directamente, con lógica de
-negocio en el método del controller:
-- Accounting: 10 de 16 controllers (`AccountingExportController`,
+**25 de 43 controllers en todo el backend no inyectan `IMediator`/`ISender`**
+(eran 26; `VatController` se corrigió — ver §4) y en su lugar inyectan el
+DbContext del módulo directamente, con lógica de negocio en el método del
+controller:
+- Accounting: 9 de 16 controllers (`AccountingExportController`,
   `AeatModelsController`, `AgingController`, `FinancialStatementsController`,
   `InversionSujetoActivoController`, `IvaManagementController`,
-  `ProrrataController`, `RecargoController`, `VatController`,
-  `ViesController`).
+  `ProrrataController`, `RecargoController`, `ViesController`).
 - Treasury: los 5 controllers del módulo, sin excepción.
 - Payroll: el único controller del módulo.
 - Además: `FacturaEController` y `PublicInvoicesController` (Billing);
@@ -203,7 +209,7 @@ secundarios ocultos ni commands mal nombrados como getters. Pero:
   ejecuta ahí toda la lógica de altas, liquidaciones y exportación TC1/TC2/RED.
   `Program.cs` no registra ningún `AddMediatR` para Payroll, a diferencia de
   los otros 8 módulos.
-- El bypass de MediatR en 26 controllers (punto 5) es, visto desde CQRS, el
+- El bypass de MediatR en 25 controllers (punto 5) es, visto desde CQRS, el
   mismo problema: esos endpoints no pasan por el pipeline de comandos/queries
   en absoluto, así que tampoco se benefician de `ValidationBehavior` ni de
   ningún pipeline behavior futuro (logging, autorización declarativa, etc.).
@@ -215,7 +221,7 @@ secundarios ocultos ni commands mal nombrados como getters. Pero:
 - **ADR-0004** (CRM): `ClientHandlers.cs` como código muerto/ancla de
   assembly.
 - **ADR-0006** (Accounting): `AccountingExportController` (SRP), duplicado
-  VatController/CalculateVatCommand, `IAccountingDbContext` de 29 DbSets
+  VatController/CalculateVatCommand (corregido), `IAccountingDbContext` de 29 DbSets
   (ISP), controllers sin MediatR.
 - **ADR-0008** (Inventory): entidades núcleo fuera de `Modules/Inventory/Domain`.
 - **ADR-0009** (Payroll): ausencia total de CQRS.
@@ -269,3 +275,32 @@ futuro — antes de dar por cerrado un módulo o una implementación, verificar:
   todos incrementan el costo de cualquier cambio futuro que toque esas zonas
   — de ahí que este ADR quede referenciado desde el template como checklist
   obligatorio, no solo como informe puntual.
+
+## Próximos pasos
+Backlog de remediación, priorizado de menor a mayor riesgo/alcance. Cada
+ítem se corrige de forma aislada y verificada (build/CI en verde) antes de
+pasar al siguiente — nada de refactors masivos de una vez, este es software
+fiscal sin tests automatizados. Estado se actualiza en este mismo ADR a
+medida que se completa cada uno.
+
+| # | Hallazgo | Módulo | Estado |
+|---|---|---|---|
+| 1 | Duplicado VatController/CalculateVatCommand | Accounting | ✅ Corregido |
+| 2 | `ClientHandlers.cs` código muerto usado como ancla de assembly de MediatR | Crm | Pendiente |
+| 3 | `RecargoController`, `AeatModelsController`, `IvaManagementController`, `InversionSujetoActivoController`, `ProrrataController`, `FinancialStatementsController`, `AgingController` sin `IMediator` | Accounting | Pendiente |
+| 4 | `AccountingExportController` (SRP, 1362 líneas, 6 módulos inyectados) | Accounting | Pendiente |
+| 5 | `ViesController` (Accounting) sigue duplicando lo que ya resuelve `Erp.Api/TaxController` | Accounting | Pendiente |
+| 6 | Validators de FluentValidation nunca registrados por módulo (`AddValidatorsFromAssembly` ausente) | Todos | Pendiente |
+| 7 | N+1 en `CreateGoodsReceiptHandler` / `CreateDeliveryNoteHandler` | Purchasing / Sales | Pendiente |
+| 8 | Paginación ausente en `Get*Query` (CRM, Accounting, Treasury, Billing, Inventory) | Varios | Pendiente |
+| 9 | Los 5 controllers de Treasury sin `IMediator` (incluye parser CSV inline) | Treasury | Pendiente |
+| 10 | Payroll sin capa CQRS/MediatR | Payroll | Pendiente |
+| 11 | `PurchaseOrdersController` / `SalesOrdersController` sin `IMediator` | Purchasing / Sales | Pendiente |
+| 12 | Sales y Purchasing: un solo assembly, sin frontera de capas real | Purchasing / Sales | Pendiente |
+| 13 | `Erp.Infrastructure` depende de 5 módulos (dirección invertida) | Core | Pendiente |
+| 14 | Entidades núcleo de Inventory fuera de `Modules/Inventory/Domain` | Inventory | Pendiente |
+
+Los ítems 13 y 14 son los de mayor riesgo/alcance (tocan la dirección de
+dependencias del monolito modular entero) y deberían abordarse solo después
+de validar los anteriores, con más contexto y posiblemente en su propia
+rama/PR dedicado — no como parte de este barrido incremental.
