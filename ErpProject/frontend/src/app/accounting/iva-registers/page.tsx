@@ -17,18 +17,18 @@ export default function IvaManagementPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="border rounded-lg p-4 bg-blue-50">
           <p className="text-gray-600 text-sm">Registro Compras</p>
-          <p className="text-2xl font-bold">Ä{(registers.purchaseTotal / 1000).toFixed(0)}k</p>
+          <p className="text-2xl font-bold">‚Ç¨{(registers.purchaseTotal / 1000).toFixed(0)}k</p>
           <p className="text-xs text-gray-500">{registers.purchaseRecords} registros</p>
         </div>
         <div className="border rounded-lg p-4 bg-green-50">
           <p className="text-gray-600 text-sm">Registro Ventas</p>
-          <p className="text-2xl font-bold">Ä{(registers.salesTotal / 1000).toFixed(0)}k</p>
+          <p className="text-2xl font-bold">‚Ç¨{(registers.salesTotal / 1000).toFixed(0)}k</p>
           <p className="text-xs text-gray-500">{registers.salesRecords} registros</p>
         </div>
         <div className="border rounded-lg p-4 bg-purple-50">
           <p className="text-gray-600 text-sm">Operaciones Intra-UE</p>
           <p className="text-2xl font-bold">{registers.intraEU}</p>
-          <p className="text-xs text-gray-500">Tri·ngulos incluidos</p>
+          <p className="text-xs text-gray-500">Tri√°ngulos incluidos</p>
         </div>
       </div>
 
@@ -47,8 +47,8 @@ export default function IvaManagementPage() {
           <hr />
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-bold">SII (Sistema Inmediato de InformaciÛn)</h3>
-              <p className="text-sm text-gray-600">EnvÌo directo a AEAT sin intermediarios</p>
+              <h3 className="font-bold">SII (Sistema Inmediato de Informaci√≥n)</h3>
+              <p className="text-sm text-gray-600">Env√≠o directo a AEAT sin intermediarios</p>
             </div>
             <button className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
               Enviar a SII
@@ -71,18 +71,18 @@ export default function IvaManagementPage() {
             <tbody>
               <tr>
                 <td className="border p-1">Proveedor A</td>
-                <td className="border p-1 text-right">Ä5.000</td>
-                <td className="border p-1 text-right">Ä1.050</td>
+                <td className="border p-1 text-right">‚Ç¨5.000</td>
+                <td className="border p-1 text-right">‚Ç¨1.050</td>
               </tr>
               <tr>
                 <td className="border p-1">Proveedor B (UE)</td>
-                <td className="border p-1 text-right">Ä3.000</td>
-                <td className="border p-1 text-right">Ä630</td>
+                <td className="border p-1 text-right">‚Ç¨3.000</td>
+                <td className="border p-1 text-right">‚Ç¨630</td>
               </tr>
               <tr className="bg-yellow-50 font-bold">
                 <td className="border p-1">TOTAL</td>
-                <td className="border p-1 text-right">Ä45.000</td>
-                <td className="border p-1 text-right">Ä9.450</td>
+                <td className="border p-1 text-right">‚Ç¨45.000</td>
+                <td className="border p-1 text-right">‚Ç¨9.450</td>
               </tr>
             </tbody>
           </table>
@@ -101,18 +101,18 @@ export default function IvaManagementPage() {
             <tbody>
               <tr>
                 <td className="border p-1">Cliente X</td>
-                <td className="border p-1 text-right">Ä8.000</td>
-                <td className="border p-1 text-right">Ä1.680</td>
+                <td className="border p-1 text-right">‚Ç¨8.000</td>
+                <td className="border p-1 text-right">‚Ç¨1.680</td>
               </tr>
               <tr>
                 <td className="border p-1">Cliente Y (UE)</td>
-                <td className="border p-1 text-right">Ä5.000</td>
-                <td className="border p-1 text-right">Ä0 (ISP)</td>
+                <td className="border p-1 text-right">‚Ç¨5.000</td>
+                <td className="border p-1 text-right">‚Ç¨0 (ISP)</td>
               </tr>
               <tr className="bg-yellow-50 font-bold">
                 <td className="border p-1">TOTAL</td>
-                <td className="border p-1 text-right">Ä120.000</td>
-                <td className="border p-1 text-right">Ä25.200</td>
+                <td className="border p-1 text-right">‚Ç¨120.000</td>
+                <td className="border p-1 text-right">‚Ç¨25.200</td>
               </tr>
             </tbody>
           </table>
@@ -124,7 +124,7 @@ export default function IvaManagementPage() {
         <ul className="text-sm space-y-1">
           <li>? RIVA .txt oficial (Art. 63-66)</li>
           <li>? SII XML con certificado digital</li>
-          <li>? Reverse Charge autom·tico para ISP</li>
+          <li>? Reverse Charge autom√°tico para ISP</li>
           <li>? Operaciones intra-UE identificadas</li>
         </ul>
       </div>

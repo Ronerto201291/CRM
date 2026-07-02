@@ -15,7 +15,7 @@ export default function AeatPage() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div className="border rounded-lg p-4 bg-blue-50">
           <p className="text-gray-600 text-sm">Modelo 347 (Anual)</p>
-          <p className="text-sm">Operaciones 3.005Ä+</p>
+          <p className="text-sm">Operaciones 3.005‚Ç¨+</p>
         </div>
         <div className="border rounded-lg p-4 bg-green-50">
           <p className="text-gray-600 text-sm">Modelos 111/190 (Trimestral/Mensual)</p>
@@ -26,7 +26,7 @@ export default function AeatPage() {
           <p className="text-sm">Resumen anual IVA</p>
         </div>
         <div className="border rounded-lg p-4 bg-purple-50">
-          <p className="text-gray-600 text-sm">Modelo 202 (DevoluciÛn)</p>
+          <p className="text-gray-600 text-sm">Modelo 202 (Devoluci√≥n)</p>
           <p className="text-sm">IVA a devolver</p>
         </div>
       </div>
@@ -37,7 +37,7 @@ export default function AeatPage() {
           <thead>
             <tr className="bg-gray-200">
               <th className="border p-2 text-left">Modelo</th>
-              <th className="border p-2 text-left">PerÌodo</th>
+              <th className="border p-2 text-left">Per√≠odo</th>
               <th className="border p-2 text-right">Cantidad</th>
               <th className="border p-2">Estado</th>
               <th className="border p-2">Acciones</th>
@@ -51,7 +51,7 @@ export default function AeatPage() {
                   {m.month ? `${m.month}/` : ""}{m.year}
                 </td>
                 <td className="border p-2 text-right">
-                  Ä{(m.totalAmount || m.annualVat || m.netVat || 0).toLocaleString()}
+                  ‚Ç¨{(m.totalAmount || m.annualVat || m.netVat || 0).toLocaleString()}
                 </td>
                 <td className="border p-2">
                   <span className={`px-2 py-1 rounded text-white text-xs ${
@@ -75,7 +75,7 @@ export default function AeatPage() {
         <h3 className="font-bold mb-2">? Formato Oficial AEAT</h3>
         <p className="text-sm text-gray-700">
           Todos los modelos se generan en formato .txt oficial reconocido por AEAT.
-          Desc·rgalos directamente desde aquÌ sin necesidad de conversiÛn.
+          Desc√°rgalos directamente desde aqu√≠ sin necesidad de conversi√≥n.
         </p>
       </div>
 

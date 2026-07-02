@@ -46,7 +46,10 @@ services:
     restart: always
     env_file: .env
     environment:
-      ConnectionStrings__DefaultConnection: ${DATABASE_URL}
+      # Construida a partir de POSTGRES_* (ya interpolados por Compose desde
+      # .env) en vez de pedir la contraseña pegada a mano por segunda vez en
+      # una variable DATABASE_URL aparte - evita que las dos copias diverjan.
+      ConnectionStrings__DefaultConnection: Host=postgres;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
       ConnectionStrings__Redis: ${REDIS_URL}
       Jwt__Secret: ${JWT_SECRET}
       Jwt__Issuer: ${JWT_ISSUER}

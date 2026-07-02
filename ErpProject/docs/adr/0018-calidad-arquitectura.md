@@ -419,7 +419,7 @@ en producción potencial**, no solo deuda de diseño — se marcan explícitamen
 
 | # | Mejora | Evidencia | Prioridad |
 |---|---|---|---|
-| 52 | Health-check post-deploy roto (puerto 5000 vs. 8080 real, sin puerto publicado) — solo relevante para el script `deploy/deploy.sh` orientado a servidor | `deploy/deploy.sh:28-29`, `backend/Dockerfile:39-43` | Aparcado — sin servidor |
+| 52 | Desajuste de puerto 5000 vs. 8080 real — **no era solo un problema del script de servidor**: `.env.example` traía `ASPNETCORE_URLS=http://+:5000`, que también rompía el arranque local (el contenedor expone/healthchequea 8080). ✅ Corregido: `.env.example` ahora usa `8080` y las URLs de frontend apuntan a `8081`/`8080` según corresponda (ver ítem 65) | `deploy/deploy.sh:28-29`, `backend/Dockerfile:39-43`, `.env.example` | ✅ Corregido (parte local); resto del script de servidor sigue Aparcado |
 | 53 | TLS desactivado en nginx de producción con HSTS activo (footgun) — solo aplica cuando haya un dominio/servidor real sirviendo HTTPS | `deploy/nginx/erp.conf:5,8-10,16` | Aparcado — sin servidor |
 | 54 | Nginx de host y de contenedor compitiendo por 80/443 — parte de `setup-vps.sh`, no del flujo local | `deploy/setup-vps.sh:20,49-50` + `docker-compose.yml:88-89` | Aparcado — sin servidor |
 | 55 | Postgres publicado a `0.0.0.0:5432` sin bloqueo de firewall — en local (sin IP pública) no es una exposición real; revisar de nuevo al desplegar en servidor | `docker-compose.yml:16-17` | Aparcado — sin servidor |
@@ -432,7 +432,70 @@ en producción potencial**, no solo deuda de diseño — se marcan explícitamen
 | 62 | El manifiesto de k8s está obsoleto y nunca se ha usado — al no haber servidor tampoco hay presión por mantenerlo; valorar si retirarlo del repo o dejarlo como referencia futura | `k8s/deployment.yaml` completo | Baja |
 | 63 | Sin infraestructura como código; `setup-vps.sh` no es re-ejecutable de forma segura — irrelevante mientras no haya VPS que aprovisionar | `deploy/setup-vps.sh` completo | Aparcado — sin servidor |
 | 64 | Todo pensado para un único VPS sin redundancia — la pregunta de redundancia/HA no aplica a un entorno Docker local de desarrollo | `docker-compose.yml` completo | Aparcado — sin servidor |
-| 65 | **Prioridad actual real**: verificar que `docker compose -f docker-compose.yml -f docker-compose.local.yml up` levanta el stack completo en local (Postgres + Redis + backend + frontend), aplica migraciones, siembra el usuario admin de desarrollo, y ambos servicios pasan sus healthchecks — es el único camino de despliegue que importa ahora mismo, y no está confirmado que funcione de punta a punta tal como está | `docker-compose.yml` + `docker-compose.local.yml` | **Alta — es lo único que importa ahora** |
+| 65 | Verificar que `docker compose -f docker-compose.yml -f docker-compose.local.yml up` levanta el stack completo en local. **Verificado por partes (ver detalle debajo); build de backend y de frontend confirmados, `docker compose config` confirma el merge correcto, pero el `up` completo con los 5 contenedores corriendo a la vez no se ha podido ejecutar en el sandbox de CI/agente porque bloquea la CDN de Docker Hub — pendiente de confirmación final en una máquina con Docker Hub accesible** | `docker-compose.yml` + `docker-compose.local.yml` + `backend/Dockerfile` + `frontend/next.config.ts` | 🟡 Verificado parcialmente — falta `up` real |
+
+**Detalle de la verificación del ítem 65 (bugs reales encontrados y corregidos):**
+
+1. **`backend/Dockerfile` no compilaba.** Solo copiaba los 4 `.csproj` del
+   core antes de `dotnet restore "Erp.Api/Erp.Api.csproj"`, pero
+   `Erp.Api.csproj` tiene ~30 `ProjectReference` hacia
+   `backend/Modules/*/*.csproj` (monolito modular) — el restore fallaba
+   porque no podía resolver esas referencias. ✅ Corregido: se copia todo
+   `backend/` antes de restaurar (se sacrifica la capa de caché de "solo
+   csproj" a cambio de que el restore funcione). Verificado con
+   `docker build --target build` real, build completo hasta
+   `/app/publish/Erp.Api.dll`.
+2. **8 páginas del frontend con encoding roto (Windows-1252/ISO-8859 en vez
+   de UTF-8) rompían el build de producción entero.** `npm run build`
+   (Turbopack) fallaba con "Reading source code for parsing failed...
+   invalid utf-8 sequence" en `accounting/aeat-models`, `cost-centers`,
+   `isp`, `iva-registers`, `prorrata`, `recargo`, `vat-regime` y
+   `billing/facturae`. ✅ Corregido con `iconv -f WINDOWS-1252 -t UTF-8`;
+   verificado con `npm run build` completo (68 rutas generadas,
+   `.next/standalone/server.js` presente, que es lo que consume
+   `frontend/Dockerfile`).
+3. **`next.config.js` y `next.config.ts` coexistían** con contenido
+   solapado; solo el `.ts` tenía `output: 'standalone'` (imprescindible para
+   el Dockerfile multi-stage). ✅ Corregido: se elimina el `.js`, se
+   consolida todo en `next.config.ts` (de paso se quita la clave `eslint`,
+   que Next.js 16 ya no soporta en `next.config` y generaba un warning).
+4. **Bug de semántica de Compose en `docker-compose.local.yml`**: el propio
+   comentario del archivo afirmaba que el override quitaba el mount SSL y
+   el puerto 443 de nginx, pero Compose fusiona listas (`ports:`,
+   `volumes:`) por `target` en vez de reemplazarlas — verificado con
+   `docker compose config` que ambos seguían presentes pese al override.
+   ✅ Corregido usando el tag `!override` de la Compose Specification en
+   `ports:`/`volumes:` del servicio `nginx`; re-verificado con
+   `docker compose config` que el nginx local queda solo con puerto 80 y
+   sin mount SSL.
+5. **`.env.example` tenía `ASPNETCORE_URLS=http://+:5000`**, en conflicto
+   con el puerto real 8080 del contenedor (ítem 52). ✅ Corregido.
+6. **Footgun de contraseña duplicada**: `.env.example` pedía pegar la
+   contraseña de Postgres dos veces (una en `POSTGRES_PASSWORD`, otra
+   sustituida a mano dentro de `DATABASE_URL`, ya que Compose no
+   interpola `${VAR}` escritas dentro del propio `.env`). ✅ Corregido:
+   `docker-compose.yml` construye `ConnectionStrings__DefaultConnection`
+   directamente a partir de `${POSTGRES_DB}`/`${POSTGRES_USER}`/
+   `${POSTGRES_PASSWORD}` (que Compose sí interpola al estar en el propio
+   compose file); se elimina `DATABASE_URL` de `.env.example`.
+7. El mount `/opt/erp/certs` (ruta absoluta del VPS) se remapea en
+   `docker-compose.local.yml` a `./deploy/certs` (repo-local, carpeta nueva
+   con `.gitkeep`); se confirmó leyendo
+   `Erp.Infrastructure/DependencyInjection.cs:75-92` que el backend arranca
+   igual sin certificado SII (carga condicional con `File.Exists`), así que
+   no hace falta ningún certificado de prueba para el flujo local.
+
+**Limitación honesta:** en el sandbox donde se hizo esta verificación, las
+imágenes `postgres:16-alpine`, `redis:7-alpine`, `node:20-alpine` y
+`nginx:alpine` no se pudieron descargar (la CDN de Docker Hub está bloqueada
+por política del proxy de salida del entorno) — por tanto **no se ha podido
+ejecutar el `docker compose up` completo con los 5 servicios corriendo a la
+vez**. Lo verificado de forma independiente es: (a) el build del backend
+completa con éxito, (b) el build/`next build` del frontend completa con
+éxito y genera el standalone que el Dockerfile necesita, (c) el merge de
+`docker-compose.yml` + `docker-compose.local.yml` es correcto vía
+`docker compose config`. Falta la confirmación final de un `up` real, que
+debe hacerse en una máquina con acceso normal a Docker Hub.
 
 **Nota sobre el estado real del pipeline:** `git log --oneline main` muestra
 21 commits, todos `docs:`/`fix:`/`chore:` sobre ADRs y código de aplicación

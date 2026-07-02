@@ -23,7 +23,7 @@ export default function CostCentersPage() {
   useEffect(() => { fetchCenters(); }, []);
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Cost Centers (Contabilidad Analítica)</h1>
+      <h1 className="text-2xl font-bold mb-4">Cost Centers (Contabilidad AnalÃ­tica)</h1>
       <div className="mb-4 border p-3">
         <input placeholder="Code" value={code} onChange={e => setCode(e.target.value)} className="border p-2 mr-2" />
         <input placeholder="Name" value={name} onChange={e => setName(e.target.value)} className="border p-2 mr-2" />

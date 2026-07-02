@@ -14,7 +14,7 @@ export default function FacturaEPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="border rounded-lg p-4 bg-blue-50">
           <p className="text-gray-600 text-sm">FacturaE 3.2.2</p>
-          <p className="text-sm">Formato electrónico normalizado</p>
+          <p className="text-sm">Formato electrÃ³nico normalizado</p>
         </div>
         <div className="border rounded-lg p-4 bg-green-50">
           <p className="text-gray-600 text-sm">RD 1007/2023</p>
@@ -65,12 +65,12 @@ export default function FacturaEPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="border rounded-lg p-4">
-          <h3 className="font-bold mb-3">Representación Gráfica</h3>
+          <h3 className="font-bold mb-3">RepresentaciÃ³n GrÃ¡fica</h3>
           <ul className="text-sm space-y-2">
             <li>? PDF con QR de factura</li>
             <li>? HTML interactivo</li>
             <li>? Firma digital visible</li>
-            <li>? Código de barras VERI*FACTU</li>
+            <li>? CÃ³digo de barras VERI*FACTU</li>
           </ul>
         </div>
         <div className="border rounded-lg p-4">

@@ -14,7 +14,7 @@ export default function VatRegimePage() {
   };
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">3.1 IVA - Régimen (Devengo/Caja/Prorrata)</h1>
+      <h1 className="text-2xl font-bold mb-4">3.1 IVA - RÃ©gimen (Devengo/Caja/Prorrata)</h1>
       <div className="mb-4 border p-3">
         <label>Select VAT Regime:</label>
         <select value={regime} onChange={e => setRegime(e.target.value)} className="border p-2 mr-2">

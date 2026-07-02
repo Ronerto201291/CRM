@@ -1,15 +1,14 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
-# Copy csproj and restore as distinct layers
-COPY ["backend/Erp.Api/Erp.Api.csproj", "Erp.Api/"]
-COPY ["backend/Erp.Application/Erp.Application.csproj", "Erp.Application/"]
-COPY ["backend/Erp.Domain/Erp.Domain.csproj", "Erp.Domain/"]
-COPY ["backend/Erp.Infrastructure/Erp.Infrastructure.csproj", "Erp.Infrastructure/"]
+# Erp.Api.csproj tiene ~30 ProjectReference hacia backend/Modules/*/*.csproj
+# (monolito modular) - un restore parcial copiando solo los 4 csproj del core
+# falla porque dotnet restore no puede resolver esas referencias de proyecto.
+# Se copia todo el código fuente antes de restaurar (se sacrifica la capa de
+# caché de "solo csproj", pero garantiza que el restore funcione).
+COPY backend/ .
 RUN dotnet restore "Erp.Api/Erp.Api.csproj"
 
-# Copy everything else and build
-COPY backend/ .
 WORKDIR "/src/Erp.Api"
 RUN dotnet build "Erp.Api.csproj" -c Release -o /app/build
 RUN dotnet publish "Erp.Api.csproj" -c Release -o /app/publish

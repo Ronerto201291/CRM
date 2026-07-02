@@ -45,7 +45,7 @@ export default function RecargoPage() {
         <div className="mt-2"><label>Supplier is RE:</label> <input type="checkbox" checked={supplierIsRE} onChange={(e) => setSupplierIsRE(e.target.checked)} className="ml-2" /></div>
         <div className="mt-2"><label>Base:</label> <input type="number" value={base} onChange={(e) => setBase(Number(e.target.value))} className="border p-2 ml-2 w-24" /></div>
         <div className="mt-2"><label>Recharge Rate (%):</label> <input type="number" step="0.1" value={rechargeRate} onChange={(e) => setRechargeRate(Number(e.target.value))} className="border p-2 ml-2 w-24" /></div>
-        <div className="mt-2 p-2 bg-yellow-50"><strong>Recharge Amount:</strong> €{rechargeAmount.toFixed(2)}</div>
+        <div className="mt-2 p-2 bg-yellow-50"><strong>Recharge Amount:</strong> â‚¬{rechargeAmount.toFixed(2)}</div>
         <button onClick={create} className="mt-3 px-4 py-2 bg-blue-600 text-white rounded">Create Recargo</button>
       </div>
       <table className="w-full border">
@@ -62,9 +62,9 @@ export default function RecargoPage() {
           {recargoList.map((r) => (
             <tr key={r.supplierVatNumber}>
               <td className="border p-2">{r.supplierVatNumber}</td>
-              <td className="border p-2">€{r.base}</td>
+              <td className="border p-2">â‚¬{r.base}</td>
               <td className="border p-2">{r.rechargeRate}%</td>
-              <td className="border p-2">€{(r.base * (r.rechargeRate / 100)).toFixed(2)}</td>
+              <td className="border p-2">â‚¬{(r.base * (r.rechargeRate / 100)).toFixed(2)}</td>
               <td className="border p-2">Pending</td>
             </tr>
           ))}

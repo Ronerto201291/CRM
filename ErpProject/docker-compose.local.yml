@@ -1,9 +1,15 @@
 # Override para desarrollo LOCAL
-# Uso: docker-compose -f docker-compose.yml -f docker-compose.local.yml up -d
+# Uso: docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
 #
 # Diferencias vs producción:
-#  - nginx: sin SSL, acceso en http://localhost
-#  - backend: puerto 8080 expuesto directamente (para Swagger sin nginx)
+#  - nginx: sin SSL, acceso en http://localhost (puerto 443 y el mount de
+#    certificados se eliminan con `!override`, no solo se "sobreescriben" -
+#    Compose fusiona listas por target salvo que se use este tag, así que sin
+#    él el 443 y el bind a deploy/nginx/ssl seguían presentes pese al comentario
+#    original)
+#  - backend: puerto 8080 expuesto directamente (para Swagger sin nginx);
+#    certificado SII apuntando a ./deploy/certs (repo-local) en vez de la ruta
+#    absoluta /opt/erp/certs del servidor, que no existe en un equipo local
 #  - ASPNETCORE_ENVIRONMENT: Development (activa seed de datos)
 
 services:
@@ -12,11 +18,13 @@ services:
       - "8081:8080"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+    volumes:
+      - uploads:/app/uploads
+      - ./deploy/certs:/app/certs:ro
 
   nginx:
-    volumes:
+    ports: !override
+      - "80:80"
+    volumes: !override
       - ./deploy/nginx/erp.local.conf:/etc/nginx/conf.d/default.conf:ro
       - uploads:/app/uploads:ro
-    # Sobreescribir para quitar el mount de SSL (que no existe en local)
-    ports:
-      - "80:80"

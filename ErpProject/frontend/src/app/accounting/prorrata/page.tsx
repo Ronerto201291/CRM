@@ -30,8 +30,8 @@ export default function ProrrataPage() {
       </div>
       {prorrata && (
         <div className="border p-4 bg-green-50">
-          <div className="mb-2"><strong>Inland Revenue:</strong> €{prorrata.inlandRevenue}</div>
-          <div className="mb-2"><strong>Exempt Revenue:</strong> €{prorrata.exemptRevenue}</div>
+          <div className="mb-2"><strong>Inland Revenue:</strong> â‚¬{prorrata.inlandRevenue}</div>
+          <div className="mb-2"><strong>Exempt Revenue:</strong> â‚¬{prorrata.exemptRevenue}</div>
           <div className="mb-2 text-lg font-bold text-blue-600"><strong>Prorrata Percentage:</strong> {prorrata.prorrataPercentage.toFixed(2)}%</div>
           <p className="text-sm text-gray-600 mt-2">This percentage determines what portion of VAT is deductible on common expenses.</p>
         </div>

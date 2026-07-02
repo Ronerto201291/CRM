@@ -24,7 +24,7 @@ export default function ISPPage() {
   const vatAmount = base * (vatRate / 100);
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">3.3 ISP - Inversión del Sujeto Pasivo (Reverse Charge)</h1>
+      <h1 className="text-2xl font-bold mb-4">3.3 ISP - InversiÃ³n del Sujeto Pasivo (Reverse Charge)</h1>
       <div className="mb-4 border p-3">
         <div><label>Supplier Country:</label>
           <select value={countryCode} onChange={e => setCountryCode(e.target.value)} className="border p-2 ml-2">
@@ -33,7 +33,7 @@ export default function ISPPage() {
         </div>
         <div className="mt-2"><label>Vatable Base:</label> <input type="number" value={base} onChange={e => setBase(Number(e.target.value))} className="border p-2 ml-2 w-32" /></div>
         <div className="mt-2"><label>VAT Rate (%):</label> <input type="number" value={vatRate} onChange={e => setVatRate(Number(e.target.value))} className="border p-2 ml-2 w-24" /></div>
-        <div className="mt-2 p-2 bg-blue-50"><strong>VAT Amount (Reverse Charged):</strong> €{vatAmount.toFixed(2)}</div>
+        <div className="mt-2 p-2 bg-blue-50"><strong>VAT Amount (Reverse Charged):</strong> â‚¬{vatAmount.toFixed(2)}</div>
         <button onClick={create} className="mt-3 px-4 py-2 bg-blue-600 text-white rounded">Create ISP</button>
       </div>
       <table className="w-full border">
@@ -50,9 +50,9 @@ export default function ISPPage() {
           {ispList.map((i: any) => (
             <tr key={i.id}>
               <td className="border p-2">{i.supplierCountryCode}</td>
-              <td className="border p-2">€{i.vatableBase}</td>
+              <td className="border p-2">â‚¬{i.vatableBase}</td>
               <td className="border p-2">{i.vatRate}%</td>
-              <td className="border p-2">€{i.vatAmount.toFixed(2)}</td>
+              <td className="border p-2">â‚¬{i.vatAmount.toFixed(2)}</td>
               <td className="border p-2">{i.isReverseCharge ? 'Yes' : 'No'}</td>
             </tr>
           ))}
