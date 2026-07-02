@@ -130,6 +130,19 @@ Desviaciones:
   corrigió que `CalculateVatCommand.CompanyId` viniera del body (el cliente
   podía enviar cualquier tenant) — ahora se resuelve del `ITenantContext`
   del handler, igual que el resto de comandos de Accounting.
+- **Corregido — mismo patrón, con un bug real de contrato añadido**:
+  `ProrrataController.CalculateProrrata` calculaba inline con un
+  `CalculateProrrataRequest` propio (`DeductibleOperations`/`NonDeductibleOperations`/`TotalVatSupported`),
+  totalmente distinto del `CalculateProrrataCommand` huérfano. Al revisar el
+  frontend real (`frontend/src/app/accounting/prorrata/page.tsx`) se
+  encontró que este envía/lee `{fiscalYear, inlandRevenue, exemptRevenue,
+  type}` / `{inlandRevenue, exemptRevenue, prorrataPercentage}` — nombres que
+  no coinciden con ninguno de los dos, así que la página producía
+  `TypeError: Cannot read properties of undefined (reading 'toFixed')` al
+  pulsar "Calculate Prorrata". Se corrigió `CalculateProrrataCommand` para
+  usar exactamente el contrato del frontend (calculadora manual: el usuario
+  introduce los ingresos, se persiste un `ProrrataCalculation` real) y
+  `ProrrataController` ahora despacha ese comando vía `IMediator`.
 - **Corregido** — `backend/Modules/Crm/Application/Handlers/ClientHandlers.cs`
   era un set completo de queries/commands (`GetClientsModuleQuery`,
   `CreateClientModuleCommand`, etc.) que ningún controller referenciaba — el
@@ -145,13 +158,13 @@ Desviaciones:
 
 ### 5. Código limpio — "nada de lógica en los controllers"
 **25 de 43 controllers en todo el backend no inyectan `IMediator`/`ISender`**
-(eran 26; `VatController` se corrigió — ver §4) y en su lugar inyectan el
-DbContext del módulo directamente, con lógica de negocio en el método del
-controller:
-- Accounting: 9 de 16 controllers (`AccountingExportController`,
+(eran 26; `VatController` y `ProrrataController` se corrigieron — ver §4) y
+en su lugar inyectan el DbContext del módulo directamente, con lógica de
+negocio en el método del controller:
+- Accounting: 8 de 16 controllers (`AccountingExportController`,
   `AeatModelsController`, `AgingController`, `FinancialStatementsController`,
   `InversionSujetoActivoController`, `IvaManagementController`,
-  `ProrrataController`, `RecargoController`, `ViesController`).
+  `RecargoController`, `ViesController`).
 - Treasury: los 5 controllers del módulo, sin excepción.
 - Payroll: el único controller del módulo.
 - Además: `FacturaEController` y `PublicInvoicesController` (Billing);
@@ -289,7 +302,9 @@ medida que se completa cada uno.
 |---|---|---|---|
 | 1 | Duplicado VatController/CalculateVatCommand | Accounting | ✅ Corregido |
 | 2 | `ClientHandlers.cs` código muerto usado como ancla de assembly de MediatR | Crm | ✅ Corregido |
-| 3 | `RecargoController`, `AeatModelsController`, `IvaManagementController`, `InversionSujetoActivoController`, `ProrrataController`, `FinancialStatementsController`, `AgingController` sin `IMediator` | Accounting | Pendiente |
+| 3a | Duplicado ProrrataController/CalculateProrrataCommand (+ bug real: contrato no coincidía con el frontend) | Accounting | ✅ Corregido |
+| 3b | `RecargoController` sin `IMediator` (tiene lógica real: queries a `IBillingDbContext`, mapeo Modelo 303 — migración no trivial) | Accounting | Pendiente |
+| 3c | `AeatModelsController`, `IvaManagementController`, `InversionSujetoActivoController`, `FinancialStatementsController`, `AgingController` sin `IMediator` | Accounting | Deprioritizado — ver nota |
 | 4 | `AccountingExportController` (SRP, 1362 líneas, 6 módulos inyectados) | Accounting | Pendiente |
 | 5 | `ViesController` (Accounting) sigue duplicando lo que ya resuelve `Erp.Api/TaxController` | Accounting | Pendiente |
 | 6 | Validators de FluentValidation nunca registrados por módulo (`AddValidatorsFromAssembly` ausente) | Todos | Pendiente |
@@ -306,3 +321,17 @@ Los ítems 13 y 14 son los de mayor riesgo/alcance (tocan la dirección de
 dependencias del monolito modular entero) y deberían abordarse solo después
 de validar los anteriores, con más contexto y posiblemente en su propia
 rama/PR dedicado — no como parte de este barrido incremental.
+
+**Nota sobre el ítem 3c (deprioritizado):** `AeatModelsController`,
+`IvaManagementController`, `InversionSujetoActivoController`,
+`FinancialStatementsController` y `AgingController` no tienen ninguna lógica
+real detrás (ni persistencia, ni cálculo a partir de datos reales, solo
+`return Ok(new { ...cifras fijas... })`). Envolver eso en un
+Command/Query/Handler de MediatR sería ceremonia sin beneficio real: no
+arregla el problema de fondo (que son informes fiscales inventados) y añade
+indirección a código que no tiene ningún comportamiento que proteger de
+duplicación. A diferencia de VAT y Prorrata, aquí no hay una segunda
+implementación "real" con la que unificar. Migrarlos a CQRS solo tiene
+sentido cuando se implemente la lógica fiscal real correspondiente — hacerlo
+antes sería una abstracción prematura. Se dejan documentados como mock en
+ADR-0006 y fuera de este barrido de "controllers delgados".

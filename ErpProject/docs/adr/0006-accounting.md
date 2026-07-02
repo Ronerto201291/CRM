@@ -75,18 +75,18 @@ Los 16 controladores de `Api/Controllers/` se agrupan así:
   inverso a cuenta 795 (Exceso de provisiones).
 
 **IVA, modelos AEAT y fiscalidad especial (mayoritariamente stubs/mock):**
-`AeatModelsController`, `ViesController`, `RecargoController`,
-`IvaManagementController`, `InversionSujetoActivoController` y
-`ProrrataController` (rutas bajo `api/v1/accounting/{aeat,vies,recargo,
-iva,isp,prorrata}`) exponen endpoints de cálculo/consulta, pero la mayoría
-**devuelven datos simulados hardcodeados** (`Guid.NewGuid()`, importes fijos,
-un diccionario VIES estático con 4 NIFs de prueba) en lugar de persistir o
-leer del DbContext — son claramente placeholders pendientes de conectar a
-datos reales. La excepción parcial es `RecargoController`, cuyo `GetAll`/
-`GetById`/`modelo303` sí consultan `IBillingDbContext.Invoices` reales
-filtrando por `SurchargeRate > 0`. `VatController.CalculateVat` dejó de ser
-mock (ver Evaluación de calidad arquitectónica más abajo); su endpoint
-`declare/modelo330` sigue siendo un stub. El endpoint real y fiable de
+`AeatModelsController`, `ViesController`, `RecargoController` e
+`IvaManagementController`/`InversionSujetoActivoController` (rutas bajo
+`api/v1/accounting/{aeat,vies,recargo,iva,isp}`) exponen endpoints de
+cálculo/consulta, pero la mayoría **devuelven datos simulados hardcodeados**
+(`Guid.NewGuid()`, importes fijos, un diccionario VIES estático con 4 NIFs de
+prueba) en lugar de persistir o leer del DbContext — son claramente
+placeholders pendientes de conectar a datos reales. La excepción parcial es
+`RecargoController`, cuyo `GetAll`/`GetById`/`modelo303` sí consultan
+`IBillingDbContext.Invoices` reales filtrando por `SurchargeRate > 0`.
+`VatController.CalculateVat` y `ProrrataController.CalculateProrrata` dejaron
+de ser mock (ver Evaluación de calidad arquitectónica más abajo); `VatController.declare/modelo330`
+sigue siendo un stub. El endpoint real y fiable de
 validación VIES está en `Erp.Api/Controllers/TaxController.cs`
 (`api/tax/vies/validate`, ver ADR-0013), no en `ViesController` del módulo
 Accounting. `FinancialStatementsController` (`cash-flow`, `equity`) y
@@ -195,11 +195,11 @@ Accounting. `VatController.DeclareModelo330` sigue siendo un stub sin tocar.
   (multi-tenant); nunca hardcodear un `AccountId`.
 - Antes de extender los controladores "stub" (`AeatModelsController`,
   `ViesController`, `IvaManagementController`,
-  `InversionSujetoActivoController`, `ProrrataController`,
-  `FinancialStatementsController`, `AgingController`), verificar si ya existe
-  lógica real equivalente en `AccountingExportController` o en
-  `Erp.Api/Controllers/TaxController.cs` para no duplicar. `VatController` ya
-  no está en esta lista (ver Evaluación de calidad arquitectónica).
+  `InversionSujetoActivoController`, `FinancialStatementsController`,
+  `AgingController`), verificar si ya existe lógica real equivalente en
+  `AccountingExportController` o en `Erp.Api/Controllers/TaxController.cs`
+  para no duplicar. `VatController` y `ProrrataController` ya no están en
+  esta lista (ver Evaluación de calidad arquitectónica).
 - Respetar el prefijo `FiscalExportHeaders.MarkAsNonOfficial` en cualquier
   exportación fiscal nueva, para no inducir a pensar que sustituye la
   presentación oficial ante la AEAT.
@@ -223,19 +223,25 @@ Accounting. `VatController.DeclareModelo330` sigue siendo un stub sin tocar.
   usa el endpoint equivocado desde el frontend.
 - **Corregido:** `Application/Features/Vat/ValidateViesCommand.cs` y
   `CalculateProrrataCommand.cs` eran código MediatR huérfano (ningún
-  controller los invocaba — `ViesController` y `ProrrataController` tienen su
+  controller los invocaba — `ViesController` y `ProrrataController` tenían su
   propia lógica duplicada e independiente) que además **no compilaba**:
   escribían en `IntraEuOperation`/`ProrrataCalculation` usando propiedades
-  que no existen en esas entidades (`CounterpartVatNumber`, `ValidatedAt`,
-  `Year`, `DeductibleOperations`...), rompiendo el build de todo el backend
-  desde el primer commit del repo. Se corrigieron para compilar contra el
-  esquema real: `CalculateProrrataCommand` ahora calcula la prorrata a partir
-  de `VatTransactions` reales (usando el régimen `"Zero"` como aproximación a
-  operación exenta, ya que el esquema no tiene un régimen "Exento" explícito)
-  en vez de cifras fijas simuladas, y `ValidateViesCommand` ahora invoca el
+  que no existen en esas entidades, rompiendo el build de todo el backend
+  desde el primer commit del repo. `ValidateViesCommand` ahora invoca el
   `IViesService` real (el mismo que usa `TaxController`, SOAP contra la UE)
-  en vez del diccionario de NIFs de prueba hardcodeado que tenía antes.
-  Importante: esto **no cambia el comportamiento de `ViesController` ni
-  `ProrrataController`**, que siguen siendo los endpoints que realmente llama
-  el frontend y siguen devolviendo datos mock — solo se arregló y limpió el
-  código MediatR huérfano que rompía la compilación.
+  en vez de un diccionario de NIFs de prueba hardcodeado; `ViesController`
+  sigue sin tocar (mock, endpoint separado).
+- **Corregido:** `ProrrataController.CalculateProrrata` ya no calcula inline
+  con un `CalculateProrrataRequest` propio — ahora despacha
+  `CalculateProrrataCommand` vía `IMediator`, que persiste un
+  `ProrrataCalculation` real. Al revisar el contrato real (`frontend/src/app/accounting/prorrata/page.tsx`,
+  que envía `{fiscalYear, inlandRevenue, exemptRevenue, type}` y lee
+  `{inlandRevenue, exemptRevenue, prorrataPercentage}` de la respuesta) se
+  detectó que el controller anterior usaba nombres de campo distintos
+  (`DeductibleOperations`/`NonDeductibleOperations`/`TotalVatSupported`) que
+  **no coincidían con lo que el frontend enviaba ni leía** — la página
+  crasheaba en runtime al llamar `prorrata.prorrataPercentage.toFixed(2)`
+  sobre `undefined`. El nuevo `CalculateProrrataCommand` usa exactamente los
+  nombres de campo del frontend (es una calculadora manual: el usuario
+  introduce los ingresos, no se derivan de `VatTransactions`) y corrige ese
+  bug real de contrato, además de la duplicación de lógica.
