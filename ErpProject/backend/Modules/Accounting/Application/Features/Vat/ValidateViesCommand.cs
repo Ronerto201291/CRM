@@ -1,4 +1,5 @@
 using MediatR;
+using Erp.Application.Common.Interfaces;
 using Erp.Modules.Accounting.Application.Interfaces;
 using Erp.Modules.Accounting.Domain.Entities;
 
@@ -13,17 +14,13 @@ public class ValidateViesCommand : IRequest<ViesValidationResponse>
 public class ValidateViesHandler : IRequestHandler<ValidateViesCommand, ViesValidationResponse>
 {
     private readonly IAccountingDbContext _context;
+    private readonly IViesService _vies;
 
-    private static readonly Dictionary<string, (bool Valid, string Name, string Address)> ViesDatabase = new()
+    public ValidateViesHandler(IAccountingDbContext context, IViesService vies)
     {
-        { "ES12345678Z", (true, "Test Company SL", "Calle Principal 123, Madrid") },
-        { "ES87654321X", (true, "Demo Business Ltd", "Avenida Central 456, Barcelona") },
-        { "IT12345678901", (true, "Società Italiana SPA", "Via Roma 789, Milano") },
-        { "DE98765432101", (true, "Deutsche Firma GmbH", "Hauptstrasse 321, Berlin") },
-        { "FR12345678901", (true, "Entreprise Française SARL", "Rue de Paris 654, Lyon") }
-    };
-
-    public ValidateViesHandler(IAccountingDbContext context) => _context = context;
+        _context = context;
+        _vies = vies;
+    }
 
     public async Task<ViesValidationResponse> Handle(ValidateViesCommand request, CancellationToken cancellationToken)
     {
@@ -33,53 +30,39 @@ public class ValidateViesHandler : IRequestHandler<ValidateViesCommand, ViesVali
             RequestedAt = DateTime.UtcNow
         };
 
-        try
-        {
-            if (!ValidateVatFormat(request.VatNumber))
-            {
-                response.IsValid = false;
-                response.Reason = "Invalid VAT format";
-                return response;
-            }
-
-            var isViesValid = ViesDatabase.TryGetValue(request.VatNumber, out var viesInfo);
-
-            response.IsValid = isViesValid;
-            
-            if (isViesValid)
-            {
-                response.CompanyName = viesInfo.Name;
-                response.Address = viesInfo.Address;
-                response.Reason = "Valid";
-                response.Status = "Active";
-            }
-            else
-            {
-                response.Reason = "Not found in VIES registry";
-                response.Status = "Invalid";
-            }
-
-            var viesRecord = new IntraEuOperation
-            {
-                Id = Guid.NewGuid(),
-                CompanyId = request.CompanyId,
-                CounterpartVatNumber = request.VatNumber,
-                CounterpartName = response.CompanyName ?? "Unknown",
-                IsValid = response.IsValid,
-                ValidatedAt = DateTime.UtcNow,
-                ValidationResult = response.Reason
-            };
-
-            _context.IntraEuOperations.Add(viesRecord);
-            await _context.SaveChangesAsync(cancellationToken);
-
-            response.ValidationId = viesRecord.Id;
-        }
-        catch (Exception ex)
+        if (!ValidateVatFormat(request.VatNumber))
         {
             response.IsValid = false;
-            response.Reason = $"Validation error: {ex.Message}";
+            response.Status = "Invalid";
+            response.Reason = "Formato de NIF-IVA invÃ¡lido";
+            return response;
         }
+
+        var countryCode = request.VatNumber.Substring(0, 2);
+        var numberWithoutPrefix = request.VatNumber.Substring(2);
+
+        var result = await _vies.ValidateAsync(countryCode, numberWithoutPrefix, cancellationToken);
+
+        response.IsValid = result.IsValid;
+        response.CompanyName = result.Name ?? string.Empty;
+        response.Address = result.Address ?? string.Empty;
+        response.Status = result.IsValid ? "Active" : "Invalid";
+        response.Reason = result.ErrorMessage
+            ?? (result.IsValid ? "VÃ¡lido en el registro VIES" : "No encontrado en el registro VIES");
+
+        var operation = new IntraEuOperation
+        {
+            CompanyId = request.CompanyId,
+            Type = "Service",
+            CountryCode = countryCode,
+            PartnerVatId = request.VatNumber,
+            ViesStatus = "NotReported",
+        };
+
+        _context.IntraEuOperations.Add(operation);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        response.ValidationId = operation.Id;
 
         return response;
     }

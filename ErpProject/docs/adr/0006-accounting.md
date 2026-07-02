@@ -195,3 +195,21 @@ dominio, sin intervención manual):
 - El doble stub de validación VIES (uno real en `TaxController`, otro mock en
   `ViesController` de Accounting) es una fuente potencial de confusión si se
   usa el endpoint equivocado desde el frontend.
+- **Corregido:** `Application/Features/Vat/ValidateViesCommand.cs` y
+  `CalculateProrrataCommand.cs` eran código MediatR huérfano (ningún
+  controller los invocaba — `ViesController` y `ProrrataController` tienen su
+  propia lógica duplicada e independiente) que además **no compilaba**:
+  escribían en `IntraEuOperation`/`ProrrataCalculation` usando propiedades
+  que no existen en esas entidades (`CounterpartVatNumber`, `ValidatedAt`,
+  `Year`, `DeductibleOperations`...), rompiendo el build de todo el backend
+  desde el primer commit del repo. Se corrigieron para compilar contra el
+  esquema real: `CalculateProrrataCommand` ahora calcula la prorrata a partir
+  de `VatTransactions` reales (usando el régimen `"Zero"` como aproximación a
+  operación exenta, ya que el esquema no tiene un régimen "Exento" explícito)
+  en vez de cifras fijas simuladas, y `ValidateViesCommand` ahora invoca el
+  `IViesService` real (el mismo que usa `TaxController`, SOAP contra la UE)
+  en vez del diccionario de NIFs de prueba hardcodeado que tenía antes.
+  Importante: esto **no cambia el comportamiento de `ViesController` ni
+  `ProrrataController`**, que siguen siendo los endpoints que realmente llama
+  el frontend y siguen devolviendo datos mock — solo se arregló y limpió el
+  código MediatR huérfano que rompía la compilación.

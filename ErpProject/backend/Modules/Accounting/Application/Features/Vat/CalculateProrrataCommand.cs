@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Erp.Modules.Accounting.Application.Interfaces;
 using Erp.Modules.Accounting.Domain.Entities;
 
@@ -19,28 +20,43 @@ public class CalculateProrrataHandler : IRequestHandler<CalculateProrrataCommand
 
     public async Task<ProrrataResponse> Handle(CalculateProrrataCommand request, CancellationToken cancellationToken)
     {
-        // Simulaci�n: en producci�n, calcular desde BD
-        var deductibleOperations = 100000m;
-        var nonDeductibleOperations = 20000m;
+        var yearTransactions = _context.VatTransactions.Where(t =>
+            t.CompanyId == request.CompanyId &&
+            t.TransactionDate.Year == request.Year);
+
+        // El esquema actual de VatRegime ("Standard","Reduced","SuperReduced","Zero")
+        // no distingue explícitamente operaciones exentas. Se usa "Zero" como
+        // aproximación a operaciones sin derecho a deducción hasta que exista un
+        // régimen de IVA "Exento" propio en VatTransaction.
+        var deductibleOperations = await yearTransactions
+            .Where(t => t.Direction == "Outbound" && t.VatRegime != "Zero")
+            .SumAsync(t => t.VatableBase, cancellationToken);
+
+        var nonDeductibleOperations = await yearTransactions
+            .Where(t => t.Direction == "Outbound" && t.VatRegime == "Zero")
+            .SumAsync(t => t.VatableBase, cancellationToken);
+
         var totalOperations = deductibleOperations + nonDeductibleOperations;
-        var prorataProportion = deductibleOperations / totalOperations;
-        
-        var totalVatSupported = 21000m;
+        var prorataProportion = totalOperations > 0
+            ? deductibleOperations / totalOperations
+            : 0m;
+
+        var totalVatSupported = await yearTransactions
+            .Where(t => t.Direction == "Inbound")
+            .SumAsync(t => t.DeductibleVat, cancellationToken);
+
         var deductibleVat = totalVatSupported * prorataProportion;
         var nonDeductibleVat = totalVatSupported - deductibleVat;
 
         var calculation = new ProrrataCalculation
         {
-            Id = Guid.NewGuid(),
             CompanyId = request.CompanyId,
-            Year = request.Year,
+            FiscalYear = request.Year,
             Type = request.ProrrataType,
-            DeductibleOperations = deductibleOperations,
-            NonDeductibleOperations = nonDeductibleOperations,
-            ProrataProportion = prorataProportion,
-            TotalVatSupported = totalVatSupported,
-            DeductibleVat = deductibleVat,
-            NonDeductibleVat = nonDeductibleVat
+            InlandRevenue = deductibleOperations,
+            ExemptRevenue = nonDeductibleOperations,
+            ProrrataPercentage = Math.Round(prorataProportion * 100, 2),
+            AdjustmentAmount = totalVatSupported - deductibleVat,
         };
 
         _context.ProrrataCalculations.Add(calculation);
@@ -51,10 +67,10 @@ public class CalculateProrrataHandler : IRequestHandler<CalculateProrrataCommand
             Id = calculation.Id,
             DeductibleOperations = deductibleOperations,
             NonDeductibleOperations = nonDeductibleOperations,
-            ProrataProportion = Math.Round(prorataProportion * 100, 2),
+            ProrataProportion = calculation.ProrrataPercentage,
             DeductibleVat = deductibleVat,
             NonDeductibleVat = nonDeductibleVat,
-            Message = $"Prorrata {request.ProrrataType} calculada: {Math.Round(prorataProportion * 100, 2)}%"
+            Message = $"Prorrata {request.ProrrataType} calculada sobre {request.Year}: {calculation.ProrrataPercentage}%"
         };
     }
 }
