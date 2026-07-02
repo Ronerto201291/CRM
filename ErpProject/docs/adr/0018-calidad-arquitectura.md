@@ -409,6 +409,19 @@ incremental. Los ítems 20-42 son de otra naturaleza (funcional/plataforma,
 no solo deuda de código puntual) y requieren decisión de producto/negocio
 antes de empezar a implementar, no solo luz verde técnica.
 
+**Criterio de cierre de este backlog:** completar los 51 ítems no es
+solo "que compile y pase el checklist de arquitectura" — el frontend tiene
+que quedar **conectado de verdad al backend real, sin excepciones**. Hoy hay
+páginas enteras que aparentan funcionar pero no llaman a ningún endpoint
+(`billing/facturae`, `accounting/iva-registers`, `settings/automation`; ver
+catálogo de mock más abajo) y botones sin `onClick`. Ningún ítem de este
+backlog se da por cerrado si, tras corregirlo, la página correspondiente
+sigue sin `fetch`/`onClick` real contra su endpoint, o si el endpoint que
+llama sigue devolviendo datos simulados. El objetivo final explícito es:
+**0 páginas mock, 0 botones decorativos, 100% del frontend hablando con
+datos reales del backend** — no solo arreglar la arquitectura interna de
+cada lado por separado.
+
 **Nota sobre el ítem 3c (deprioritizado):** `AeatModelsController`,
 `IvaManagementController`, `InversionSujetoActivoController`,
 `FinancialStatementsController` y `AgingController` no tienen ninguna lógica

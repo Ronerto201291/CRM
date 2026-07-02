@@ -58,6 +58,12 @@ de considerar terminada una implementación en un módulo:
 - Los endpoints de listado paginan; no se añaden queries dentro de bucles.
 - Las referencias de proyecto nuevas respetan la dirección de dependencias
   (Api→Application→Domain; el core no depende de módulos).
+- **El frontend de la página tocada queda conectado de verdad al backend**:
+  si arreglas o implementas un endpoint, confirma que la página que lo usa
+  hace `fetch`/`onClick` real contra él (no lo des por hecho — hay páginas
+  enteras que son mock puro, ver ADR-0018 catálogo de mock). No se cierra un
+  cambio dejando el backend arreglado pero el frontend correspondiente
+  todavía desconectado o con botones sin `onClick`.
 
 ## Comandos básicos
 
