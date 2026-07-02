@@ -11,36 +11,16 @@ coste de ventas y, en última instancia, para la contabilidad). Al tratarse
 de un ERP español, la valoración soporta explícitamente el método de Coste
 Medio Ponderado (PMP/CMP), habitual en el PGC, además de FIFO.
 
-El código relevante vive en dos sitios distintos del repositorio, y una
-parte de esta ADR consiste precisamente en aclarar cuál es el real:
-
-- `backend/Modules/Inventory/{API,Application,Domain,Infrastructure}` — el
-  módulo tal y como sigue el patrón estándar descrito en ADR-0001
-  (`Api/Application/Domain/Infrastructure` por módulo). **Nótese que aquí la
-  carpeta se llama `API` en mayúsculas** (`Erp.Modules.Inventory.Api.csproj`
-  vive en `backend/Modules/Inventory/API/`), mientras que el resto de
-  módulos (`Crm`, `Billing`, `Purchasing`, `Sales`...) usan `Api`. Es una
-  inconsistencia de nomenclatura, no funcional (ver Consecuencias).
-- `backend/Erp.Domain/Modules/Inventory/Entities/` — contiene
-  `Product.cs`, `Warehouse.cs`, `Stock.cs` y `StockMovement.cs`. A primera
-  vista parece una carpeta "legacy" fuera del módulo, pero **no es código
-  muerto**: estas clases declaran el namespace
-  `Erp.Modules.Inventory.Domain.Entities` (el mismo namespace que usa el
-  módulo activo) y `Erp.Modules.Inventory.Domain.csproj` referencia
-  explícitamente `Erp.Domain.csproj` vía `<ProjectReference>` sin exclusión
-  de archivos, por lo que el SDK de .NET las compila igualmente dentro del
-  ensamblado del módulo. `InventoryDbContext` (en
-  `backend/Modules/Inventory/Infrastructure/Data/InventoryDbContext.cs`)
-  las usa directamente (`DbSet<Product>`, `DbSet<Warehouse>`,
-  `DbSet<Stock>`, `DbSet<StockMovement>`) y las migraciones EF Core del
-  propio módulo las mapean a tablas reales en el esquema `inventory`. Es
-  decir: son las entidades reales, simplemente están ubicadas físicamente
-  fuera de `Modules/Inventory/Domain/Entities/` (donde sí están `Lot` y
-  `SerialNumber`). Este patrón de "entidades núcleo fuera del módulo, en
-  `Erp.Domain`" ya existe documentado para Accounting en ADR-0006 (aunque
-  con una ruta distinta, `Erp.Domain/Entities/Accounting/`), así que no es
-  exclusivo de Inventory, pero aquí queda repartido de forma inconsistente
-  entre dos ubicaciones para el mismo módulo (ver Consecuencias).
+El código relevante vive en `backend/Modules/Inventory/{API,Application,
+Domain,Infrastructure}`, siguiendo el patrón estándar de ADR-0001. Existe
+además una segunda ubicación, `backend/Erp.Domain/Modules/Inventory/
+Entities/`, que a primera vista parece código legacy fuera del módulo pero
+que, tras verificarlo, resulta ser parte activa del mismo módulo (mismo
+namespace, referenciada por `ProjectReference`, mapeada por
+`InventoryDbContext` con migraciones y tablas reales) — el detalle se
+explica en Decisión/Modelo de datos y se valora en Consecuencias, junto con
+la inconsistencia de que la carpeta del módulo se llama `API` (mayúsculas)
+en vez de `Api` como el resto de módulos.
 
 `Program.cs` (`backend/Erp.Api/Program.cs`) confirma cuál es el módulo
 activo: registra los controllers de `Erp.Modules.Inventory.API.Controllers`
@@ -127,7 +107,16 @@ verificado como parte de esta ADR.
 
 ### Modelo de datos
 Esquema PostgreSQL `inventory` (`InventoryDbContext`, migraciones
-`InitialCreate` y `AddLotsAndSerials`):
+`InitialCreate` y `AddLotsAndSerials`). Nota de ubicación física: `Product`,
+`Warehouse`, `Stock` y `StockMovement` están definidas en
+`backend/Erp.Domain/Modules/Inventory/Entities/` (namespace
+`Erp.Modules.Inventory.Domain.Entities`, compiladas en el módulo vía
+`ProjectReference` de `Erp.Modules.Inventory.Domain.csproj` a
+`Erp.Domain.csproj`), mientras que `Lot` y `SerialNumber` están en
+`backend/Modules/Inventory/Domain/Entities/Lot.cs`. Las cuatro primeras no
+son código muerto pese a la ubicación: `InventoryDbContext` las mapea con
+`DbSet<T>` y las migraciones del propio módulo crean sus tablas reales (ver
+Consecuencias):
 
 - **`InventoryProducts`** (`Product`) — `SKU`, `Name`, `Type`
   (`Product`/`Service`), `CostPrice` (coste medio calculado), `SalePrice`,
