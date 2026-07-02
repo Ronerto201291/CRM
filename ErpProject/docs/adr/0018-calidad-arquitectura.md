@@ -184,14 +184,19 @@ llaman a `_mediator.Send(...)`. El patrón correcto existe en el código base,
 pero no se aplicó de forma consistente — es el estándar a exigir en todo ADR
 nuevo (ver checklist en `0000-template.md`).
 
-**Validación silenciosamente muerta:** `Erp.Application/DependencyInjection.cs`
-registra `ValidationBehavior` (pipeline de MediatR) pero solo escanea
+**Corregido — validación silenciosamente muerta:** `Erp.Application/DependencyInjection.cs`
+registra `ValidationBehavior` (pipeline de MediatR) pero solo escaneaba
 validators del propio assembly `Erp.Application` (`AddValidatorsFromAssembly(Assembly.GetExecutingAssembly())`).
-Ningún `Modules/*/Infrastructure/DependencyInjection.cs` registra sus propios
-validators de FluentValidation — por lo que clases como
-`Modules/Crm/Application/Features/Crm/Validators/CreateClientValidator.cs`
-existen en el código pero **nunca se ejecutan en runtime** (`IValidator<T>`
-nunca se resuelve para ellas).
+Ningún `Modules/*/Infrastructure/DependencyInjection.cs` registraba sus
+propios validators de FluentValidation. Revisando los 9 módulos, el único
+validator de FluentValidation real (`AbstractValidator<T>`) que existía fuera
+del core era `Modules/Crm/Application/Features/Crm/Validators/CreateClientValidator.cs`
+— existía en el código pero **nunca se ejecutaba en runtime**
+(`IValidator<CreateClientCommand>` nunca se resolvía). Se corrigió añadiendo
+`AddValidatorsFromAssembly` a `AddCrmInfrastructure`. El resto de módulos no
+tiene validators de FluentValidation (no hay nada más que registrar); si se
+añade uno nuevo en cualquier módulo, recordar registrarlo en el
+`DependencyInjection.cs` de ese módulo o seguirá sin ejecutarse.
 
 ### 6. Escalabilidad
 - **Corregido** — N+1 en `Modules/Purchasing/Application/Features/Receipts/Handlers/CreateGoodsReceiptHandler.cs`
@@ -282,11 +287,10 @@ futuro — antes de dar por cerrado un módulo o una implementación, verificar:
   no es un caso aislado sino el patrón dominante en Accounting y Treasury.
   Cualquier trabajo futuro en esos dos módulos debería migrar el controller
   tocado a MediatR en vez de añadir más lógica al patrón existente.
-- La validación de FluentValidation "muerta" es un riesgo silencioso: el
-  código da la falsa sensación de estar validado (los validators existen,
-  compilan, tienen tests unitarios plausibles) pero no se ejecutan en
-  producción. Cualquier módulo que dependa de esta validación para
-  integridad de datos está, de hecho, sin validar.
+- La validación de FluentValidation "muerta" era un riesgo silencioso: el
+  código daba la falsa sensación de estar validado (el validator existía,
+  compilaba) pero no se ejecutaba en producción (corregido para CRM; ver
+  ítem 6 del backlog).
 - Ninguno de estos hallazgos es bloqueante para seguir desarrollando, pero
   todos incrementan el costo de cualquier cambio futuro que toque esas zonas
   — de ahí que este ADR quede referenciado desde el template como checklist
@@ -308,7 +312,7 @@ medida que se completa cada uno.
 | 3c | `AeatModelsController`, `IvaManagementController`, `InversionSujetoActivoController`, `FinancialStatementsController`, `AgingController` sin `IMediator` | Accounting | Deprioritizado — ver nota |
 | 4 | `AccountingExportController` (SRP, 1362 líneas, 6 módulos inyectados) | Accounting | Pendiente |
 | 5 | `ViesController` (Accounting) sigue duplicando lo que ya resuelve `Erp.Api/TaxController` | Accounting | Pendiente |
-| 6 | Validators de FluentValidation nunca registrados por módulo (`AddValidatorsFromAssembly` ausente) | Todos | Pendiente |
+| 6 | Validators de FluentValidation nunca registrados por módulo (`AddValidatorsFromAssembly` ausente) | Crm | ✅ Corregido |
 | 7 | N+1 en `CreateGoodsReceiptHandler` / `CreateDeliveryNoteHandler` | Purchasing / Sales | ✅ Corregido |
 | 8 | Paginación ausente en `Get*Query` (CRM, Accounting, Treasury, Billing, Inventory) | Varios | Pendiente |
 | 9 | Los 5 controllers de Treasury sin `IMediator` (incluye parser CSV inline) | Treasury | Pendiente |
