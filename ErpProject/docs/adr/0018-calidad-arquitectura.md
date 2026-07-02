@@ -370,12 +370,36 @@ mundial). Mezcla código/plataforma (32-37) y producto (38-42).
 | 34 | Aislamiento multi-tenant a un solo nivel de defensa (global query filters de EF Core); añadir Row-Level Security de Postgres como segunda barrera — el fallo más grave posible en un SaaS es fuga de datos entre empresas | Core | Alta |
 | 35 | Ninguna de las 19 violaciones de arquitectura de este ADR se detecta automáticamente en CI; añadir tests de arquitectura (tipo NetArchTest: "ningún controller referencia DbContext directamente", "Domain no depende de Infrastructure") para que las reglas se apliquen solas en cada PR | Core/CI | Media |
 | 36 | Sin observabilidad real: no hay logging estructurado, tracing distribuido ni métricas en ningún módulo — depurar producción (p. ej. por qué se atascó el outbox) hoy depende de logs de consola sueltos | Core | Media |
-| 37 | Frontend con muy poca reutilización: solo 5 componentes genéricos compartidos, la mayoría de la lógica de UI vive inline en cada página — mismo problema que los "controllers gordos" del backend, en la otra capa | Frontend | Media |
+| 37 | Frontend con muy poca reutilización de componentes — ver auditoría dedicada y desglose en ítems 43-51 | Frontend | Media |
 | 38 | Multi-moneda real en Billing (facturar en divisa distinta del euro con conversión automática usando los tipos de cambio de Treasury) — hoy no está claro que Billing soporte esto | Billing ↔ Treasury | Media |
 | 39 | Portal de autoservicio para cliente/proveedor (ver y pagar facturas, subir facturas de proveedor) — hoy todo el flujo es interno, sin reenvío manual de PDFs | Billing/Purchasing | Baja |
 | 40 | Funciones asistidas por IA sobre los datos ya capturados: detección de anomalías en gastos, previsión de tesorería, categorización automática — extensión natural del OCR real que ya existe en Expenses | Expenses/Treasury | Baja |
 | 41 | Asistente de alta/onboarding: plantillas de plan contable por sector, importación desde Excel/otro ERP — hoy el alta de empresa no tiene ninguna ayuda guiada | Core | Baja |
 | 42 | Notificaciones proactivas (email/push) de facturas vencidas, stock bajo, aprobaciones pendientes — depende directamente de activar el motor de automatización (ítem 27) | Core/Automatización | Media |
+
+**Ítems 43-51: auditoría dedicada de frontend** (Next.js 15 App Router +
+TypeScript + Tailwind), mismo nivel de detalle que la auditoría de backend,
+con cita de archivo para cada hallazgo — amplía y sustituye al ítem 37.
+
+| # | Mejora | Evidencia | Prioridad |
+|---|---|---|---|
+| 43 | 71 de 72 `page.tsx` son Client Components (`"use client"` + `useEffect`+`fetch`) — no se aprovecha ninguna ventaja de Server Components/Server Actions del App Router (fetch en servidor, menos JS al cliente, streaming) | Patrón idéntico en los 9 módulos revisados, p. ej. `sales/orders/page.tsx:24-40`, `treasury/currencies/page.tsx:16-36` | Media (es un cambio de patrón transversal, no un bug puntual) |
+| 44 | Fugas de `any` pese a `strict: true` en `tsconfig.json`: 24 `: any`, 8 `as any`, 11 `any[]` en 19 archivos — incluye un escape-hatch repetido `(lines[i] as any)[key] = val` en 8 formularios de líneas de pedido/factura | `dashboard/page.tsx:12-13`, `expenses/[id]/page.tsx:38`, `billing/quotes/page.tsx:87`, y 7 archivos más con el mismo patrón | Media |
+| 45 | Sin `error.tsx`/`loading.tsx`/`not-found.tsx` en todo `src/app/` (cero archivos) — cada página gestiona error/carga a mano y de forma inconsistente; algunos fetches fallidos fallan en silencio (solo `console.error`), 91 usos de `alert()` nativo para feedback de error/validación | `crm/clients/[id]/page.tsx:38-51` (falla en silencio) vs. `:56-85` (sí muestra error) en la misma página; `accounting/cash-flow/page.tsx:6-14` sin try/catch ni `res.ok` | Media |
+| 46 | **Proxy abierto de facto**: `api/proxy/[...path]/route.ts` define `PROXY_PATHS` como aparente whitelist pero nunca se usa — cualquier request autenticada se reenvía a `${backendUrl}/api/${path}` para cualquier ruta del backend, sin restricción real | `src/app/api/proxy/[...path]/route.ts:7-11` (definido, no usado) | **Alta** |
+| 47 | Bug real en el proxy: en `proxyFetch`, `response` se declara dentro del `try` pero el `catch` la referencia (`response.headers.get(...)`) — si el `fetch` falla (backend caído, DNS), el catch lanza `ReferenceError` en vez de devolver el JSON de error esperado | `src/app/api/proxy/[...path]/route.ts:38-80`, referencia en línea 68 | **Alta** (rompe justo el caso que el catch debía cubrir) |
+| 48 | Accesibilidad mínima: 0 atributos `aria-*` en todo `src/`, 0 `role="dialog"` en los 8+ modales existentes (sin focus trap ni cierre con Escape), 0 `htmlFor` en 51 archivos que usan `<label>` (sin asociación programática label↔input) | `crm/prospects/page.tsx:272`, `crm/leads/page.tsx:134`, `crm/clients/[id]/page.tsx:125-139` | Media |
+| 49 | Sin caché ni estado compartido: existen dos abstracciones de fetch ya construidas (`hooks/useApi.ts`, `lib/api.ts`) con 0 usos — cada página hace su propio `fetch` inline; 6 páginas distintas piden `/api/proxy/clients` completo de forma independiente en cada navegación | `hooks/useApi.ts`, `lib/api.ts` (código muerto); `crm/page.tsx`, `crm/alerts`, `billing/quotes`, etc. | Media |
+| 50 | 0 usos de `useMemo`/`React.memo` en todo `app/` — p. ej. `crm/page.tsx` (316 líneas) refiltra 3 listas completas en cada pulsación de tecla del buscador, sin memoización | `crm/page.tsx:77-79,91` | Baja |
+| 51 | Sin librería de formularios/validación (0 uso de react-hook-form/Zod/Formik) — "validación" es solo comprobar campos no vacíos vía `if`+`alert()`, sin reflejar las reglas reales del backend (FluentValidation); mismo patrón superficial repetido en 18+ formularios | `crm/clients/[id]/page.tsx:57-60`, `treasury/currencies/page.tsx:39`, y 16 archivos más | Media |
+
+Nota positiva de la misma auditoría: `globals.css` sí tiene un sistema de
+clases reutilizable (`.btn-primary`, `.erp-input`, `.erp-card`, etc.,
+usado en 54 de 78 archivos), la configuración de URL de API vía
+`NEXT_PUBLIC_API_URL`/`API_URL` es correcta sin URLs hardcodeadas de
+producción, y `package.json` no arrastra dependencias pesadas innecesarias
+— la base es más sana de lo que el ítem 37 original sugería; el problema es
+consistencia y patrones, no herramientas equivocadas.
 
 Los ítems 13 y 14 son los de mayor riesgo/alcance dentro de la deuda de
 código (tocan la dirección de dependencias del monolito modular entero) y
