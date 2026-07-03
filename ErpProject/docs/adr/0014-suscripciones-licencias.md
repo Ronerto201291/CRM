@@ -175,6 +175,32 @@ Alta de suscripción y activación de módulos:
   tenant resuelto) y llamar a `SyncTenantModulesAsync` si el cambio
   afecta a qué módulos debe tener activos el tenant.
 
+## Auditoría de corrección frente a especificación externa — Stripe
+Verificado con lectura completa de `StripeService.cs`/`StripeWebhookController`.
+A diferencia de VeriFactu/SII/FacturaE, **la verificación de firma del
+webhook está bien hecha**: usa `EventUtility.ConstructEvent` sobre el body
+crudo (no reserializado) antes de confiar en el payload
+(`StripeService.cs:141`), y devuelve 400 si falta la firma. Hallazgos reales
+más allá de eso:
+- **Sin idempotencia por `stripeEvent.Id`** (riesgo alto): no hay tabla de
+  eventos procesados ni comprobación de duplicados — confirmado que el
+  identificador del evento nunca se usa en el código. Stripe reentrega
+  eventos por diseño; una reentrega de `invoice.payment_succeeded` extiende
+  de nuevo `ExpirationDate` sin control.
+- **Sin distinción test/live de la clave API**: a diferencia del guard
+  PRE/PROD de `VerifactuOptions`, no hay ninguna comprobación de que
+  `Stripe:SecretKey` sea `sk_live_`/`sk_test_` acorde al entorno.
+- **Fechas de expiración inconsistentes**: `HandleCheckoutCompleted` fija
+  `AddYears(1)` mientras que las renovaciones vía webhook usan `AddMonths(1)`
+  — no reflejan el periodo real devuelto por Stripe.
+- **Dependencia de un único evento para activar**: la activación depende
+  solo de `checkout.session.completed`; si ese webhook concreto no llega,
+  el cliente pagó pero `IsActive` se queda en `false`.
+- Riesgo menor a vigilar: el código usa `Invoice.SubscriptionId` y
+  `Subscription.CurrentPeriodEnd`, campos que Stripe ha ido moviendo de
+  sitio en versiones de API más recientes — verificar que coincide con la
+  versión de API configurada en la cuenta real antes de ir a producción.
+
 ## Consecuencias
 - El campo `Subscription.ActiveModules` (JSONB) se escribe con una lista
   fija de módulos al dar de alta una `Company` (`RegisterCompanyCommand`,

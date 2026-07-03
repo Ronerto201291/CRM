@@ -1,7 +1,7 @@
 # ADR-0013: Fiscal — SII y VeriFactu
 
 ## Estado
-Aceptado — refleja la implementación actual del código en `main`.
+Aceptado — refleja la implementación actual del código en `main`. **Actualización crítica**: una auditoría de corrección (no solo de existencia) encontró que **VeriFactu y SII, tal como están hoy, serían rechazados por la AEAT** — no son mock (llaman de verdad a los servicios de la AEAT, firman digitalmente, calculan huellas), pero el resultado no es válido frente a la especificación real. Ver la sección dedicada "Auditoría de corrección frente a especificación externa" más abajo antes de asumir que cualquiera de los dos flujos es funcional en producción.
 
 ## Contexto
 Esta ADR documenta el cumplimiento de dos obligaciones fiscales españolas
@@ -167,6 +167,142 @@ Emisión y bloqueo de una factura → cadena de huellas VeriFactu → envío AEA
   `VerifactuSubmissionService`.
 - Usar siempre `Erp.Api/Controllers/TaxController.cs` para validación VIES
   real; el `ViesController` de Accounting es un stub de datos de ejemplo.
+
+## Auditoría de corrección frente a especificación externa
+
+Todo lo descrito arriba en "Decisión" existe como código real: llama de
+verdad a los endpoints TIKE/SII de la AEAT, firma digitalmente, calcula
+huellas SHA-256, genera XML. Esto lo diferencia de los mock puros
+documentados en el catálogo de ADR-0018 (que devuelven `Ok(new {...})`
+hardcodeado). Pero "es código real" no es lo mismo que "es correcto frente
+a la especificación exacta que dice implementar" — y no se había verificado
+esto último hasta esta auditoría dedicada. Resultado: **los tres mecanismos
+de cumplimiento fiscal automatizado de este ERP (VeriFactu, SII, FacturaE)
+fallarían contra los sistemas reales de la AEAT/FACe hoy mismo**, cada uno
+por motivos propios y confirmados leyendo el código exacto citado.
+
+### VeriFactu — la huella (hash) no coincidiría con la que recalcula la AEAT
+- **Fórmula de la huella incorrecta**: `VerifactuService.ComputeHuella` hashea
+  **11 campos** (`VerifactuService.cs:56-69`) en vez de los 8 exactos del
+  Anexo II del RD 1007/2023 — añade de más el NIF del software, el
+  `IdSistema` y el número de registro. La AEAT recalcula la huella con sus 8
+  campos oficiales; al no coincidir, rechaza el registro.
+- **Formato de concatenación incorrecto**: los valores se unen en crudo
+  (`valor1&valor2&...`, `VerifactuService.cs:56`) en vez del formato
+  `clave=valor` (`IDEmisorFactura=...&NumSerieFactura=...`) que exige la
+  especificación técnica — otro motivo independiente de que el hash no
+  coincida.
+- **Inconsistencia F1/F2 entre el hash y el XML**: una factura simplificada
+  se hashea como `F2` (`BillingHandlers.cs:376`) pero el XML la declara `F1`
+  (`VerifactuXmlGenerator.cs:127`, que solo distingue `Rectificativa`/resto).
+- **XML con forma de SII, no de VeriFactu**: elemento raíz
+  `SuministroLRFacturasEmitidas` en vez de `RegFactuSistemaFacturacion`;
+  faltan `TipoHuella` e `IDVersion`; el encadenamiento nunca declara
+  `PrimerRegistro="S"` para la primera factura de una serie
+  (`VerifactuXmlGenerator.cs:96-185`).
+- **`AceptadoConErrores` tratado como fallo total**: `VerifactuSubmissionService.cs`
+  hace `ok = estado == "Correcto"`, así que un registro que la AEAT sí aceptó
+  (con avisos) se reintenta indefinidamente sin dejar rastro de que fue
+  aceptado.
+- **Reenvíos duplicados**: el job de envío reprocesa todas las facturas sin
+  marcar del mes cada vez que se bloquea una factura nueva, pudiendo
+  reenviar a la AEAT facturas ya aceptadas.
+- **Sin registro de anulación**: no existe ningún camino de cumplimiento para
+  anular un registro ya enviado (solo facturas rectificativas nuevas).
+- **Sin tabla de auditoría/eventos**: los envíos fallidos o con errores no
+  dejan rastro consultable en base de datos, solo en logs de aplicación.
+- **Falta la leyenda legal obligatoria** ("VERI*FACTU" o la alternativa de
+  modo local) en el PDF de factura — sí lleva QR y huella, pero no el texto
+  exigido.
+- **No existe el modo "no VERI*FACTU"** (registro local sin envío en tiempo
+  real): el sistema solo implementa el modo de envío inmediato
+  (`VerifactuXmlGenerator.cs:182`, `TipoUsoPosibleSoloVerifactu = "S"`).
+- Lo que sí está bien: el encadenamiento recupera correctamente la huella
+  anterior de la misma serie/ejercicio fiscal (`BillingHandlers.cs:364-371`);
+  el guard de arranque bloquea NIFs de software de ejemplo en producción
+  (`VerifactuOptions.AssertValid`, `VerifactuOptions.cs:59-80`); el patrón
+  async con reintentos de Hangfire es sólido; el PRE/PROD por defecto es
+  seguro (`UseProduction=false`); el frontend está de verdad conectado (no
+  es mock).
+
+### SII — tres bugs independientes garantizan rechazo
+- **Namespace único mal aplicado**: `Cabecera`/`Titular` se serializan bajo
+  un único namespace (`SiiModels.cs:10,20`) cuando el XSD real de SII exige
+  dos namespaces distintos para la envoltura `SuministroLR` y el contenido
+  común `SuministroInformacion`.
+- **Sobre SOAP con el documento anidado dos veces**: `signedXml` ya es un
+  documento `<SuministroLRFacturasEmitidas>` completo, y
+  `BuildSoapEnvelope` (`SiiSubmissionService.cs:86-98`) lo vuelve a envolver
+  dentro de otro `<sii:SuministroLRFacturasEmitidas>` — XML mal formado.
+  Además el firmante no omite la declaración `<?xml?>`
+  (`SiiSigningService.cs:117`), que queda incrustada a mitad del sobre.
+- **Falta `Contraparte` en facturas emitidas**: confirmado que
+  `SiiXmlGenerator.cs:60-92` (bloque `FacturaExpedida`) nunca rellena
+  `Contraparte` (identificación del cliente), obligatorio para F1. En
+  recibidas sí se rellena (`SiiXmlGenerator.cs:153`) pero usando el campo
+  `CuotaRepercutida` (IVA repercutido) cuando debe informarse
+  `CuotaSoportada` (IVA soportado) — el campo ni siquiera existe en el
+  modelo (`SiiModels.cs:130`).
+- **Firma XAdES-BES con problema de orden de operaciones**: `SignedProperties`
+  se calcula/digiere antes de moverse dentro de la firma
+  (`SiiSigningService.cs:68-71,103-108`), lo que cambia el contexto de
+  canonicalización inclusive y probablemente invalida la firma; el
+  `IssuerSerialV2` tampoco es DER válido, solo texto Base64 de un string
+  (`SiiSigningService.cs:159-160`).
+- **API de certificado obsoleta**: `new X509Certificate2(path, pass, flags)`
+  (`SiiSigningService.cs:55`, `Erp.Infrastructure/DependencyInjection.cs:86`)
+  es el patrón `SYSLIB0057` ya señalado en otras partes del código; sin
+  comprobación de expiración antes de firmar.
+- Lo que sí está bien: SOAP real con mTLS (a diferencia de VeriFactu, que
+  hace POST crudo), Polly retry/circuit-breaker, algoritmos RSA-SHA256/C14N
+  correctos, fechas `dd-MM-yyyy` correctas, filtro por facturas bloqueadas.
+
+### FacturaE — se presenta como firmado sin estarlo
+- **Extensión `.xsig` sin firma real**: `FacturaEService.cs:53` nombra el
+  fichero `.xsig` (que implica "firmado") pero no genera ningún
+  `ds:Signature` — el documento nunca se firma. El propio comentario del
+  controller afirma "El XML generado cumple el esquema oficial"
+  (`FacturaEController.cs:30`), lo cual no es cierto para un envío FACe real
+  (que exige XAdES).
+- **Namespace probablemente incorrecto**:
+  `http://www.facturae.gob.es/formato/Version3.2.2/Facturae32.xsd`
+  (`FacturaEService.cs:20`) — necesita confirmarse contra el XSD vivo, alta
+  probabilidad de ser distinto del namespace real de la versión 3.2.2.
+  ver.
+- **Bloque `Extensions` mal formado** dentro de `FileHeader`
+  (`FacturaEService.cs:236-264`) con una estructura inventada, no la que
+  define el estándar.
+- **NIF sin validar**: se pasa tal cual (`FacturaEService.cs:308`), sin
+  ningún dígito de control — coincide con el hallazgo sistémico de más abajo.
+- **Dirección con placeholders hardcodeados**: `PostCode="00000"`,
+  `Town="N/D"`, `Province="N/D"` (`FacturaEService.cs:281-283`) en vez de
+  leer los datos reales de la empresa/cliente.
+- **Sin ningún camino de envío a FACe**: solo genera el archivo descargable,
+  ninguna transmisión SOAP/REST.
+- Lo que sí está bien: la aritmética de IVA/IRPF por línea y su agregación
+  (`FacturaEService.cs:65-71,151,163`) es correcta; el orden general de
+  bloques sigue razonablemente la forma del estándar.
+
+### Hallazgo sistémico transversal — sin validación de NIF/CIF/NIE en ningún sitio
+Búsqueda en todo el backend: cero clases/funciones que validen el dígito de
+control de un NIF/CIF/NIE español (`grep` de patrones de validación: 0
+resultados salvo la heurística de primer carácter de `FacturaEService.IsCompanyNif`,
+que solo decide persona física/jurídica, no valida nada). Esto afecta a la
+vez a CRM (alta de cliente), Billing (emisión de factura), FacturaE, SII y
+VeriFactu — un NIF con la letra de control equivocada se acepta sin aviso en
+el alta y solo se descubriría, en el mejor de los casos, cuando la AEAT
+rechace el envío.
+
+### Cadena de hash genérica antifraude (Ley 11/2021) — correcta, con una duplicación menor
+A diferencia de VeriFactu, esta cadena (`Invoice.Hash`/`PreviousHash`,
+`InvoiceHashService.ComputeHash`) no se envía a la AEAT para que la
+recalcule con una fórmula fija — es un mecanismo de trazabilidad interna. La
+fórmula (`InvoiceHashService.cs:15-20`) es razonable y consistente. Único
+hallazgo: el cálculo está duplicado — se repite inline en
+`BillingHandlers.cs:218-219` en vez de llamar al método estático
+`InvoiceHashService.ComputeHash` que ya existe (y que solo se usa hoy para
+verificar, no para generar) — riesgo de que las dos copias diverjan si se
+cambia la fórmula en un solo sitio.
 
 ## Consecuencias
 - La firma XAdES-BES y el envío SOAP/HTTP a la AEAT dependen de un

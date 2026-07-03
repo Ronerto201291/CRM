@@ -177,6 +177,32 @@ otro módulo, no vía evento — acoplamiento real, no solo de lectura trivial.
   `Modules/Treasury/Application/` — a día de hoy no lo hay para
   `PaymentReceivedEvent`.
 
+## Auditoría de corrección frente a especificación externa — SEPA (`SepaService.cs`)
+Verificado con lectura completa del archivo: `GenerateCreditTransferXml`
+**no está conectado a nada** — es código muerto, ninguna clase del backend
+lo invoca. Aun si se conectara, el XML que produce hoy no sería válido:
+- Usa nombres de elemento completos en inglés
+  (`CustomerCreditTransferInitiation`, `GroupHeader`, `PaymentInformation`,
+  `SepaService.cs:33,34,41`) en vez de los códigos cortos ISO 20022 que
+  exige el XSD real (`CstmrCdtTrfInitn`, `GrpHdr`, `PmtInf`) — rechazo
+  garantizado en la raíz del documento.
+- Paréntesis mal cerrado (`SepaService.cs:55`) anida por error el bloque de
+  transacción completo (`CdtTrfTxInf`) dentro de `DbtrAgt` en vez de como
+  hermano de `PmtInf` — jerarquía inválida independientemente del nombrado.
+- Sin validación de IBAN (dígito de control mod-97): se pasa tal cual, solo
+  se le quitan espacios. Cuando falta el BIC, se inventa un placeholder
+  `"XXXXESMM"` (`SepaService.cs:55,66`) — un BIC inválido que el banco
+  rechazará, en vez de omitirlo con seguridad.
+- **Solo genera transferencias (`pain.001`, TRF), no adeudos domiciliados
+  (`pain.008`/SDD)** — pese a que el método está documentado como para
+  "cobrar un efecto" (`CashEffect`). Cobrar requiere SEPA Direct Debit, no
+  Credit Transfer; de hecho el código mapea la empresa como `Dbtr` (pagador)
+  y al cliente como `Cdtr` (cobrador) — el sentido invertido de lo que
+  significa "cobrar".
+- Lo que sí está bien: namespace `pain.001.001.03` correcto, formato de
+  importe correcto (`F2`, `InvariantCulture`, atributo `Ccy="EUR"`),
+  `EndToEndId`/`RmtInf` presentes.
+
 ## Consecuencias
 - La falta de un handler de `PaymentReceivedEvent` en Treasury significa que
   el saldo de `BankAccount.CurrentBalance` y las previsiones de
