@@ -116,7 +116,9 @@ facturas reales vía `IRecargoInvoiceReader` y `Create` persiste en
 `RecargoDEquivalencias` (jul 2026).
 `VatController.CalculateVat` y `ProrrataController.CalculateProrrata` dejaron
 de ser mock (ver Evaluación de calidad arquitectónica más abajo); `VatController.declare/modelo330`
-sigue pendiente de implementación. Validación VIES real disponible en dos rutas equivalentes:
+registra autoliquidaciones IVA trimestrales en `VatLiquidations` vía
+`DeclareModelo330Command` + `IModelo303Reader` (jul 2026; nombre legacy «330» → modelo 303 vigente).
+Validación VIES real disponible en dos rutas equivalentes:
 `TaxController` (`api/tax/vies/validate`, ver ADR-0013) y `ViesController`
 (`api/v1/accounting/vies/validate`, con persistencia en `IntraEuOperations`).
 `FinancialStatementsController` (`cash-flow`, `equity`, `income-statement`, `balance-sheet`)
@@ -200,8 +202,7 @@ persisten y calculan desde datos reales; `FinancialStatementsController`
 delega en handlers con cálculo real parcial (#26).
 
 **Pendiente (sin cerrar en backlog):** `IAccountingDbContext` expone 29 DbSets
-(ISP — `GetFiscalPeriodsHandler` solo usa `FiscalPeriods`).
-`VatController.DeclareModelo330` sigue sin implementar. OCP: tasas IVA en
+(ISP — `GetFiscalPeriodsHandler` solo usa `FiscalPeriods`). OCP: tasas IVA en
 `Dictionary`/`switch` (`CalculateVatCommand`).
 
 **Corregido (backlog #4):** `AccountingExportController` (~350 líneas, 16 rutas)
@@ -217,7 +218,14 @@ la misma fuente de datos que usa el handler — ya no hay dos tablas de tasas
 independientes. De paso, `CalculateVatCommand` dejó de aceptar `CompanyId`
 como campo del body (el cliente podía enviar cualquier tenant) y ahora lo
 resuelve del `ITenantContext` del handler, igual que el resto de comandos de
-Accounting. `VatController.DeclareModelo330` sigue pendiente.
+Accounting.
+
+**Corregido:** `VatController.DeclareModelo330` despacha `DeclareModelo330Command`
+vía `IMediator`, calcula el trimestre con `IModelo303Reader` (facturas bloqueadas +
+asientos 472 deducible), persiste en `VatLiquidations` con índice único
+`CompanyId+Year+Quarter` y rechaza duplicados. El frontend
+(`frontend/src/app/accounting/aeat/page.tsx`) expone «Registrar declaración» vía
+`POST /api/proxy/v1/accounting/vat/declare/modelo330`.
 
 **Corregido:** `RecargoController` inyectaba `IBillingDbContext` directamente
 con toda la lógica inline (queries a facturas con `SurchargeRate > 0`, agrupación
@@ -259,9 +267,9 @@ usado por `TaxController`). El frontend
 
 ## Consecuencias
 - La madurez del módulo es heterogénea: cierre, presupuestos, activos fijos,
-  provisiones, exportación fiscal y modelos 303/347 están sobre datos reales;
-  quedan huecos puntuales (`RecargoController.Create`, `DeclareModelo330`,
-  ISP/aging sin controller dedicado tras eliminar los stubs).
+  provisiones, exportación fiscal, modelos 303/347 y registro de autoliquidaciones
+  IVA (`VatLiquidations`) están sobre datos reales; quedan huecos puntuales
+  (ISP/aging sin controller dedicado tras eliminar los stubs).
 - **Corregido (ADR-0018 #14):** las entidades núcleo (`Account`,
   `JournalEntry`, `FiscalPeriod`, etc.) viven en
   `Modules/Accounting/Domain/Entities/`, no en `Erp.Domain`.

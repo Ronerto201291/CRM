@@ -50,6 +50,22 @@ namespace Erp.Modules.Accounting.Domain.Entities
         public string ValidationStatus { get; set; } = "Pending"; // Pending, Valid, Invalid
     }
 
+    /// <summary>
+    /// Autoliquidación IVA trimestral registrada (API legacy «modelo330» → modelo 303 vigente).
+    /// </summary>
+    public class VatLiquidation : AuditableEntity
+    {
+        public Guid CompanyId { get; set; }
+        public int Year { get; set; }
+        public int Quarter { get; set; }
+        public string ModeloCode { get; set; } = "303";
+        public decimal TotalDevengado { get; set; }
+        public decimal IvaDeducible { get; set; }
+        public decimal Resultado { get; set; }
+        public string ResultadoTipo { get; set; } = "AIngresar";
+        public string Status { get; set; } = "Declared";
+    }
+
     public class RecargoDEquivalencia : AuditableEntity
     {
         public Guid CompanyId { get; set; }

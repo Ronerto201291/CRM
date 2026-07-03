@@ -65,6 +65,25 @@ public class VatController : ControllerBase
             request.EffectiveDate ?? DateTime.UtcNow), ct);
         return Ok(result);
     }
+
+    /// <summary>
+    /// Registra una autoliquidación IVA trimestral.
+    /// Nombre legacy «modelo330» — el modelo vigente es el 303 (el 330 quedó obsoleto en 2014).
+    /// </summary>
+    [HttpPost("declare/modelo330")]
+    public async Task<IActionResult> DeclareModelo330([FromBody] DeclareModelo330Request request, CancellationToken ct)
+    {
+        try
+        {
+            var result = await _mediator.Send(
+                new DeclareModelo330Command(request.Year, request.Quarter), ct);
+            return Created("", result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
 }
 
 public class CalculateVatRequest
@@ -78,4 +97,10 @@ public class SetVatRegimeRequest
 {
     public string Type { get; set; } = "Standard";
     public DateTime? EffectiveDate { get; set; }
+}
+
+public class DeclareModelo330Request
+{
+    public int Year { get; set; }
+    public int Quarter { get; set; } = 1;
 }

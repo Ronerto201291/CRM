@@ -16,4 +16,5 @@
   <Project Path="Modules/Crm/Infrastructure/Erp.Modules.Crm.Infrastructure.csproj" />
   <Project Path="Modules/Crm/Api/Erp.Modules.Crm.Api.csproj" />
   <Project Path="tests/Erp.Tests/Erp.Tests.csproj" />
+  <Project Path="tests/Erp.ArchitectureTests/Erp.ArchitectureTests.csproj" />
 </Solution>

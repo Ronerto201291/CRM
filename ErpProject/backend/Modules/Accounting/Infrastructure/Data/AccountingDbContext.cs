@@ -51,6 +51,7 @@ public class AccountingDbContext : ModuleDbContextBase, IAccountingDbContext
     public DbSet<InversionDeSujetoActivo> InversionDeSujetoActivos { get; set; } = null!;
     public DbSet<RecargoDEquivalencia> RecargoDEquivalencias { get; set; } = null!;
     public DbSet<ViesDeclaration> ViesDeclarations { get; set; } = null!;
+    public DbSet<VatLiquidation> VatLiquidations { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

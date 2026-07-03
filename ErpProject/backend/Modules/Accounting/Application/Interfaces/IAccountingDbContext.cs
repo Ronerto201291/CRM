@@ -43,6 +43,7 @@ public interface IAccountingDbContext
     DbSet<InversionDeSujetoActivo> InversionDeSujetoActivos { get; }
     DbSet<RecargoDEquivalencia> RecargoDEquivalencias { get; }
     DbSet<ViesDeclaration> ViesDeclarations { get; }
+    DbSet<VatLiquidation> VatLiquidations { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }
