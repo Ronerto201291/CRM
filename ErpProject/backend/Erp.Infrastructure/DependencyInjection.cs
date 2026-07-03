@@ -25,6 +25,7 @@ public static class DependencyInjection
             .BindConfiguration(StripeOptions.SectionName)
             .ValidateDataAnnotations()
             .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<StripeOptions>, StripeOptionsValidator>();
 
         // Email: SMTP transactional email.
         // Production env vars: Email__Host, Email__Port, Email__Username, Email__Password,

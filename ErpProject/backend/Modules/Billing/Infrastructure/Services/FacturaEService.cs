@@ -1,4 +1,5 @@
 using Erp.Application.Common.Interfaces;
+using Erp.Application.Common.Validation;
 using Erp.Domain.Entities.Core;
 using Erp.Modules.Billing.Application.Interfaces;
 using Erp.Modules.Billing.Domain.Entities;
@@ -47,6 +48,9 @@ public sealed class FacturaEService : IFacturaEService
         var company = await _app.Companies
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == tenantId, ct);
+
+        ValidateTaxId(company?.TaxId, "emisor");
+        ValidateTaxId(invoice.ClientNif, "cliente");
 
         var xml = BuildFacturaE(invoice, company);
         var bytes = Encoding.UTF8.GetBytes(xml.Declaration + "\n" + xml.ToString());
@@ -344,4 +348,11 @@ public sealed class FacturaEService : IFacturaEService
         var x when x.Length == 3 => x,   // already 3-letter
         var x => x.PadRight(3, 'X')      // fallback (unknown)
     };
+
+    private static void ValidateTaxId(string? taxId, string role)
+    {
+        if (string.IsNullOrWhiteSpace(taxId)) return;
+        if (!SpanishTaxIdValidator.IsValid(taxId))
+            throw new InvalidOperationException($"NIF/CIF/NIE del {role} no válido: {taxId}");
+    }
 }

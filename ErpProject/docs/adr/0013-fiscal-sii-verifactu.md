@@ -279,11 +279,7 @@ por motivos propios y confirmados leyendo el código exacto citado.
   (`FacturaEService.cs:236-264`) con una estructura inventada, no la que
   define el estándar (que exige contenido de un namespace ajeno, no hijos
   con nombres inventados).
-- **NIF sin validar**: ~~se pasa tal cual~~ **🟡 Parcial, con un bug real
-  en CIF** — `SpanishTaxIdValidator` en `FacturaEService.ValidateTaxId` sí
-  se invoca en emisión de factura, pero hereda el bug de inversión
-  letra/dígito documentado en la sección "Hallazgo sistémico" más abajo — un
-  CIF de S.A./S.L. real puede ser rechazado aquí también.
+- **NIF sin validar**: ~~se pasa tal cual~~ **✅ Corregido** — `SpanishTaxIdValidator` en `FacturaEService.ValidateTaxId` valida emisor y cliente antes de generar XML; CIF con lógica de control corregida (jul 2026).
 - **Dirección con placeholders hardcodeados**: ~~`PostCode="00000"`,
   `Town="N/D"`, `Province="N/D"`~~ **🟡 Parcial** — `ExtractTown`/`ExtractPostCode`
   parsean la dirección; `Province` sigue como `N/D` si no hay dato.
@@ -298,45 +294,20 @@ por motivos propios y confirmados leyendo el código exacto citado.
   bloques sigue razonablemente la forma del estándar.
 
 ### Hallazgo sistémico transversal — validación NIF/CIF/NIE
-**⚠️ Parcial, con un bug grave de nuevo cuño en CIF — verificado con cálculo manual.**
+**✅ Corregido (jul 2026).**
 `SpanishTaxIdValidator` (`Erp.Application/Common/Validation/SpanishTaxIdValidator.cs`)
-está centralizado y sí se invoca en alta/edición cliente y proveedor
+está centralizado y se invoca en alta/edición cliente y proveedor
 (FluentValidation), registro empresa, `UpdateCompanyHandler`, emisión de
-factura (`BillingHandlers`) y generación FacturaE — el hueco sistémico de
-"cero validación en ningún sitio" está cerrado. Pero:
+factura y generación FacturaE (`FacturaEService.ValidateTaxId`).
 
-- **NIF y NIE están bien**: `ValidateNif` usa la tabla oficial de 23
-  caracteres `"TRWAGMYFPDXBNJZSQVHLCKE"[numero % 23]`; verificado con
-  ejemplo manual (`12345678 % 23 = 14 → 'Z'` → `12345678Z`, correcto). NIE
-  mapea X/Y/Z a 0/1/2 y reutiliza el mismo cálculo — correcto.
-- **CIF tiene la lógica de letra/dígito de control invertida**
-  (`ValidateCif`, líneas ~68-72): las letras de tipo de entidad `A, B, E, H`
-  (que legalmente llevan **dígito** de control) reciben una **letra**
-  calculada; y `P, Q, R, S, W` (que legalmente llevan **letra**) reciben un
-  **dígito**. Confirmado con un CIF real conocido: **Banco Santander,
-  `A39000013`** — el algoritmo de suma calcula correctamente el dígito de
-  control `3` (coincide con el CIF real), pero como el código empieza por
-  `A`, ejecuta la rama de letra (`(char)('A'+3-1)='C'`) y compara `cif[8]`
-  (`'3'`) contra `'C'` → **falso** → **rechaza un CIF real y válido**. El
-  mismo problema afecta a cualquier S.A./S.L. (prefijos `A`/`B`, la inmensa
-  mayoría de las empresas españolas).
-- **El test unitario no lo detecta y da falsa confianza**:
-  `SpanishTaxIdValidatorTests.FindValidCif` genera un CIF por fuerza bruta
-  hasta que el propio validador (ya roto) lo acepte — es decir, el test
-  verifica que el validador es consistente consigo mismo, no que sea
-  correcto frente a la regla real. Un fichero suelto
-  `ErpProject/backend/tmp-find-cif.cs` (resto de depuración, no debería
-  estar commiteado) hace el mismo cálculo por fuerza bruta — indicio de que
-  el CIF "válido" usado en tests se obtuvo así, en vez de tomarlo de un caso
-  real conocido.
-- **Impacto de negocio**: esto bloquearía el alta de clientes/proveedores o
-  la propia empresa cuando su CIF empiece por `A`/`B`/`E`/`H`/`P`/`Q`/`R`/`S`/`W`
-  — es decir, la mayoría de sociedades mercantiles españolas reales — pese a
-  que el validador exista y "funcione" en apariencia. Prioridad alta de
-  corrección: invertir las dos ramas del `switch` en `ValidateCif`.
+- **NIF y NIE**: tabla oficial de 23 caracteres y mapeo X/Y/Z — verificado.
+- **CIF**: corregida la inversión letra/dígito en `ValidateCif` — `A/B/E/H`
+  usan dígito de control; `K/L/M/N/P/Q/R/S/W` usan letra; resto admite ambos.
+  Verificado con `A39000013` (Banco Santander) y `B12345674`.
+- **Tests**: `tests/Erp.Tests/Common/SpanishTaxIdValidatorTests.cs` con casos
+  reales conocidos (sin fuerza bruta circular).
 
-Pendiente además: cobertura en todos los puntos de entrada (p. ej.
-importaciones masivas) y leads (sin campo NIF hoy).
+Pendiente: cobertura en importaciones masivas y leads (sin campo NIF hoy).
 
 ### Cadena de hash genérica antifraude (Ley 11/2021) — correcta, con una duplicación menor
 A diferencia de VeriFactu, esta cadena (`Invoice.Hash`/`PreviousHash`,
