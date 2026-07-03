@@ -304,6 +304,37 @@ futuro — antes de dar por cerrado un módulo o una implementación, verificar:
   — de ahí que este ADR quede referenciado desde el template como checklist
   obligatorio, no solo como informe puntual.
 
+## Hallazgos críticos — código real pero incorrecto frente a especificación externa
+
+Categoría distinta del catálogo de mock de más abajo: esto **no es código
+que finge funcionar** (no hay ningún `Ok(new {...})` hardcodeado) — es
+código real que llama de verdad a la AEAT/Stripe/un banco, firma
+digitalmente, calcula hashes. La auditoría de esta sección responde a una
+pregunta que ninguna auditoría anterior de este ADR se había hecho: **el
+código que SÍ es real, ¿es además correcto frente a la especificación
+externa exacta que dice implementar?** Cada fila está verificada leyendo el
+archivo citado, no es una sospecha. Detalle completo por módulo en
+ADR-0013 (VeriFactu/SII/FacturaE), ADR-0012 (SEPA) y ADR-0014 (Stripe).
+
+| # | Hallazgo | Módulo | Prioridad |
+|---|---|---|---|
+| 0a | **VeriFactu — la huella (hash) no coincidiría con la que recalcula la AEAT**: hashea 11 campos en vez de los 8 del Anexo II del RD 1007/2023 (de más: NIF software, IdSistema, número de registro), y los concatena sin claves (`valor&valor` en vez de `clave=valor&clave=valor`). Además: factura simplificada hasheada como F2 pero declarada F1 en el XML; XML con forma de SII en vez de VeriFactu (falta `TipoHuella`/`IDVersion`, encadenamiento nunca declara `PrimerRegistro`); `AceptadoConErrores` tratado como fallo total; reenvíos duplicados del mes completo; sin registro de anulación; sin tabla de auditoría de envíos; falta la leyenda legal obligatoria en el PDF | Billing/Core (VerifactuService, VerifactuXmlGenerator, LockInvoiceHandler) | **Crítica** |
+| 0b | **SII — tres bugs independientes garantizan rechazo**: namespace único mal aplicado en `Cabecera`/`Titular`; el sobre SOAP anida el documento dos veces (`signedXml` ya es un `<SuministroLRFacturasEmitidas>` completo, se vuelve a envolver en otro) más la declaración `<?xml?>` incrustada a mitad del sobre; falta `Contraparte` en facturas emitidas y en recibidas se usa `CuotaRepercutida` en vez de `CuotaSoportada` (el campo ni existe en el modelo). La firma XAdES-BES tiene además un problema de orden de operaciones que probablemente la invalida | Core (SiiXmlGenerator, SiiSigningService, SiiSubmissionService) | **Crítica** |
+| 0c | **FacturaE — se presenta como firmado sin estarlo**: el fichero se nombra `.xsig` (implica firmado) pero nunca se genera ningún `ds:Signature`; el comentario del controller afirma "cumple el esquema oficial" sin ser cierto. Namespace probablemente incorrecto, bloque `Extensions` mal formado, dirección con placeholders hardcodeados (`Town="N/D"`), sin ningún camino de envío a FACe | Billing (FacturaEService, FacturaEController) | **Crítica** — es el único de los tres que además se anuncia como "cumple el esquema" sin serlo |
+| 0d | **SEPA — código muerto e inválido si se conectara**: `GenerateCreditTransferXml` no lo invoca nada del backend (confirmado, cero llamadas). Si se conectara, tampoco sería válido: usa nombres de elemento en inglés (`GroupHeader`) en vez de los códigos ISO 20022 (`GrpHdr`), un paréntesis mal cerrado anida mal la jerarquía, sin validación de IBAN (mod-97), inventa un BIC placeholder inválido cuando falta, y solo genera transferencias (TRF) cuando el caso de uso documentado es cobrar (requeriría SEPA Direct Debit) — de hecho mapea empresa=pagador/cliente=cobrador, el sentido invertido de "cobrar" | Treasury (SepaService) | Alta |
+| 0e | **Stripe — sin idempotencia de eventos de webhook**: no hay tabla de eventos procesados ni comprobación de `stripeEvent.Id` — Stripe reentrega eventos por diseño, así que una reentrega de `payment_succeeded` puede volver a extender `ExpirationDate` sin control. Añadir además distinción test/live de la clave API (no existe ninguna) | Core (StripeService) | Alta — la verificación de firma del webhook sí está bien hecha, esto es idempotencia, no autenticación |
+| 0f | **Sin validación de NIF/CIF/NIE en ningún sitio del backend** (confirmado por `grep`: cero funciones de validación de dígito de control, solo una heurística de primer carácter en `FacturaEService.IsCompanyNif` que decide persona física/jurídica, no valida nada). Afecta a la vez a CRM, Billing, FacturaE, SII y VeriFactu — un NIF con letra de control equivocada se acepta sin aviso en el alta | CRM/Billing/Core | Alta |
+
+**Por qué esto es más grave que el resto del backlog de código**: los ítems
+1-19 son deuda técnica que hace el código más difícil de mantener, pero
+funciona. Los ítems 0a-0f son al revés — el código funciona (no lanza
+excepciones, no requiere arreglar nada para "que compile"), pero el
+resultado que produce sería rechazado por un tercero externo (AEAT, un
+banco) si se usara en producción real. Es el tipo de deuda más peligroso
+porque no se detecta con ningún build verde ni con pruebas manuales
+superficiales — solo se descubre al intentar el envío real u homologar el
+software, momento en el que ya hay facturas/pagos reales de por medio.
+
 ## Próximos pasos
 Backlog de remediación, priorizado de menor a mayor riesgo/alcance. Cada
 ítem se corrige de forma aislada y verificada (build/CI en verde) antes de
