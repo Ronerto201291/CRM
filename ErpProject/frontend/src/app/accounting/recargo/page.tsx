@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import PageContainer from "@/components/PageContainer";
 
 interface RecargoItem {
-  invoiceId: string;
+  id: string;
+  invoiceId?: string | null;
+  source?: string;
   invoiceNumber: string;
   clientTaxId: string;
   clientName: string;
@@ -65,8 +67,13 @@ export default function RecargoPage() {
           </thead>
           <tbody>
             {recargoList.map((r) => (
-              <tr key={r.invoiceId}>
-                <td className="border p-2">{r.invoiceNumber}</td>
+              <tr key={r.id ?? r.invoiceId ?? r.invoiceNumber}>
+                <td className="border p-2">
+                  {r.invoiceNumber}
+                  {r.source === "Manual" && (
+                    <span className="ml-1 text-xs text-gray-500">(manual)</span>
+                  )}
+                </td>
                 <td className="border p-2">{r.clientName ?? r.clientTaxId}</td>
                 <td className="border p-2 text-right">{eur(r.baseAmount)}</td>
                 <td className="border p-2 text-right">{r.surchargeRate}%</td>

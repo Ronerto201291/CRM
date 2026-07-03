@@ -27,6 +27,7 @@ public static class DependencyInjection
         services.AddScoped<IAgingDataService, AgingDataService>();
         services.AddScoped<IIvaRegisterDataService, IvaRegisterDataService>();
         services.AddScoped<IAeatModelsDataService, AeatModelsDataService>();
+        services.AddScoped<IRecargoInvoiceReader, RecargoInvoiceReader>();
 
         // Hangfire jobs (transient — Hangfire resolves per execution)
         services.AddTransient<AmortizationMonthlyJob>();

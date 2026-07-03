@@ -111,14 +111,12 @@ registrando la consulta en `IntraEuOperations` (ver Evaluación de calidad
 arquitectónica).
 `RecargoController` (`api/v1/accounting/recargo`) despacha
 `GetRecargosQuery`/`GetRecargoByIdQuery`/`CreateRecargoCommand`/
-`GenerateRecargoModelo303Command` vía `IMediator` (controller delgado, ver
-Evaluación de calidad arquitectónica); `GetAll`/`GetById`/`modelo303` consultan
-`IBillingDbContext.Invoices` reales filtrando por `SurchargeRate > 0`, mientras
-que `Create` sigue siendo un stub sin persistencia (igual que antes de la
-migración a CQRS).
+`GenerateRecargoModelo303Command` vía `IMediator` (controller delgado); `GetAll`/`GetById`/`modelo303` consultan
+facturas reales vía `IRecargoInvoiceReader` y `Create` persiste en
+`RecargoDEquivalencias` (jul 2026).
 `VatController.CalculateVat` y `ProrrataController.CalculateProrrata` dejaron
 de ser mock (ver Evaluación de calidad arquitectónica más abajo); `VatController.declare/modelo330`
-sigue siendo un stub. Validación VIES real disponible en dos rutas equivalentes:
+sigue pendiente de implementación. Validación VIES real disponible en dos rutas equivalentes:
 `TaxController` (`api/tax/vies/validate`, ver ADR-0013) y `ViesController`
 (`api/v1/accounting/vies/validate`, con persistencia en `IntraEuOperations`).
 `FinancialStatementsController` (`cash-flow`, `equity`, `income-statement`, `balance-sheet`)
@@ -202,9 +200,9 @@ persisten y calculan desde datos reales; `FinancialStatementsController`
 delega en handlers con cálculo real parcial (#26).
 
 **Pendiente (sin cerrar en backlog):** `IAccountingDbContext` expone 29 DbSets
-(ISP — `GetFiscalPeriodsHandler` solo usa `FiscalPeriods`). `RecargoController.Create`
-sigue siendo stub sin persistencia. `VatController.DeclareModelo330` sigue sin
-implementar. OCP: tasas IVA en `Dictionary`/`switch` (`CalculateVatCommand`).
+(ISP — `GetFiscalPeriodsHandler` solo usa `FiscalPeriods`).
+`VatController.DeclareModelo330` sigue sin implementar. OCP: tasas IVA en
+`Dictionary`/`switch` (`CalculateVatCommand`).
 
 **Corregido (backlog #4):** `AccountingExportController` (~350 líneas, 16 rutas)
 delega todas las exportaciones en `IMediator` + exporters en Infrastructure;
@@ -219,13 +217,15 @@ la misma fuente de datos que usa el handler — ya no hay dos tablas de tasas
 independientes. De paso, `CalculateVatCommand` dejó de aceptar `CompanyId`
 como campo del body (el cliente podía enviar cualquier tenant) y ahora lo
 resuelve del `ITenantContext` del handler, igual que el resto de comandos de
-Accounting. `VatController.DeclareModelo330` sigue siendo un stub sin tocar.
+Accounting. `VatController.DeclareModelo330` sigue pendiente.
 
 **Corregido:** `RecargoController` inyectaba `IBillingDbContext` directamente
 con toda la lógica inline (queries a facturas con `SurchargeRate > 0`, agrupación
 Modelo 303). Ahora despacha `GetRecargosQuery`, `GetRecargoByIdQuery`,
 `CreateRecargoCommand` y `GenerateRecargoModelo303Command` vía `IMediator`
-(`Application/Features/Recargo/RecargoHandlers.cs`). El frontend
+(`Application/Features/Recargo/RecargoHandlers.cs`). `CreateRecargoCommand` persiste
+en `RecargoDEquivalencias` con validación NIF y tasas oficiales (0,5/1,4/5,2%).
+El frontend
 (`frontend/src/app/accounting/recargo/page.tsx`) dejó de llamar a
 `/api/v1/accounting/recargo` (ruta inexistente en Next.js) y usa
 `/api/proxy/v1/accounting/recargo` con el contrato real (`year`/`q` en GET,
