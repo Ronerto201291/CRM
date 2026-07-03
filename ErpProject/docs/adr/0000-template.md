@@ -86,6 +86,13 @@ entender el módulo.>
   o algún controller bypasea el pipeline? ¿el módulo registra sus propios
   validators de FluentValidation en su `DependencyInjection.cs`
   (`AddValidatorsFromAssembly`), o existen como clase pero nunca se ejecutan?
+- **Cobertura de test en CI**: ¿tiene cada handler/entidad/endpoint nuevo al
+  menos un test en `backend/tests/` que corra en `dotnet test
+  ErpProject/backend/Erp.slnx`? ¿el test verifica un caso conocido/externo,
+  o solo comprueba que el código es consistente consigo mismo (ver el
+  antipatrón de `SpanishTaxIdValidatorTests.FindValidCif`, ADR-0018 ítem
+  0f, que generaba su propio caso de prueba por fuerza bruta contra un
+  validador que resultó estar roto)?
 
 ## Buenas prácticas aplicables
 <Convenciones a seguir al modificar este módulo: patrones ya usados en el

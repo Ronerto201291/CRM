@@ -80,6 +80,20 @@ de considerar terminada una implementación en un módulo:
   reléelo antes de modificarlo. El objetivo es que la deuda técnica sea
   monótonamente decreciente: cada corrección debe quedar protegida, no
   solo hecha una vez.
+- **Toda funcionalidad nueva lleva test que corra en CI, sin excepción**:
+  ningún handler, entidad, endpoint o componente nuevo se da por terminado
+  sin al menos un test que lo cubra en `backend/tests/` (`Erp.Tests` para
+  unit, `Erp.IntegrationTests` para flujos con BBDD real,
+  `Erp.ArchitectureTests` si añade una regla estructural) y que
+  `dotnet test ErpProject/backend/Erp.slnx` lo ejecute en verde en el mismo
+  cambio — no en un PR aparte "de tests" posterior. Igual para frontend en
+  cuanto exista runner (ver huecos conocidos). Esto aplica también a bugs
+  corregidos: el test que prueba la corrección es lo que impide que el bug
+  vuelva (refuerza la regla de no regresión de arriba). No añadir un
+  test que solo repita lo que el propio código ya afirma (ver el caso de
+  `SpanishTaxIdValidatorTests.FindValidCif`, ADR-0018 ítem 0f) — el test
+  tiene que verificar contra un caso conocido/externo, no contra el mismo
+  código que pretende probar.
 
 ## Comandos básicos
 
