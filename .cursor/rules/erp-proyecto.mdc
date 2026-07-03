@@ -69,8 +69,8 @@ ADR-0018).
 
 - Los controllers nuevos/modificados son delgados: construyen un
   Command/Query y llaman a `_mediator.Send(...)`, sin lógica de negocio ni
-  acceso a datos inline (24 de 43 controllers todavía incumplen esto — no
-  sumar más; ver backlog de remediación en ADR-0018).
+  acceso a datos inline (43/43 controllers con `IMediator`; no reintroducir
+  bypass; remediación arquitectónica backlog 1–27 ~100% en ADR-0018).
 - No se duplica lógica que ya existe en un Command/Handler (patrón repetido
   y ya corregido en VIES, VAT y Prorrata — ver ADR-0018 §4 antes de crear un
   segundo cálculo/consulta que ya exista).
@@ -119,8 +119,8 @@ docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
 
 ## Huecos conocidos
 
-- No hay tests automatizados en todo el repo (ni `*.Tests.csproj` en
-  backend, ni runner JS configurado en frontend).
+- Backend: `Erp.Tests`, `Erp.IntegrationTests` y `Erp.ArchitectureTests`
+  (~48 tests); frontend sin runner JS configurado.
 - `ErpProject/backend/Erp.slnx` no registra explícitamente todos los
   módulos que sí están cableados en `Program.cs` (ver ADR-0001).
 - Varios módulos tienen partes construidas pero no conectadas end-to-end
