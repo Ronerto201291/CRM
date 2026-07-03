@@ -1,6 +1,7 @@
 using Erp.Modules.Accounting.Application.Interfaces;
 using Erp.Modules.Accounting.Infrastructure.Data;
 using Erp.Modules.Accounting.Infrastructure.Jobs;
+using Erp.Modules.Accounting.Infrastructure.Services;
 using Hangfire;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -22,6 +23,12 @@ public static class DependencyInjection
                .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
 
         services.AddScoped<IAccountingDbContext>(p => p.GetRequiredService<AccountingDbContext>());
+
+        services.AddScoped<IAgingDataService, AgingDataService>();
+        services.AddScoped<IIvaRegisterDataService, IvaRegisterDataService>();
+        services.AddScoped<IAeatModelsDataService, AeatModelsDataService>();
+        services.AddScoped<IRecargoInvoiceReader, RecargoInvoiceReader>();
+        services.AddScoped<IModelo303Reader, Modelo303Reader>();
 
         // Hangfire jobs (transient — Hangfire resolves per execution)
         services.AddTransient<AmortizationMonthlyJob>();

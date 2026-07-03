@@ -1,95 +1,188 @@
 "use client";
-import React, { useState } from "react";
 
-export default function AeatPage() {
-  const [models] = useState([
-    { id: 1, type: "347", year: 2024, status: "Draft", totalRecords: 45, totalAmount: 500000 },
-    { id: 2, type: "111", year: 2025, month: 1, status: "Generated", netVat: 35000 },
-    { id: 3, type: "200", year: 2024, status: "Submitted", annualVat: 250000 },
-  ]);
+import { useCallback, useEffect, useState } from "react";
+import PageContainer from "@/components/PageContainer";
+
+interface AeatModel {
+  id: string;
+  type: string;
+  year: number;
+  month?: number | null;
+  status: string;
+  totalRecords: number;
+  totalAmount: number;
+  message?: string;
+}
+
+export default function AeatModelsPage() {
+  const currentYear = new Date().getFullYear();
+  const [year, setYear] = useState(currentYear);
+  const [models, setModels] = useState<AeatModel[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadModels = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/proxy/v1/accounting/aeat/models");
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e.error || "No se pudieron cargar los modelos");
+      }
+      setModels(await res.json());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error de conexiÃ³n");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadModels(); }, [loadModels]);
+
+  const createModel = async (path: string, body: object, key: string) => {
+    setBusy(key);
+    setError(null);
+    try {
+      const res = await fetch(`/api/proxy/v1/accounting/aeat/${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e.error || "Error al generar el modelo");
+      }
+      await loadModels();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error al generar");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const exportTxt = async (id: string) => {
+    setBusy(`export-${id}`);
+    setError(null);
+    try {
+      const res = await fetch(`/api/proxy/v1/accounting/aeat/modelo347/${id}/export-txt`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al exportar");
+      alert(data.message || `Exportado: ${data.fileName}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error al exportar");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const submitModel = async (id: string) => {
+    setBusy(`submit-${id}`);
+    setError(null);
+    try {
+      const res = await fetch(`/api/proxy/v1/accounting/aeat/${id}/sign-and-submit`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al registrar envÃ­o");
+      await loadModels();
+      alert(data.message || "Registrado localmente");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error al enviar");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const eur = (n: number) => n.toLocaleString("es-ES", { style: "currency", currency: "EUR" });
 
   return (
-    <div className="p-6">
-      <h1 className="text-3xl font-bold mb-6">0.5 Modelos AEAT</h1>
-
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="border rounded-lg p-4 bg-blue-50">
-          <p className="text-gray-600 text-sm">Modelo 347 (Anual)</p>
-          <p className="text-sm">Operaciones 3.005€+</p>
-        </div>
-        <div className="border rounded-lg p-4 bg-green-50">
-          <p className="text-gray-600 text-sm">Modelos 111/190 (Trimestral/Mensual)</p>
-          <p className="text-sm">IVA Declaratorio</p>
-        </div>
-        <div className="border rounded-lg p-4 bg-yellow-50">
-          <p className="text-gray-600 text-sm">Modelo 200 (Anual)</p>
-          <p className="text-sm">Resumen anual IVA</p>
-        </div>
-        <div className="border rounded-lg p-4 bg-purple-50">
-          <p className="text-gray-600 text-sm">Modelo 202 (Devolución)</p>
-          <p className="text-sm">IVA a devolver</p>
+    <PageContainer>
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Modelos AEAT</h1>
+          <p className="page-subtitle">GeneraciÃ³n y seguimiento desde facturas y gastos reales</p>
         </div>
       </div>
 
-      <div className="border rounded-lg p-4 mb-6">
-        <h2 className="text-xl font-semibold mb-4">Modelos Generados</h2>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-gray-200">
-              <th className="border p-2 text-left">Modelo</th>
-              <th className="border p-2 text-left">Período</th>
-              <th className="border p-2 text-right">Cantidad</th>
-              <th className="border p-2">Estado</th>
-              <th className="border p-2">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {models.map((m) => (
-              <tr key={m.id}>
-                <td className="border p-2 font-bold">{m.type}</td>
-                <td className="border p-2">
-                  {m.month ? `${m.month}/` : ""}{m.year}
-                </td>
-                <td className="border p-2 text-right">
-                  €{(m.totalAmount || m.annualVat || m.netVat || 0).toLocaleString()}
-                </td>
-                <td className="border p-2">
-                  <span className={`px-2 py-1 rounded text-white text-xs ${
-                    m.status === "Submitted" ? "bg-green-600" : 
-                    m.status === "Generated" ? "bg-blue-600" : "bg-yellow-600"
-                  }`}>
-                    {m.status}
-                  </span>
-                </td>
-                <td className="border p-2 text-xs">
-                  <button className="text-blue-600 hover:underline mr-2">Descargar .TXT</button>
-                  <button className="text-green-600 hover:underline">Enviar</button>
-                </td>
+      {error && (
+        <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div>
+      )}
+
+      <div className="mb-6 flex flex-wrap items-end gap-3">
+        <div>
+          <label className="erp-label">Ejercicio</label>
+          <input className="erp-input w-28" type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} />
+        </div>
+        <button
+          className="btn-primary"
+          disabled={!!busy}
+          onClick={() => createModel("modelo347", { year }, "347")}
+        >
+          {busy === "347" ? "Generandoâ€¦" : "Generar Modelo 347"}
+        </button>
+        <button
+          className="btn-secondary"
+          disabled={!!busy}
+          onClick={() => createModel("modelo111-190", { year, month: new Date().getMonth() + 1 }, "111")}
+        >
+          {busy === "111" ? "Generandoâ€¦" : "Generar Modelo 111"}
+        </button>
+        <button
+          className="btn-secondary"
+          disabled={!!busy}
+          onClick={() => createModel("modelo200", { year }, "200")}
+        >
+          {busy === "200" ? "Generandoâ€¦" : "Generar Modelo 200"}
+        </button>
+        <button
+          className="btn-secondary"
+          disabled={!!busy}
+          onClick={() => createModel("modelo202", { year }, "202")}
+        >
+          {busy === "202" ? "Generandoâ€¦" : "Generar Modelo 202"}
+        </button>
+      </div>
+
+      <div className="erp-card">
+        <h2 className="mb-4 text-lg font-semibold">Modelos generados</h2>
+        {loading ? (
+          <p className="text-sm text-gray-500">Cargandoâ€¦</p>
+        ) : models.length === 0 ? (
+          <p className="text-sm text-gray-500">No hay modelos generados todavÃ­a.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="border p-2 text-left">Modelo</th>
+                <th className="border p-2 text-left">PerÃ­odo</th>
+                <th className="border p-2 text-right">Importe</th>
+                <th className="border p-2">Estado</th>
+                <th className="border p-2">Acciones</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {models.map((m) => (
+                <tr key={m.id}>
+                  <td className="border p-2 font-semibold">{m.type}</td>
+                  <td className="border p-2">{m.month ? `${m.month}/` : ""}{m.year}</td>
+                  <td className="border p-2 text-right">{eur(m.totalAmount)}</td>
+                  <td className="border p-2">{m.status}</td>
+                  <td className="border p-2 space-x-2">
+                    {m.type === "347" && (
+                      <button className="text-blue-600 hover:underline text-xs" disabled={!!busy} onClick={() => exportTxt(m.id)}>
+                        Descargar TXT
+                      </button>
+                    )}
+                    <button className="text-green-600 hover:underline text-xs" disabled={!!busy} onClick={() => submitModel(m.id)}>
+                      Registrar envÃ­o
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
-
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-        <h3 className="font-bold mb-2">? Formato Oficial AEAT</h3>
-        <p className="text-sm text-gray-700">
-          Todos los modelos se generan en formato .txt oficial reconocido por AEAT.
-          Descárgalos directamente desde aquí sin necesidad de conversión.
-        </p>
-      </div>
-
-      <div className="flex gap-4">
-        <button className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-          Generar Modelo 347
-        </button>
-        <button className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
-          Generar Modelo 111
-        </button>
-        <button className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700">
-          Exportar Todos los Modelos
-        </button>
-      </div>
-    </div>
+    </PageContainer>
   );
 }

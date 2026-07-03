@@ -38,10 +38,12 @@ public interface IAccountingDbContext
 
     // Phase 3 - VAT & Fiscality
     DbSet<VatTransaction> VatTransactions { get; }
+    DbSet<VatRegime> VatRegimes { get; }
     DbSet<ProrrataCalculation> ProrrataCalculations { get; }
     DbSet<InversionDeSujetoActivo> InversionDeSujetoActivos { get; }
     DbSet<RecargoDEquivalencia> RecargoDEquivalencias { get; }
     DbSet<ViesDeclaration> ViesDeclarations { get; }
+    DbSet<VatLiquidation> VatLiquidations { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

@@ -1,59 +1,57 @@
+using Erp.Application.Common.Interfaces;
+using Erp.Modules.Accounting.Application.Features.Vat;
+using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Erp.Modules.Accounting.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/accounting/vies")]
+[Authorize]
 public class ViesController : ControllerBase
 {
-    private static readonly Dictionary<string, (bool Valid, string Name, string Address)> ViesDatabase = new()
-    {
-        { "ES12345678Z", (true, "Test Company SL", "Calle Principal 123, Madrid") },
-        { "ES87654321X", (true, "Demo Business Ltd", "Avenida Central 456, Barcelona") },
-        { "IT12345678901", (true, "Societ� Italiana SPA", "Via Roma 789, Milano") },
-        { "DE98765432101", (true, "Deutsche Firma GmbH", "Hauptstrasse 321, Berlin") },
-    };
+    private readonly IMediator _mediator;
+    private readonly ITenantContext _tenant;
 
-    [HttpPost("validate")]
-    public IActionResult ValidateVat([FromBody] ValidateVatRequest request)
+    public ViesController(IMediator mediator, ITenantContext tenant)
     {
-        try
-        {
-            var isValid = ValidateVatFormat(request.VatNumber);
-            var viesInfo = ViesDatabase.TryGetValue(request.VatNumber, out var info)
-                ? info
-                : (Valid: false, Name: "", Address: "");
-
-            return Ok(new
-            {
-                validationId = Guid.NewGuid(),
-                vatNumber = request.VatNumber,
-                isValid = isValid && viesInfo.Valid,
-                companyName = viesInfo.Name,
-                address = viesInfo.Address,
-                status = (isValid && viesInfo.Valid) ? "Valid" : "Invalid",
-                requestedAt = DateTime.UtcNow
-            });
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        _mediator = mediator;
+        _tenant = tenant;
     }
 
-    private static bool ValidateVatFormat(string vatNumber)
+    [HttpPost("validate")]
+    public async Task<IActionResult> ValidateVat([FromBody] ValidateVatApiRequest request, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(vatNumber) || vatNumber.Length < 4)
-            return false;
+        var vatNumber = !string.IsNullOrWhiteSpace(request.VatNumber)
+            ? request.VatNumber
+            : $"{request.CountryCode}{request.VatNumberOnly}";
 
-        var countryCode = vatNumber.Substring(0, 2);
-        var validCountryCodes = new[] { "ES", "IT", "FR", "DE", "NL", "BE", "AT", "PT", "GR" };
-        return validCountryCodes.Contains(countryCode);
+        var companyId = _tenant.TenantId ?? throw new InvalidOperationException("Tenant no resuelto.");
+        var result = await _mediator.Send(new ValidateViesCommand
+        {
+            VatNumber = vatNumber.Trim().ToUpperInvariant(),
+            CompanyId = companyId
+        }, ct);
+
+        return Ok(new
+        {
+            validationId = result.ValidationId,
+            countryCode = vatNumber.Length >= 2 ? vatNumber[..2] : request.CountryCode,
+            vatNumber = result.VatNumber,
+            isValid = result.IsValid,
+            companyName = result.CompanyName,
+            address = result.Address,
+            validationStatus = result.Status,
+            reason = result.Reason,
+            requestedAt = result.RequestedAt
+        });
     }
 }
 
-public class ValidateVatRequest
+public class ValidateVatApiRequest
 {
+    public string CountryCode { get; set; } = string.Empty;
+    public string VatNumberOnly { get; set; } = string.Empty;
     public string VatNumber { get; set; } = string.Empty;
-    public Guid CompanyId { get; set; }
 }

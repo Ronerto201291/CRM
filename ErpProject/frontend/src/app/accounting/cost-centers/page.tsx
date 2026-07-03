@@ -6,12 +6,12 @@ export default function CostCentersPage() {
   const [code, setCode] = useState("");
   const [type, setType] = useState("Department");
   const fetchCenters = async () => {
-    const res = await fetch(`/api/v1/accounting/cost-centers`);
+    const res = await fetch(`/api/proxy/v1/accounting/cost-centers`);
     const data = await res.json();
     setCenters(data || []);
   };
   const create = async () => {
-    await fetch(`/api/v1/accounting/cost-centers`, {
+    await fetch(`/api/proxy/v1/accounting/cost-centers`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code, name, type })
@@ -23,7 +23,7 @@ export default function CostCentersPage() {
   useEffect(() => { fetchCenters(); }, []);
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Cost Centers (Contabilidad Analítica)</h1>
+      <h1 className="text-2xl font-bold mb-4">Cost Centers (Contabilidad AnalÃ­tica)</h1>
       <div className="mb-4 border p-3">
         <input placeholder="Code" value={code} onChange={e => setCode(e.target.value)} className="border p-2 mr-2" />
         <input placeholder="Name" value={name} onChange={e => setName(e.target.value)} className="border p-2 mr-2" />

@@ -64,19 +64,10 @@ async function proxyFetch(request: NextRequest, path: string, method: string) {
         const responseData = await response.json();
         return NextResponse.json(responseData, { status: response.status });
     } catch (error) {
-        // If response body couldn't be parsed as JSON, return raw error info
-        const isContentTypeJson = response.headers.get('content-type')?.includes('application/json') ?? false;
-        if (isContentTypeJson) {
-            return NextResponse.json({
-                error: 'Error de conexión con el backend',
-                details: error instanceof Error ? error.message : 'Error desconocido'
-            }, { status: 500 });
-        }
-        // Non-JSON error response (e.g. HTML error page from a proxy)
         return NextResponse.json({
-            error: 'Error del servidor backend',
-            status: response.status
-        }, { status: response.status >= 400 ? response.status : 500 });
+            error: 'Error de conexión con el backend',
+            details: error instanceof Error ? error.message : 'Error desconocido'
+        }, { status: 502 });
     }
 }
 

@@ -1,75 +1,88 @@
 "use client";
-import React, { useState, useEffect } from "react";
+
+import { useEffect, useState } from "react";
+import PageContainer from "@/components/PageContainer";
 
 interface RecargoItem {
-  supplierVatNumber: string;
-  supplierIsRE: boolean;
-  base: number;
-  rechargeRate: number;
+  id: string;
+  invoiceId?: string | null;
+  source?: string;
+  invoiceNumber: string;
+  clientTaxId: string;
+  clientName: string;
+  baseAmount: number;
+  surchargeRate: number;
+  surchargeAmount: number;
+  invoiceDate: string;
 }
 
 export default function RecargoPage() {
-  const [supplierVatNumber, setSupplierVatNumber] = useState("");
-  const [supplierIsRE, setSupplierIsRE] = useState(false);
-  const [base, setBase] = useState(1000);
-  const [rechargeRate, setRechargeRate] = useState(5.2);
+  const year = new Date().getFullYear();
+  const quarter = Math.ceil((new Date().getMonth() + 1) / 3);
   const [recargoList, setRecargoList] = useState<RecargoItem[]>([]);
+  const [period, setPeriod] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const fetchList = async () => {
-    const res = await fetch(`/api/v1/accounting/recargo`);
-    const data = await res.json();
-    setRecargoList(Array.isArray(data) ? data : []);
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/proxy/v1/accounting/recargo?year=${year}&q=${quarter}`);
+      if (!res.ok) throw new Error("Error al cargar recargos");
+      const data = await res.json();
+      setPeriod(data.period ?? `T${quarter} ${year}`);
+      setRecargoList(data.recargos ?? []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error de conexiÃ³n");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  useEffect(() => {
-    fetchList();
-  }, []);
+  useEffect(() => { fetchList(); }, []);
 
-  const create = async () => {
-    await fetch(`/api/v1/accounting/recargo`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ supplierVatNumber, supplierIsRE, base, rechargeRate })
-    });
-    alert('Recargo created');
-    fetchList();
-  };
-
-  const rechargeAmount = base * (rechargeRate / 100);
+  const eur = (n: number) => n.toLocaleString("es-ES", { style: "currency", currency: "EUR" });
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-4">3.4 Recargo de Equivalencia (Extremo a Extremo)</h1>
-      <div className="mb-4 border p-3">
-        <div><label>Supplier VAT Number:</label> <input value={supplierVatNumber} onChange={(e) => setSupplierVatNumber(e.target.value)} className="border p-2 ml-2" /></div>
-        <div className="mt-2"><label>Supplier is RE:</label> <input type="checkbox" checked={supplierIsRE} onChange={(e) => setSupplierIsRE(e.target.checked)} className="ml-2" /></div>
-        <div className="mt-2"><label>Base:</label> <input type="number" value={base} onChange={(e) => setBase(Number(e.target.value))} className="border p-2 ml-2 w-24" /></div>
-        <div className="mt-2"><label>Recharge Rate (%):</label> <input type="number" step="0.1" value={rechargeRate} onChange={(e) => setRechargeRate(Number(e.target.value))} className="border p-2 ml-2 w-24" /></div>
-        <div className="mt-2 p-2 bg-yellow-50"><strong>Recharge Amount:</strong> €{rechargeAmount.toFixed(2)}</div>
-        <button onClick={create} className="mt-3 px-4 py-2 bg-blue-600 text-white rounded">Create Recargo</button>
-      </div>
-      <table className="w-full border">
-        <thead>
-          <tr className="bg-gray-200">
-            <th className="border p-2">Supplier VAT</th>
-            <th className="border p-2">Base</th>
-            <th className="border p-2">Recharge Rate</th>
-            <th className="border p-2">Recharge Amount</th>
-            <th className="border p-2">Modelo 303 Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {recargoList.map((r) => (
-            <tr key={r.supplierVatNumber}>
-              <td className="border p-2">{r.supplierVatNumber}</td>
-              <td className="border p-2">€{r.base}</td>
-              <td className="border p-2">{r.rechargeRate}%</td>
-              <td className="border p-2">€{(r.base * (r.rechargeRate / 100)).toFixed(2)}</td>
-              <td className="border p-2">Pending</td>
+    <PageContainer>
+      <h1 className="page-title mb-2">Recargo de equivalencia</h1>
+      <p className="mb-4 text-sm text-gray-600">Facturas con recargo en {period || `T${quarter} ${year}`}</p>
+      {error && <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div>}
+
+      {loading ? (
+        <p className="text-sm text-gray-500">Cargandoâ€¦</p>
+      ) : recargoList.length === 0 ? (
+        <p className="text-sm text-gray-500">No hay facturas con recargo de equivalencia en el trimestre actual.</p>
+      ) : (
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-100">
+              <th className="border p-2">Factura</th>
+              <th className="border p-2">Cliente</th>
+              <th className="border p-2 text-right">Base</th>
+              <th className="border p-2 text-right">% RE</th>
+              <th className="border p-2 text-right">Cuota RE</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {recargoList.map((r) => (
+              <tr key={r.id ?? r.invoiceId ?? r.invoiceNumber}>
+                <td className="border p-2">
+                  {r.invoiceNumber}
+                  {r.source === "Manual" && (
+                    <span className="ml-1 text-xs text-gray-500">(manual)</span>
+                  )}
+                </td>
+                <td className="border p-2">{r.clientName ?? r.clientTaxId}</td>
+                <td className="border p-2 text-right">{eur(r.baseAmount)}</td>
+                <td className="border p-2 text-right">{r.surchargeRate}%</td>
+                <td className="border p-2 text-right">{eur(r.surchargeAmount)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </PageContainer>
   );
 }

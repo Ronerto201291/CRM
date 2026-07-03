@@ -63,11 +63,10 @@ public class ValidateViesHandler : IRequestHandler<ValidateViesCommand, ViesVali
             {
                 Id = Guid.NewGuid(),
                 CompanyId = request.CompanyId,
-                CounterpartVatNumber = request.VatNumber,
-                CounterpartName = response.CompanyName ?? "Unknown",
-                IsValid = response.IsValid,
-                ValidatedAt = DateTime.UtcNow,
-                ValidationResult = response.Reason
+                Type = "ViesValidation",
+                CountryCode = request.VatNumber.Length >= 2 ? request.VatNumber[..2].ToUpperInvariant() : string.Empty,
+                PartnerVatId = request.VatNumber,
+                ViesStatus = response.IsValid ? "Valid" : "Invalid"
             };
 
             _context.IntraEuOperations.Add(viesRecord);

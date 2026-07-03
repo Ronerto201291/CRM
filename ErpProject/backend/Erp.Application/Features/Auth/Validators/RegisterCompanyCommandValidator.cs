@@ -1,3 +1,4 @@
+using Erp.Application.Common.Validation;
 using FluentValidation;
 
 namespace Erp.Application.Features.Auth.Validators;
@@ -12,7 +13,8 @@ public class RegisterCompanyCommandValidator : AbstractValidator<Commands.Regist
 
         RuleFor(x => x.CompanyTaxId)
             .NotEmpty().WithMessage("El CIF/NIF es requerido.")
-            .MaximumLength(20).WithMessage("El CIF/NIF no puede superar 20 caracteres.");
+            .MaximumLength(20).WithMessage("El CIF/NIF no puede superar 20 caracteres.")
+            .Must(SpanishTaxIdValidator.IsValid).WithMessage("NIF/CIF/NIE no válido.");
 
         RuleFor(x => x.CompanyAddress)
             .NotEmpty().WithMessage("La dirección es requerida.")

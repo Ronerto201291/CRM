@@ -1,133 +1,217 @@
 "use client";
-import React, { useState } from "react";
 
-export default function IvaManagementPage() {
-  const [registers] = useState({
-    purchaseTotal: 45000,
-    salesTotal: 120000,
-    purchaseRecords: 87,
-    salesRecords: 125,
-    intraEU: 15,
-  });
+import { useCallback, useEffect, useState } from "react";
+import PageContainer from "@/components/PageContainer";
+
+interface Summary {
+  totalRecords: number;
+  purchaseVat: number;
+  salesVat: number;
+  purchaseRecords: number;
+  salesRecords: number;
+  intraEuCount: number;
+}
+
+interface Line {
+  name: string;
+  taxId: string;
+  baseAmount: number;
+  vatAmount: number;
+  isIntraEu: boolean;
+}
+
+export default function IvaRegistersPage() {
+  const [summary, setSummary] = useState<Summary | null>(null);
+  const [purchaseLines, setPurchaseLines] = useState<Line[]>([]);
+  const [salesLines, setSalesLines] = useState<Line[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [sumRes, purRes, salRes] = await Promise.all([
+        fetch("/api/proxy/v1/accounting/iva/registro"),
+        fetch("/api/proxy/v1/accounting/iva/registro/purchase/lines?limit=50"),
+        fetch("/api/proxy/v1/accounting/iva/registro/sales/lines?limit=50"),
+      ]);
+      if (!sumRes.ok) throw new Error("Error al cargar resumen IVA");
+      const sum = await sumRes.json();
+      setSummary({
+        totalRecords: sum.totalRecords,
+        purchaseVat: sum.purchaseVat,
+        salesVat: sum.salesVat,
+        purchaseRecords: sum.purchaseRecords ?? sum.totalRecords,
+        salesRecords: sum.salesRecords ?? 0,
+        intraEuCount: sum.intraEU ?? 0,
+      });
+      if (purRes.ok) setPurchaseLines(await purRes.json());
+      if (salRes.ok) setSalesLines(await salRes.json());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error de conexiÃ³n");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const exportRiva = async () => {
+    setBusy("riva");
+    setMessage(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/proxy/v1/accounting/iva/registro/export-riva", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al exportar RIVA");
+      setMessage(`${data.fileName}: ${data.totalRecords} registros, IVA ${data.totalVat}â‚¬`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error RIVA");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const sendSii = async () => {
+    setBusy("sii");
+    setMessage(null);
+    setError(null);
+    try {
+      const now = new Date();
+      const createRes = await fetch("/api/proxy/v1/accounting/iva/sii", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ year: now.getFullYear(), month: now.getMonth() + 1 }),
+      });
+      const created = await createRes.json();
+      if (!createRes.ok) throw new Error(created.error || "Error al crear declaraciÃ³n SII");
+
+      const submitRes = await fetch(`/api/proxy/v1/accounting/iva/sii/${created.id}/submit`, { method: "POST" });
+      const submitted = await submitRes.json();
+      if (!submitRes.ok) throw new Error(submitted.error || "Error al enviar SII");
+      setMessage(submitted.message || "DeclaraciÃ³n SII registrada");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error SII");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const eur = (n: number) => n.toLocaleString("es-ES", { style: "currency", currency: "EUR" });
+  const purchaseTotalBase = purchaseLines.reduce((s, l) => s + l.baseAmount, 0);
+  const purchaseTotalVat = purchaseLines.reduce((s, l) => s + l.vatAmount, 0);
+  const salesTotalBase = salesLines.reduce((s, l) => s + l.baseAmount, 0);
+  const salesTotalVat = salesLines.reduce((s, l) => s + l.vatAmount, 0);
 
   return (
-    <div className="p-6">
-      <h1 className="text-3xl font-bold mb-6">0.2 Libros IVA Exportables (RIVA + SII)</h1>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div className="border rounded-lg p-4 bg-blue-50">
-          <p className="text-gray-600 text-sm">Registro Compras</p>
-          <p className="text-2xl font-bold">€{(registers.purchaseTotal / 1000).toFixed(0)}k</p>
-          <p className="text-xs text-gray-500">{registers.purchaseRecords} registros</p>
-        </div>
-        <div className="border rounded-lg p-4 bg-green-50">
-          <p className="text-gray-600 text-sm">Registro Ventas</p>
-          <p className="text-2xl font-bold">€{(registers.salesTotal / 1000).toFixed(0)}k</p>
-          <p className="text-xs text-gray-500">{registers.salesRecords} registros</p>
-        </div>
-        <div className="border rounded-lg p-4 bg-purple-50">
-          <p className="text-gray-600 text-sm">Operaciones Intra-UE</p>
-          <p className="text-2xl font-bold">{registers.intraEU}</p>
-          <p className="text-xs text-gray-500">Triángulos incluidos</p>
+    <PageContainer>
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Libros IVA (RIVA + SII)</h1>
+          <p className="page-subtitle">Datos reales de facturas emitidas y gastos aprobados</p>
         </div>
       </div>
 
-      <div className="border rounded-lg p-4 mb-6">
-        <h2 className="text-xl font-semibold mb-4">Exportar Libros Registro</h2>
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-bold">RIVA (Art. 63-66 LIVA)</h3>
-              <p className="text-sm text-gray-600">Libro Registro IVA Aduanero - Formato oficial</p>
+      {error && <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div>}
+      {message && <div className="mb-4 rounded border border-green-200 bg-green-50 p-3 text-sm text-green-800">{message}</div>}
+
+      {loading || !summary ? (
+        <p className="text-sm text-gray-500">Cargando libros de IVAâ€¦</p>
+      ) : (
+        <>
+          <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div className="erp-card bg-blue-50">
+              <p className="text-sm text-gray-600">Registro compras</p>
+              <p className="text-2xl font-bold">{eur(summary.purchaseVat)}</p>
+              <p className="text-xs text-gray-500">{summary.purchaseRecords} registros</p>
             </div>
-            <button className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-              Descargar .TXT
-            </button>
-          </div>
-          <hr />
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-bold">SII (Sistema Inmediato de Información)</h3>
-              <p className="text-sm text-gray-600">Envío directo a AEAT sin intermediarios</p>
+            <div className="erp-card bg-green-50">
+              <p className="text-sm text-gray-600">Registro ventas</p>
+              <p className="text-2xl font-bold">{eur(summary.salesVat)}</p>
+              <p className="text-xs text-gray-500">{summary.salesRecords} registros</p>
             </div>
-            <button className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
-              Enviar a SII
-            </button>
+            <div className="erp-card bg-purple-50">
+              <p className="text-sm text-gray-600">Operaciones intra-UE</p>
+              <p className="text-2xl font-bold">{summary.intraEuCount}</p>
+            </div>
           </div>
-        </div>
-      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="border rounded-lg p-4">
-          <h3 className="font-bold mb-3 text-lg">Libro Registro Compras</h3>
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="border p-1 text-left">Proveedor</th>
-                <th className="border p-1 text-right">Base Imponible</th>
-                <th className="border p-1 text-right">IVA</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td className="border p-1">Proveedor A</td>
-                <td className="border p-1 text-right">€5.000</td>
-                <td className="border p-1 text-right">€1.050</td>
-              </tr>
-              <tr>
-                <td className="border p-1">Proveedor B (UE)</td>
-                <td className="border p-1 text-right">€3.000</td>
-                <td className="border p-1 text-right">€630</td>
-              </tr>
-              <tr className="bg-yellow-50 font-bold">
-                <td className="border p-1">TOTAL</td>
-                <td className="border p-1 text-right">€45.000</td>
-                <td className="border p-1 text-right">€9.450</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+          <div className="erp-card mb-6">
+            <h2 className="mb-4 text-lg font-semibold">Exportar</h2>
+            <div className="flex flex-wrap gap-3">
+              <button className="btn-primary" disabled={!!busy} onClick={exportRiva}>
+                {busy === "riva" ? "Exportandoâ€¦" : "Descargar RIVA .TXT"}
+              </button>
+              <button className="btn-secondary" disabled={!!busy} onClick={sendSii}>
+                {busy === "sii" ? "Procesandoâ€¦" : "Crear y registrar SII"}
+              </button>
+            </div>
+          </div>
 
-        <div className="border rounded-lg p-4">
-          <h3 className="font-bold mb-3 text-lg">Libro Registro Ventas</h3>
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="border p-1 text-left">Cliente</th>
-                <th className="border p-1 text-right">Base Imponible</th>
-                <th className="border p-1 text-right">IVA</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td className="border p-1">Cliente X</td>
-                <td className="border p-1 text-right">€8.000</td>
-                <td className="border p-1 text-right">€1.680</td>
-              </tr>
-              <tr>
-                <td className="border p-1">Cliente Y (UE)</td>
-                <td className="border p-1 text-right">€5.000</td>
-                <td className="border p-1 text-right">€0 (ISP)</td>
-              </tr>
-              <tr className="bg-yellow-50 font-bold">
-                <td className="border p-1">TOTAL</td>
-                <td className="border p-1 text-right">€120.000</td>
-                <td className="border p-1 text-right">€25.200</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div className="erp-card">
+              <h3 className="mb-3 font-bold">Libro registro compras</h3>
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="border p-1 text-left">Proveedor</th>
+                    <th className="border p-1 text-right">Base</th>
+                    <th className="border p-1 text-right">IVA</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {purchaseLines.map((l, i) => (
+                    <tr key={`${l.taxId}-${i}`}>
+                      <td className="border p-1">{l.name}{l.isIntraEu ? " (UE)" : ""}</td>
+                      <td className="border p-1 text-right">{eur(l.baseAmount)}</td>
+                      <td className="border p-1 text-right">{eur(l.vatAmount)}</td>
+                    </tr>
+                  ))}
+                  <tr className="bg-yellow-50 font-bold">
+                    <td className="border p-1">TOTAL</td>
+                    <td className="border p-1 text-right">{eur(purchaseTotalBase)}</td>
+                    <td className="border p-1 text-right">{eur(purchaseTotalVat)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
 
-      <div className="mt-6 bg-green-50 border border-green-200 rounded-lg p-4">
-        <h3 className="font-bold mb-2">? Formatos Soportados</h3>
-        <ul className="text-sm space-y-1">
-          <li>? RIVA .txt oficial (Art. 63-66)</li>
-          <li>? SII XML con certificado digital</li>
-          <li>? Reverse Charge automático para ISP</li>
-          <li>? Operaciones intra-UE identificadas</li>
-        </ul>
-      </div>
-    </div>
+            <div className="erp-card">
+              <h3 className="mb-3 font-bold">Libro registro ventas</h3>
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="border p-1 text-left">Cliente</th>
+                    <th className="border p-1 text-right">Base</th>
+                    <th className="border p-1 text-right">IVA</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {salesLines.map((l, i) => (
+                    <tr key={`${l.taxId}-${i}`}>
+                      <td className="border p-1">{l.name}{l.isIntraEu ? " (ISP)" : ""}</td>
+                      <td className="border p-1 text-right">{eur(l.baseAmount)}</td>
+                      <td className="border p-1 text-right">{l.isIntraEu ? "â‚¬0" : eur(l.vatAmount)}</td>
+                    </tr>
+                  ))}
+                  <tr className="bg-yellow-50 font-bold">
+                    <td className="border p-1">TOTAL</td>
+                    <td className="border p-1 text-right">{eur(salesTotalBase)}</td>
+                    <td className="border p-1 text-right">{eur(salesTotalVat)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+    </PageContainer>
   );
 }

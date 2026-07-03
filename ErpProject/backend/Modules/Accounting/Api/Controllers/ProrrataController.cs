@@ -1,29 +1,31 @@
+using Erp.Modules.Accounting.Application.Features.Vat;
+using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Erp.Modules.Accounting.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/accounting/prorrata")]
+[Authorize]
 public class ProrrataController : ControllerBase
 {
-    [HttpPost("calculate")]
-    public IActionResult CalculateProrrata([FromBody] CalculateProrrataRequest request)
-    {
-        var totalOperations = request.DeductibleOperations + request.NonDeductibleOperations;
-        var prorataProportion = totalOperations > 0 ? request.DeductibleOperations / totalOperations : 0;
-        var deductibleVat = request.TotalVatSupported * prorataProportion;
+    private readonly IMediator _mediator;
 
-        return Created("", new
+    public ProrrataController(IMediator mediator) => _mediator = mediator;
+
+    [HttpPost("calculate")]
+    public async Task<IActionResult> CalculateProrrata([FromBody] CalculateProrrataApiRequest request, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new CalculateProrrataCommand
         {
-            id = Guid.NewGuid(),
-            deductibleOperations = request.DeductibleOperations,
-            nonDeductibleOperations = request.NonDeductibleOperations,
-            prorataProportion = Math.Round(prorataProportion * 100, 2),
-            totalVatSupported = request.TotalVatSupported,
-            deductibleVat = deductibleVat,
-            nonDeductibleVat = request.TotalVatSupported - deductibleVat,
-            message = $"Prorrata calculada: {Math.Round(prorataProportion * 100, 2)}%"
-        });
+            FiscalYear = request.FiscalYear > 0 ? request.FiscalYear : DateTime.UtcNow.Year,
+            InlandRevenue = request.InlandRevenue,
+            ExemptRevenue = request.ExemptRevenue,
+            Type = request.Type ?? "General"
+        }, ct);
+
+        return Created(string.Empty, result);
     }
 
     [HttpGet("types")]
@@ -37,10 +39,10 @@ public class ProrrataController : ControllerBase
     }
 }
 
-public class CalculateProrrataRequest
+public class CalculateProrrataApiRequest
 {
-    public decimal DeductibleOperations { get; set; }
-    public decimal NonDeductibleOperations { get; set; }
-    public decimal TotalVatSupported { get; set; }
+    public int FiscalYear { get; set; }
+    public decimal InlandRevenue { get; set; }
+    public decimal ExemptRevenue { get; set; }
+    public string? Type { get; set; }
 }
-
