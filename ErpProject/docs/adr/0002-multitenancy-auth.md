@@ -262,3 +262,17 @@ este pipeline compartido.
   `TenantResolverMiddleware`, `ModuleDbContextBase` o `PermissionService`
   debe verificarse manualmente con al menos dos tenants distintos antes de
   desplegar.
+- **El modelo `User`↔`Company` es 1:N rígido (un `User.CompanyId` fijo, sin
+  tabla `UserCompany`), no soporta multi-empresa real** (un mismo login con
+  acceso a varias empresas — caso de uso relevante para gestorías que llevan
+  varias pymes clientas). El email de login es único a nivel de toda la
+  plataforma (`RegisterCompanyCommand.cs:54-56`), y el `CompanyId` queda
+  grabado como claim fijo e inmutable en el JWT al emitirlo
+  (`JwtProvider.cs:33`) — no hay concepto de "empresa activa" cambiable en
+  sesión. Si se aborda, implica una migración de esquema real (tabla
+  `UserCompany` muchos-a-muchos con rol por membresía, relajar la unicidad
+  de email a `(Email, CompanyId)`, y rehacer el JWT para llevar una lista de
+  empresas accesibles + una activa conmutable). Backlog y justificación de
+  negocio completa en `ADR-0018` ítem 42a — no implementar como parte de un
+  cambio menor de auth, es un cambio de esquema con decisión de producto
+  detrás (modelo de suscripción por empresa vs. por cuenta/gestoría).
