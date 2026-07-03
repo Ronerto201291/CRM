@@ -33,14 +33,12 @@ public class CalculateProrrataHandler : IRequestHandler<CalculateProrrataCommand
         {
             Id = Guid.NewGuid(),
             CompanyId = request.CompanyId,
-            Year = request.Year,
+            FiscalYear = request.Year,
             Type = request.ProrrataType,
-            DeductibleOperations = deductibleOperations,
-            NonDeductibleOperations = nonDeductibleOperations,
-            ProrataProportion = prorataProportion,
-            TotalVatSupported = totalVatSupported,
-            DeductibleVat = deductibleVat,
-            NonDeductibleVat = nonDeductibleVat
+            InlandRevenue = deductibleOperations,
+            ExemptRevenue = nonDeductibleOperations,
+            ProrrataPercentage = Math.Round(prorataProportion * 100, 2),
+            AdjustmentAmount = nonDeductibleVat
         };
 
         _context.ProrrataCalculations.Add(calculation);

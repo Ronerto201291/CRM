@@ -1,66 +1,94 @@
+using Erp.Modules.Accounting.Application.Features.Aeat;
+using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace Erp.Modules.Accounting.Api.Controllers
+namespace Erp.Modules.Accounting.Api.Controllers;
+
+[ApiController]
+[Route("api/v1/accounting/aeat")]
+[Authorize]
+public class AeatModelsController : ControllerBase
 {
-    [ApiController]
-    [Route("api/v1/accounting/aeat")]
-    public class AeatModelsController : ControllerBase
+    private readonly IMediator _mediator;
+
+    public AeatModelsController(IMediator mediator) => _mediator = mediator;
+
+    [HttpPost("modelo347")]
+    public async Task<IActionResult> CreateModelo347([FromBody] CreateModelo347Request dto, CancellationToken ct)
     {
-        [HttpPost("modelo347")]
-        public IActionResult CreateModelo347([FromBody] object dto) => Created("", new { 
-            id = Guid.NewGuid(), 
-            status = "Draft",
-            type = "347",
-            message = "Modelo 347 creado (declaración anual operaciones 3.005€+)"
-        });
+        var year = dto.Year > 0 ? dto.Year : DateTime.UtcNow.Year;
+        var result = await _mediator.Send(new CreateModelo347Command(year), ct);
+        return CreatedAtAction(nameof(GetModelo347), new { year = result.Year }, result);
+    }
 
-        [HttpGet("modelo347/{year}")]
-        public IActionResult GetModelo347(int year) => Ok(new { 
-            year, 
-            status = "Draft",
-            totalRecords = 25,
-            totalAmount = 500000m
-        });
-
-        [HttpPost("modelo347/{id}/export-txt")]
-        public IActionResult ExportModelo347(Guid id) => Ok(new { 
-            id,
-            fileName = $"347_{DateTime.Now.Year}.txt",
-            format = "AEAT_Official_TXT",
-            message = "Archivo .txt oficial AEAT generado"
-        });
-
-        [HttpPost("modelo111-190")]
-        public IActionResult CreateModelo111([FromBody] object dto) => Created("", new { 
-            id = Guid.NewGuid(),
-            status = "Draft",
-            type = "111",
-            message = "Modelo 111 creado (declaración trimestral IVA)"
-        });
-
-        [HttpPost("modelo200")]
-        public IActionResult CreateModelo200([FromBody] object dto) => Created("", new { 
-            id = Guid.NewGuid(),
-            status = "Draft",
-            type = "200",
-            message = "Modelo 200 creado (declaración anual IVA)"
-        });
-
-        [HttpPost("modelo202")]
-        public IActionResult CreateModelo202([FromBody] object dto) => Created("", new { 
-            id = Guid.NewGuid(),
-            status = "Draft",
-            type = "202",
-            message = "Modelo 202 creado (devolución IVA)"
-        });
-
-        [HttpPost("{id}/sign-and-submit")]
-        public IActionResult SignAndSubmit(Guid id) => Ok(new { 
-            id,
-            status = "Submitted",
-            submissionReference = Guid.NewGuid().ToString().Substring(0, 13),
-            submissionDate = DateTime.UtcNow,
-            message = "Modelo AEAT firmado y enviado"
+    [HttpGet("modelo347/{year:int}")]
+    public async Task<IActionResult> GetModelo347(int year, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new GetModelo347Query(year), ct);
+        return result is null ? NotFound() : Ok(new
+        {
+            year = result.Year,
+            status = result.Status,
+            totalRecords = result.TotalRecords,
+            totalAmount = result.TotalAmount,
+            id = result.Id,
+            message = result.Message
         });
     }
+
+    [HttpPost("modelo347/{id:guid}/export-txt")]
+    public async Task<IActionResult> ExportModelo347(Guid id, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new ExportModelo347TxtCommand(id), ct);
+        return Ok(result);
+    }
+
+    [HttpPost("modelo111-190")]
+    public async Task<IActionResult> CreateModelo111([FromBody] CreateModelo111Request dto, CancellationToken ct)
+    {
+        var year = dto.Year > 0 ? dto.Year : DateTime.UtcNow.Year;
+        var month = dto.Month is >= 1 and <= 12 ? dto.Month : DateTime.UtcNow.Month;
+        var result = await _mediator.Send(new CreateModelo111Command(year, month), ct);
+        return Created(string.Empty, result);
+    }
+
+    [HttpPost("modelo200")]
+    public async Task<IActionResult> CreateModelo200([FromBody] CreateModeloYearRequest dto, CancellationToken ct)
+    {
+        var year = dto.Year > 0 ? dto.Year : DateTime.UtcNow.Year;
+        var result = await _mediator.Send(new CreateModelo200Command(year), ct);
+        return Created(string.Empty, result);
+    }
+
+    [HttpPost("modelo202")]
+    public async Task<IActionResult> CreateModelo202([FromBody] CreateModeloYearRequest dto, CancellationToken ct)
+    {
+        var year = dto.Year > 0 ? dto.Year : DateTime.UtcNow.Year;
+        var result = await _mediator.Send(new CreateModelo202Command(year), ct);
+        return Created(string.Empty, result);
+    }
+
+    [HttpPost("{id:guid}/sign-and-submit")]
+    public async Task<IActionResult> SignAndSubmit(Guid id, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new SignAndSubmitAeatModelCommand(id), ct);
+        return Ok(result);
+    }
+}
+
+public class CreateModelo347Request
+{
+    public int Year { get; set; }
+}
+
+public class CreateModelo111Request
+{
+    public int Year { get; set; }
+    public int Month { get; set; }
+}
+
+public class CreateModeloYearRequest
+{
+    public int Year { get; set; }
 }

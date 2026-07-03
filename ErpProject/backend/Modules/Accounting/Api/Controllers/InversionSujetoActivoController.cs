@@ -1,105 +1,94 @@
+using Erp.Modules.Accounting.Application.Features.Isp;
+using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Erp.Modules.Accounting.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/accounting/isp")]
+[Authorize]
 public class InversionSujetoActivoController : ControllerBase
 {
+    private readonly IMediator _mediator;
+
+    public InversionSujetoActivoController(IMediator mediator) => _mediator = mediator;
+
     [HttpGet]
-    public IActionResult GetAll()
-    {
-        var isp = new[]
-        {
-            new 
-            { 
-                id = Guid.NewGuid(),
-                description = "Servicios de consultoría",
-                supplierVat = "IT12345678901",
-                invoiceAmount = 50000m,
-                vatRate = 0.22m,
-                vatAmount = 11000m,
-                ispApplies = true,
-                status = "Active"
-            },
-            new 
-            { 
-                id = Guid.NewGuid(),
-                description = "Transportes intracomunitarios",
-                supplierVat = "DE98765432101",
-                invoiceAmount = 75000m,
-                vatRate = 0.19m,
-                vatAmount = 14250m,
-                ispApplies = false,
-                status = "Active"
-            },
-        };
-        return Ok(isp);
-    }
+    public async Task<IActionResult> GetAll(CancellationToken ct)
+        => Ok(await _mediator.Send(new GetIspOperationsQuery(), ct));
 
     [HttpPost]
-    public IActionResult Create([FromBody] CreateISPRequest request)
+    public async Task<IActionResult> Create([FromBody] CreateIspRequest request, CancellationToken ct)
     {
-        return Created("", new
+        var result = await _mediator.Send(new CreateIspOperationCommand(
+            request.SupplierCountryCode,
+            request.VatableBase,
+            request.VatRate), ct);
+
+        return Created(string.Empty, new
         {
-            id = Guid.NewGuid(),
-            description = request.Description,
-            supplierVat = request.SupplierVat,
-            invoiceAmount = request.InvoiceAmount,
-            ispApplies = DeterminateISP(request.SupplierVat, request.Description),
-            status = "Created",
+            id = result.Id,
+            supplierCountryCode = result.SupplierCountryCode,
+            vatableBase = result.VatableBase,
+            vatRate = result.VatRate,
+            vatAmount = result.VatAmount,
+            isReverseCharge = result.IsReverseCharge,
+            status = result.Status,
             message = "Inversión del sujeto pasivo registrada"
         });
     }
 
-    [HttpGet("{id}")]
-    public IActionResult GetById(Guid id)
+    [HttpGet("{id:guid}")]
+    public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
+        var result = await _mediator.Send(new GetIspOperationQuery(id), ct);
+        if (result is null) return NotFound();
+
         return Ok(new
         {
-            id,
-            description = "Servicios profesionales",
-            supplierVat = "IT12345678901",
-            invoiceAmount = 50000m,
-            vatAmount = 11000m,
-            ispApplies = true,
-            status = "Active",
+            id = result.Id,
+            supplierCountryCode = result.SupplierCountryCode,
+            vatableBase = result.VatableBase,
+            vatRate = result.VatRate,
+            vatAmount = result.VatAmount,
+            isReverseCharge = result.IsReverseCharge,
+            status = result.Status,
             regulation = "Art. 84.1 RD 1619/2012"
         });
     }
 
-    [HttpPost("{id}/calculate-vat")]
-    public IActionResult CalculateVAT(Guid id, [FromBody] CalculateVATRequest request)
+    [HttpPost("{id:guid}/calculate-vat")]
+    public async Task<IActionResult> CalculateVAT(Guid id, [FromBody] CalculateIspVatRequest request, CancellationToken ct)
     {
-        return Ok(new
+        try
         {
-            id,
-            invoiceVat = request.Amount * 0.22m,
-            ispApplied = true,
-            effectiveVat = 0,
-            message = "IVA con ISP aplicado",
-            status = "Calculated"
-        });
-    }
-
-    private static bool DeterminateISP(string supplierVat, string description)
-    {
-        // Simplificado: solo EU suppliers, ciertos servicios
-        return supplierVat.Length > 2 && 
-               (description.Contains("consultor") || 
-                description.Contains("profesional") ||
-                description.Contains("servicio"));
+            var result = await _mediator.Send(new CalculateIspVatCommand(id, request.Amount), ct);
+            return Ok(new
+            {
+                id = result.Id,
+                invoiceVat = result.InvoiceVat,
+                ispApplied = result.IspApplied,
+                effectiveVat = result.EffectiveVat,
+                message = result.Message,
+                status = result.Status
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
     }
 }
 
-public class CreateISPRequest
+public class CreateIspRequest
 {
-    public string Description { get; set; } = string.Empty;
-    public string SupplierVat { get; set; } = string.Empty;
-    public decimal InvoiceAmount { get; set; }
+    public string SupplierCountryCode { get; set; } = string.Empty;
+    public decimal VatableBase { get; set; }
+    public decimal VatRate { get; set; }
 }
 
-public class CalculateVATRequest
+public class CalculateIspVatRequest
 {
     public decimal Amount { get; set; }
 }
