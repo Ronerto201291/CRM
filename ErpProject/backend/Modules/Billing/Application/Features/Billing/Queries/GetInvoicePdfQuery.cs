@@ -144,6 +144,7 @@ public class GetInvoicePdfHandler : IRequestHandler<GetInvoicePdfQuery, InvoiceP
             Hash: invoice.Hash,
             VerifactuHuella: invoice.VerifactuHuella,
             VerifactuQrUrl: invoice.VerifactuQrUrl,
+            VerifactuRealtimeSubmission: invoice.VerifactuRealtimeSubmission,
             Company: company,
             Client: client,
             Lines: lines,

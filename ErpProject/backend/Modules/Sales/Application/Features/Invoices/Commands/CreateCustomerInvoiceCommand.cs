@@ -4,7 +4,14 @@ using MediatR;
 
 namespace Erp.Modules.Sales.Application.Features.Invoices.Commands
 {
-    public class CreateCustomerInvoiceCommand : IRequest<Guid>
+    public class CreateCustomerInvoiceResult
+    {
+        public Guid Id { get; set; }
+        public Guid BillingInvoiceId { get; set; }
+        public string BillingInvoiceNumber { get; set; } = string.Empty;
+    }
+
+    public class CreateCustomerInvoiceCommand : IRequest<CreateCustomerInvoiceResult>
     {
         public Guid SalesOrderId { get; set; }
         public string Number { get; set; } = string.Empty;

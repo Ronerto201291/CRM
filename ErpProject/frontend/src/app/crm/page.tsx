@@ -4,6 +4,7 @@ import { parseListResponse, parseTotalCount } from '@/lib/parseListResponse';
 import Link from 'next/link';
 import PageContainer from '@/components/PageContainer';
 import NotesPanel from '@/components/NotesPanel';
+import AccessibleModal from '@/components/AccessibleModal';
 
 type Tab = 'clients' | 'suppliers' | 'contacts';
 
@@ -14,6 +15,9 @@ interface Contact {
     clientId?: string; supplierId?: string; clientName?: string; supplierName?: string;
 }
 
+type CrmEntity = Client | Supplier | Contact;
+type CrmForm = Partial<Client & Supplier & Contact>;
+
 export default function CrmPage() {
     const [tab, setTab] = useState<Tab>('clients');
     const [clients, setClients] = useState<Client[]>([]);
@@ -21,10 +25,11 @@ export default function CrmPage() {
     const [contacts, setContacts] = useState<Contact[]>([]);
     const [prospectsCount, setProspectsCount] = useState(0);
     const [showModal, setShowModal] = useState(false);
-    const [editing, setEditing] = useState<any>(null);
+    const [editing, setEditing] = useState<CrmEntity | null>(null);
     const [notesTarget, setNotesTarget] = useState<{ id: string; name: string } | null>(null);
     const [search, setSearch] = useState('');
-    const [form, setForm] = useState<any>({});
+    const [form, setForm] = useState<CrmForm>({});
+    const [formError, setFormError] = useState<string | null>(null);
 
     const load = useCallback(async () => {
         const [r1, r2, r3, r4] = await Promise.all([
@@ -50,10 +55,11 @@ export default function CrmPage() {
         return { name: '', email: '', phone: '', position: '', clientId: '', supplierId: '' };
     };
 
-    const openNew = () => { setEditing(null); setForm(getEmptyForm(tab)); setShowModal(true); };
-    const openEdit = (item: any) => { setEditing(item); setForm({ ...item }); setShowModal(true); };
+    const openNew = () => { setEditing(null); setForm(getEmptyForm(tab)); setFormError(null); setShowModal(true); };
+    const openEdit = (item: CrmEntity) => { setEditing(item); setForm({ ...item }); setFormError(null); setShowModal(true); };
 
     const handleSave = async () => {
+        setFormError(null);
         let url = '';
         const method = editing ? 'PUT' : 'POST';
         if (tab === 'clients') url = editing ? `/api/proxy/clients/${editing.id}` : '/api/proxy/clients';
@@ -66,7 +72,10 @@ export default function CrmPage() {
 
         const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         if (res.ok) { setShowModal(false); load(); }
-        else { const e = await res.json().catch(() => ({})); alert(e.error || 'Error al guardar'); }
+        else {
+            const e = await res.json().catch(() => ({}));
+            setFormError(e.error || 'Error al guardar');
+        }
     };
 
     const handleDelete = async (id: string) => {
@@ -260,13 +269,23 @@ export default function CrmPage() {
             )}
 
             {/* MODAL — New / Edit */}
-            {showModal && (
-                <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowModal(false); }}>
-                    <div className="modal-box" style={{ maxWidth: '520px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                            <h2 style={{ fontSize: '18px', fontWeight: 700 }}>{editing ? 'Editar' : 'Nuevo'} {tabLabel[tab]}</h2>
-                            <button onClick={() => setShowModal(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '20px', color: 'var(--text-muted)' }}>✕</button>
-                        </div>
+            <AccessibleModal
+                open={showModal}
+                onClose={() => setShowModal(false)}
+                title={`${editing ? 'Editar' : 'Nuevo'} ${tabLabel[tab]}`}
+                footer={(
+                    <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                        <button className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancelar</button>
+                        <button className="btn btn-primary" onClick={handleSave}>✓ Guardar</button>
+                    </div>
+                )}
+            >
+
+                        {formError && (
+                            <div style={{ padding: '10px 12px', marginBottom: 14, borderRadius: 8, color: 'var(--danger)', background: 'var(--danger-bg)', fontSize: 13 }}>
+                                {formError}
+                            </div>
+                        )}
 
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
                             {/* CLIENTS FORM */}
@@ -308,13 +327,7 @@ export default function CrmPage() {
                             </>}
                         </div>
 
-                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                            <button className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancelar</button>
-                            <button className="btn btn-primary" onClick={handleSave}>✓ Guardar</button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            </AccessibleModal>
         </PageContainer>
     );
 }

@@ -197,14 +197,116 @@ public class GetConsolidatedStatementsHandler : IRequestHandler<GetConsolidatedS
 public class ConsolidateGroupHandler : IRequestHandler<ConsolidateGroupCommand, object>
 {
     private readonly ITreasuryDbContext _ctx;
+    private readonly IConsolidationMetricsQuery _metrics;
 
-    public ConsolidateGroupHandler(ITreasuryDbContext ctx) => _ctx = ctx;
+    public ConsolidateGroupHandler(ITreasuryDbContext ctx, IConsolidationMetricsQuery metrics)
+    {
+        _ctx = ctx;
+        _metrics = metrics;
+    }
 
     public async Task<object> Handle(ConsolidateGroupCommand request, CancellationToken ct)
     {
-        var group = await _ctx.ConsolidationGroups.FindAsync(new object[] { request.GroupId }, ct);
-        if (group == null) throw new KeyNotFoundException("Group not found");
-        return new { status = "Consolidated", timestamp = DateTime.UtcNow };
+        var group = await _ctx.ConsolidationGroups.FindAsync(new object[] { request.GroupId }, ct)
+            ?? throw new KeyNotFoundException("Group not found");
+
+        var subsidiaries = await _ctx.SubsidiaryCompanies
+            .Where(s => s.ParentCompanyId == group.ParentCompanyId && s.Status == "Active")
+            .AsNoTracking()
+            .ToListAsync(ct);
+
+        var fiscalYear = DateTime.UtcNow.Year;
+        decimal totalRevenue = 0, totalExpenses = 0, totalAssets = 0, totalLiabilities = 0, totalEquity = 0;
+
+        foreach (var sub in subsidiaries)
+        {
+            var factor = sub.OwnershipPercentage / 100m;
+            var metrics = await _metrics.GetCompanyMetricsAsync(sub.CompanyId, fiscalYear, ct);
+            totalRevenue += metrics.Revenue * factor;
+            totalExpenses += metrics.Expenses * factor;
+            totalAssets += metrics.Assets * factor;
+            totalLiabilities += metrics.Liabilities * factor;
+            totalEquity += metrics.Equity * factor;
+        }
+
+        var parentMetrics = await _metrics.GetCompanyMetricsAsync(group.ParentCompanyId, fiscalYear, ct);
+        totalRevenue += parentMetrics.Revenue;
+        totalExpenses += parentMetrics.Expenses;
+        totalAssets += parentMetrics.Assets;
+        totalLiabilities += parentMetrics.Liabilities;
+        totalEquity += parentMetrics.Equity;
+
+        var netIncome = totalRevenue - totalExpenses;
+        var prepared = DateTime.UtcNow;
+
+        await UpsertStatementAsync(group.Id, fiscalYear, "IncomeStatement",
+            totalRevenue, totalExpenses, netIncome, 0, 0, 0, prepared, ct);
+        await UpsertStatementAsync(group.Id, fiscalYear, "BalanceSheet",
+            0, 0, netIncome, totalAssets, totalLiabilities, totalEquity, prepared, ct);
+
+        group.Status = "Consolidated";
+        group.ConsolidationDate = prepared;
+        group.UpdatedAt = prepared;
+        await _ctx.SaveChangesAsync(ct);
+
+        return new
+        {
+            status = "Consolidated",
+            fiscalYear,
+            timestamp = prepared,
+            subsidiaries = subsidiaries.Count,
+            totalRevenue,
+            totalExpenses,
+            netIncome,
+            totalAssets,
+            totalLiabilities,
+            totalEquity
+        };
+    }
+
+    private async Task UpsertStatementAsync(
+        Guid groupId, int fiscalYear, string statementType,
+        decimal revenue, decimal expenses, decimal netIncome,
+        decimal assets, decimal liabilities, decimal equity,
+        DateTime prepared, CancellationToken ct)
+    {
+        var existing = await _ctx.ConsolidatedFinancialStatements
+            .FirstOrDefaultAsync(s =>
+                s.ConsolidationGroupId == groupId
+                && s.FiscalYear == fiscalYear
+                && s.StatementType == statementType, ct);
+
+        if (existing is null)
+        {
+            _ctx.ConsolidatedFinancialStatements.Add(new ConsolidatedFinancialStatement
+            {
+                Id = Guid.NewGuid(),
+                ConsolidationGroupId = groupId,
+                FiscalYear = fiscalYear,
+                StatementType = statementType,
+                TotalRevenue = revenue,
+                TotalExpenses = expenses,
+                NetIncome = netIncome,
+                TotalAssets = assets,
+                TotalLiabilities = liabilities,
+                TotalEquity = equity,
+                PreparedDate = prepared,
+                Status = "Draft",
+                CreatedAt = prepared,
+                UpdatedAt = prepared
+            });
+        }
+        else
+        {
+            existing.TotalRevenue = revenue;
+            existing.TotalExpenses = expenses;
+            existing.NetIncome = netIncome;
+            existing.TotalAssets = assets;
+            existing.TotalLiabilities = liabilities;
+            existing.TotalEquity = equity;
+            existing.PreparedDate = prepared;
+            existing.UpdatedAt = prepared;
+        }
     }
 }
 

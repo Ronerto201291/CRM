@@ -9,6 +9,7 @@ const ALLOWED_PATH_PREFIXES = [
     'admin/',
     'audit-logs',
     'auth/',
+    'automation/',
     'accounting/',
     'clients',
     'company',

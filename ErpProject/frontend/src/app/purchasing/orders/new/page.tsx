@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import PageContainer from "@/components/PageContainer";
+import { updateLineAt } from "@/lib/lineForm";
 import { parseListResponse } from "@/lib/parseListResponse";
 import { Supplier } from "@/types/api";
 
@@ -27,6 +28,7 @@ export default function NewPurchaseOrderPage() {
         lines: [emptyLine()] as OrderLine[],
     });
     const [saving, setSaving] = useState(false);
+    const [formError, setFormError] = useState<string | null>(null);
 
     useEffect(() => {
         fetch('/api/proxy/suppliers?pageSize=500')
@@ -35,11 +37,8 @@ export default function NewPurchaseOrderPage() {
             .catch(() => {});
     }, []);
 
-    const updateLine = (i: number, key: keyof OrderLine, val: any) => {
-        const lines = [...form.lines];
-        (lines[i] as any)[key] = val;
-        setForm({ ...form, lines });
-    };
+    const updateLine = <K extends keyof OrderLine>(i: number, key: K, val: OrderLine[K]) =>
+        setForm({ ...form, lines: updateLineAt(form.lines, i, key, val) });
     const addLine = () => setForm({ ...form, lines: [...form.lines, emptyLine()] });
     const removeLine = (i: number) => setForm({ ...form, lines: form.lines.filter((_, idx) => idx !== i) });
 
@@ -49,8 +48,9 @@ export default function NewPurchaseOrderPage() {
     const fmt = (n: number) => `€ ${n.toLocaleString('es-ES', { minimumFractionDigits: 2 })}`;
 
     const submit = async () => {
-        if (!form.supplierId) { alert('Selecciona un proveedor'); return; }
-        if (!form.number) { alert('Introduce el número de pedido'); return; }
+        setFormError(null);
+        if (!form.supplierId) { setFormError('Selecciona un proveedor'); return; }
+        if (!form.number) { setFormError('Introduce el número de pedido'); return; }
         setSaving(true);
         try {
             const body = {
@@ -66,11 +66,10 @@ export default function NewPurchaseOrderPage() {
                 body: JSON.stringify(body),
             });
             if (res.ok) {
-                alert('Pedido creado correctamente');
                 window.location.href = '/purchasing/orders';
             } else {
                 const e = await res.json();
-                alert(e.error || e.message || 'Error al crear el pedido');
+                setFormError(e.error || e.message || 'Error al crear el pedido');
             }
         } finally {
             setSaving(false);
@@ -86,6 +85,12 @@ export default function NewPurchaseOrderPage() {
                 </div>
                 <a href="/purchasing/orders" className="btn btn-secondary">← Volver</a>
             </div>
+
+            {formError && (
+                <div className="erp-card" style={{ padding: '12px 16px', marginBottom: 16, color: 'var(--danger)', background: 'var(--danger-bg)' }}>
+                    {formError}
+                </div>
+            )}
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
                 <div className="form-group">

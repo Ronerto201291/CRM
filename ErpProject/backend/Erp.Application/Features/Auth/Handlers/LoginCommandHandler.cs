@@ -1,5 +1,6 @@
 using Erp.Application.DTOs;
 using Erp.Application.Features.Auth.Commands;
+using Erp.Application.Features.Auth.Queries;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Erp.Application.Common.Interfaces;
@@ -10,11 +11,13 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponseDt
 {
     private readonly IApplicationDbContext _context;
     private readonly IJwtProvider _jwtProvider;
+    private readonly IMediator _mediator;
 
-    public LoginCommandHandler(IApplicationDbContext context, IJwtProvider jwtProvider)
+    public LoginCommandHandler(IApplicationDbContext context, IJwtProvider jwtProvider, IMediator mediator)
     {
         _context = context;
         _jwtProvider = jwtProvider;
+        _mediator = mediator;
     }
 
     public async Task<LoginResponseDto> Handle(LoginCommand request, CancellationToken cancellationToken)
@@ -48,12 +51,18 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponseDt
         }
 
         // 4. No 2FA — issue JWT directly.
+        var company = await _context.Companies.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(c => c.Id == user.CompanyId, cancellationToken);
+        var companies = await _mediator.Send(new GetUserCompaniesQuery(user.Id), cancellationToken);
+
         return new LoginResponseDto
         {
             Token = _jwtProvider.Generate(user),
             UserId = user.Id,
             Email = user.Email,
-            CompanyId = user.CompanyId.ToString()
+            CompanyId = user.CompanyId.ToString(),
+            CompanyName = company?.Name ?? string.Empty,
+            Companies = companies.ToList()
         };
     }
 }

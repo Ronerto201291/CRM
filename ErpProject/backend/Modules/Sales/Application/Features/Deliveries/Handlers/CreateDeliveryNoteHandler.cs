@@ -1,3 +1,4 @@
+using Erp.Application.Common.Events;
 using Erp.Modules.Sales.Application.Features.Deliveries.Commands;
 using Erp.Modules.Sales.Application.Interfaces;
 using Erp.Modules.Sales.Domain.Entities;
@@ -9,8 +10,13 @@ namespace Erp.Modules.Sales.Application.Features.Deliveries.Handlers
     public class CreateDeliveryNoteHandler : IRequestHandler<CreateDeliveryNoteCommand, Guid>
     {
         private readonly ISalesDbContext _context;
+        private readonly IPublisher _publisher;
 
-        public CreateDeliveryNoteHandler(ISalesDbContext context) => _context = context;
+        public CreateDeliveryNoteHandler(ISalesDbContext context, IPublisher publisher)
+        {
+            _context = context;
+            _publisher = publisher;
+        }
 
         public async Task<Guid> Handle(CreateDeliveryNoteCommand request, CancellationToken cancellationToken)
         {
@@ -42,18 +48,33 @@ namespace Erp.Modules.Sales.Application.Features.Deliveries.Handlers
                 delivery.Lines.Add(line);
                 _context.DeliveryNoteLines.Add(line);
 
-                // Update SO line delivered quantity
                 if (salesOrderLines.TryGetValue(l.SalesOrderLineId, out var sol))
                     sol.DeliveredQuantity += l.ShippedQuantity;
             }
 
-            // Update SO status
             var deliveredTotal = so.Lines.Sum(l => l.DeliveredQuantity);
             var orderedTotal = so.Lines.Sum(l => l.Quantity);
             so.Status = deliveredTotal >= orderedTotal ? "Completed" : "PartiallyDelivered";
 
             _context.DeliveryNotes.Add(delivery);
             await _context.SaveChangesAsync(cancellationToken);
+
+            await _publisher.Publish(new DeliveryNoteCreatedEvent
+            {
+                DeliveryNoteId = delivery.Id,
+                CompanyId = delivery.CompanyId,
+                DeliveryNumber = delivery.Number,
+                Lines = delivery.Lines
+                    .Where(l => l.ProductId.HasValue && l.ShippedQuantity > 0)
+                    .Select(l => new StockLineEventDto
+                    {
+                        ProductId = l.ProductId,
+                        Quantity = l.ShippedQuantity,
+                        UnitCost = 0
+                    })
+                    .ToList()
+            }, cancellationToken);
+
             return delivery.Id;
         }
     }

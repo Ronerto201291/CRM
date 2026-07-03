@@ -1,5 +1,7 @@
+using Erp.Application.Common.Certificates;
 using Erp.Application.Common.Interfaces;
 using Erp.Application.Features.Auth.Commands;
+using Erp.Infrastructure.Automation;
 using Erp.Infrastructure.Data;
 using Erp.Infrastructure.Messaging;
 using Erp.Infrastructure.Security;
@@ -56,6 +58,7 @@ public static class DependencyInjection
 
         // ABAC: Current user accessor (reads UserId from JWT via IHttpContextAccessor)
         services.AddScoped<IHttpContextCurrentUserAccessor, HttpContextCurrentUserAccessor>();
+        services.AddScoped<Interceptors.AuditSaveChangesInterceptor>();
 
         // ABAC: MVC filter (scoped so it can inject IPermissionService)
         services.AddScoped<AbacAuthorizationFilter>();
@@ -65,8 +68,7 @@ public static class DependencyInjection
         services.AddScoped<SiiSigningService>();
         services.AddScoped<SiiSubmissionService>();
 
-        // VERI*FACTU (RD 1007/2023): XML registro TIKE + envío (distinto de SII)
-        services.AddScoped<VerifactuXmlGenerator>();
+        // VERI*FACTU (RD 1007/2023): envío (generador en Billing.Infrastructure)
         services.AddScoped<VerifactuSubmissionService>();
 
         // SII: named HTTP client with mTLS + retry (x3 exponential) + circuit breaker
@@ -83,8 +85,7 @@ public static class DependencyInjection
                 var certPass = cfg["Sii:CertPass"];
                 if (!string.IsNullOrEmpty(certPath) && File.Exists(certPath))
                 {
-                    var cert = new X509Certificate2(certPath, certPass,
-                        X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.EphemeralKeySet);
+                    var cert = Pkcs12CertificateLoader.Load(certPath, certPass);
                     handler.ClientCertificates.Add(cert);
                     handler.ClientCertificateOptions = ClientCertificateOption.Manual;
                 }
@@ -111,6 +112,7 @@ public static class DependencyInjection
             .ValidateOnStart();
         services.AddScoped<IVerifactuService, VerifactuService>();
         services.AddScoped<IVerifactuSubmissionService, VerifactuSubmissionService>();
+        services.AddSingleton<IVerifactuModeSettings, VerifactuModeSettings>();
 
         // RL-4: Almacenamiento de archivos sobre MinIO/S3 (cifrado en reposo)
         // Config: Storage:Endpoint, Storage:AccessKey, Storage:SecretKey, Storage:UseSSL
@@ -128,6 +130,8 @@ public static class DependencyInjection
         // Calendario fiscal: generación de eventos y recordatorios
         services.AddScoped<IFiscalCalendarService, FiscalCalendarService>();
         services.AddScoped<FiscalReminderJob>();
+        services.AddScoped<RuleEvaluatorJob>();
+        services.AddScoped<RealtimeRuleEvaluator>();
 
         return services;
     }

@@ -77,7 +77,7 @@ export interface ExpenseDocument {
     isValidated: boolean;
     isLocked: boolean;
     hashSignature?: string;
-    ocrData?: Record<string, any>;
+    ocrData?: Record<string, unknown>;
     createdAt: string;
 }
 

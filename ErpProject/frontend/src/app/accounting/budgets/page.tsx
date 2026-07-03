@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
 import PageContainer from '@/components/PageContainer';
+import AccessibleModal from '@/components/AccessibleModal';
 
 interface BudgetSummary {
   id: string;
@@ -453,14 +454,8 @@ export default function BudgetsPage() {
       </div>
 
       {/* ── Modal Crear Presupuesto ──────────────────────────────────────────── */}
-      {showCreate && (
-        <div className="modal-overlay" onClick={() => setShowCreate(false)}>
-          <div className="modal" style={{ width: 420 }} onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Nuevo Presupuesto</h2>
-              <button className="modal-close" onClick={() => setShowCreate(false)}>✕</button>
-            </div>
-            <form onSubmit={handleCreate} style={{ padding: '20px 24px' }}>
+      <AccessibleModal open={showCreate} onClose={() => setShowCreate(false)} title="Nuevo Presupuesto" maxWidth="420px">
+        <form onSubmit={handleCreate}>
               <div className="form-group">
                 <label className="erp-label">NOMBRE *</label>
                 <input className="erp-input" required value={name}
@@ -482,19 +477,10 @@ export default function BudgetsPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+      </AccessibleModal>
 
-      {/* ── Modal Añadir Línea ───────────────────────────────────────────────── */}
-      {showAddLine && (
-        <div className="modal-overlay" onClick={() => setShowAddLine(false)}>
-          <div className="modal" style={{ width: 420 }} onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Añadir Línea</h2>
-              <button className="modal-close" onClick={() => setShowAddLine(false)}>✕</button>
-            </div>
-            <form onSubmit={handleAddLine} style={{ padding: '20px 24px' }}>
+      <AccessibleModal open={showAddLine} onClose={() => setShowAddLine(false)} title="Añadir Línea" maxWidth="420px">
+        <form onSubmit={handleAddLine}>
               <div className="form-group">
                 <label className="erp-label">TIPO *</label>
                 <select className="erp-input" value={lineForm.type}
@@ -523,9 +509,7 @@ export default function BudgetsPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+      </AccessibleModal>
     </PageContainer>
   );
 }

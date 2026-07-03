@@ -41,6 +41,12 @@ explícitamente para no asumir que todo funciona.
 Si un cambio modifica la estructura descrita en un ADR (nuevo endpoint,
 entidad, integración), actualiza ese ADR en el mismo cambio.
 
+Al cerrar un ítem en ADR-0018 o modificar un módulo, actualiza también
+**Decisión**, **Consecuencias** y **Evaluación de calidad** del ADR del
+módulo (no solo una nota al final); elimina frases obsoletas («sin
+IMediator», «mock», «código muerto», entidades en `Erp.Domain`) y comprueba
+con `0000-template.md` que no contradigan ADR-0018 ni el código.
+
 ## Antes de dar por terminado un cambio, pasa el checklist de calidad
 
 Todo ADR incluye una sección **"Evaluación de calidad arquitectónica"**

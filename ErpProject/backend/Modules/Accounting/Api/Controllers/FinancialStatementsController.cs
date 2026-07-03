@@ -1,38 +1,54 @@
+using Erp.Modules.Accounting.Application.Queries;
+using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Erp.Modules.Accounting.Application.Features.FinancialStatements;
 
 namespace Erp.Modules.Accounting.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/accounting/financial-statements")]
+[Authorize]
 public class FinancialStatementsController : ControllerBase
 {
+    private readonly IMediator _mediator;
+
+    public FinancialStatementsController(IMediator mediator) => _mediator = mediator;
+
     [HttpPost("cash-flow")]
-    public IActionResult GenerateCashFlow([FromBody] object request)
+    public async Task<IActionResult> GenerateCashFlow([FromBody] CashFlowRequest request, CancellationToken ct)
     {
-        return Ok(new
-        {
-            id = Guid.NewGuid(),
-            operatingCashFlow = 150000m,
-            investingCashFlow = -50000m,
-            financingCashFlow = 20000m,
-            netCashFlow = 120000m,
-            period = "01/2025",
-            status = "Generated"
-        });
+        var result = await _mediator.Send(new GenerateCashFlowStatementQuery(request.Year, request.Month), ct);
+        return Ok(result);
     }
 
     [HttpPost("equity")]
-    public IActionResult GenerateEquityStatement([FromBody] object request)
+    public async Task<IActionResult> GenerateEquityStatement([FromBody] EquityRequest request, CancellationToken ct)
     {
-        return Ok(new
+        var result = await _mediator.Send(new GenerateEquityStatementQuery(request.Year), ct);
+        return Ok(result);
+    }
+
+    [HttpPost("income-statement")]
+    public async Task<IActionResult> GenerateIncomeStatement([FromBody] PeriodRangeRequest request, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new GetProfitAndLossQuery
         {
-            id = Guid.NewGuid(),
-            beginningCapital = 100000m,
-            netIncome = 45000m,
-            dividendsPaid = 10000m,
-            otherChanges = 5000m,
-            endingCapital = 140000m,
-            status = "Generated"
-        });
+            FechaInicio = request.From,
+            FechaFin = request.To
+        }, ct);
+        return Ok(result);
+    }
+
+    [HttpPost("balance-sheet")]
+    public async Task<IActionResult> GenerateBalanceSheet([FromBody] BalanceSheetRequest request, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new GetBalanceSheetQuery { FechaCorte = request.AsOf }, ct);
+        return Ok(result);
     }
 }
+
+public record CashFlowRequest(int Year, int Month);
+public record EquityRequest(int Year);
+public record PeriodRangeRequest(DateTime From, DateTime To);
+public record BalanceSheetRequest(DateTime AsOf);

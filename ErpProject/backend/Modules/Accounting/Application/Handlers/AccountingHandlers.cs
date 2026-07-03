@@ -2,7 +2,7 @@ using Erp.Application.DTOs;
 using Erp.Modules.Accounting.Application.Commands;
 using Erp.Modules.Accounting.Application.Interfaces;
 using Erp.Modules.Accounting.Application.Queries;
-using Erp.Domain.Entities.Accounting;
+using Erp.Modules.Accounting.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

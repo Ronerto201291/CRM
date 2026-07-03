@@ -12,6 +12,7 @@ public interface IBillingDbContext
     DbSet<QuoteLine> QuoteLines { get; }
     DbSet<QuoteStatusHistory> QuoteStatusHistory { get; }
     DbSet<QuoteNumberSeries> QuoteNumberSeries { get; }
+    DbSet<VerifactuSubmissionLog> VerifactuSubmissionLogs { get; }
     DatabaseFacade Database { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);

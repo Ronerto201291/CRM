@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
 import PageContainer from '@/components/PageContainer';
+import AccessibleModal from '@/components/AccessibleModal';
 
 interface FixedAsset {
   id: string;
@@ -252,14 +253,8 @@ export default function DepreciationPage() {
       )}
 
       {/* ── Modal Nuevo Activo ───────────────────────────────────────────────── */}
-      {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal" style={{ width: 680 }} onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Registrar Activo Fijo</h2>
-              <button className="modal-close" onClick={() => setShowModal(false)}>✕</button>
-            </div>
-            <form onSubmit={handleCreate} style={{ padding: '20px 24px' }}>
+      <AccessibleModal open={showModal} onClose={() => setShowModal(false)} title="Registrar Activo Fijo" maxWidth="680px">
+        <form onSubmit={handleCreate}>
               {error && (
                 <div style={{ background: '#fee2e2', color: '#991b1b', padding: '8px 12px', borderRadius: 6, marginBottom: 16, fontSize: 13 }}>
                   {error}
@@ -348,19 +343,16 @@ export default function DepreciationPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+      </AccessibleModal>
 
-      {/* ── Modal Amortizar ─────────────────────────────────────────────────── */}
-      {deprModal && (
-        <div className="modal-overlay" onClick={() => setDeprModal(null)}>
-          <div className="modal" style={{ width: 460 }} onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Dotación de Amortización</h2>
-              <button className="modal-close" onClick={() => setDeprModal(null)}>✕</button>
-            </div>
-            <div style={{ padding: '20px 24px' }}>
+      <AccessibleModal open={!!deprModal} onClose={() => setDeprModal(null)} title="Dotación de Amortización" maxWidth="460px"
+        footer={deprModal ? (<div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+          <button className="btn-secondary" onClick={() => setDeprModal(null)}>Cerrar</button>
+          <button className="btn-primary" onClick={handleDeprRun} disabled={deprLoading}>
+            {deprLoading ? 'Procesando...' : 'Generar Asiento'}
+          </button>
+        </div>) : undefined}>
+        {deprModal && (<>
               <div style={{ background: '#f9fafb', borderRadius: 8, padding: '12px 16px', marginBottom: 20 }}>
                 <div style={{ fontWeight: 600 }}>{deprModal.name} <span style={{ color: '#9ca3af', fontWeight: 400 }}>({deprModal.assetCode})</span></div>
                 <div style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>
@@ -396,16 +388,8 @@ export default function DepreciationPage() {
                   {deprResult}
                 </div>
               )}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
-                <button className="btn-secondary" onClick={() => setDeprModal(null)}>Cerrar</button>
-                <button className="btn-primary" onClick={handleDeprRun} disabled={deprLoading}>
-                  {deprLoading ? 'Procesando...' : 'Generar Asiento'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+        </>)}
+      </AccessibleModal>
     </PageContainer>
   );
 }

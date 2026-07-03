@@ -1,4 +1,4 @@
-using Erp.Domain.Entities.Accounting;
+using Erp.Modules.Accounting.Domain.Entities;
 using Erp.Modules.Accounting.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,7 +11,7 @@ public interface IAccountingDbContext
     DbSet<JournalEntry> JournalEntries { get; }
     DbSet<JournalEntryLine> JournalEntryLines { get; }
     DbSet<FiscalPeriod> FiscalPeriods { get; }
-    DbSet<Erp.Domain.Entities.Accounting.FixedAsset> FixedAssets { get; }
+    DbSet<FixedAsset> FixedAssets { get; }
     DbSet<DeferredEntry> DeferredEntries { get; }
 
     // Phase 0 - Compliance & Legal

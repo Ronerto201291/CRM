@@ -7,4 +7,6 @@ namespace Erp.Modules.Billing.Application.Interfaces;
 public interface IVerifactuXmlGenerator
 {
     Task<string> GenerateRegistroAsync(Guid companyId, int year, int month, CancellationToken ct = default);
+    Task<string> GenerateSingleInvoiceRegistroAsync(Guid invoiceId, CancellationToken ct = default);
+    Task<string> GenerateAnulacionRegistroAsync(Guid invoiceId, CancellationToken ct = default);
 }

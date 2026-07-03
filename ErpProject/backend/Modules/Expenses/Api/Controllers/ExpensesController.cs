@@ -1,10 +1,9 @@
 using Erp.Application.Common.Interfaces;
 using Erp.Modules.Expenses.Domain.Entities;
-using Erp.Modules.Crm.Application.Interfaces;
-using Erp.Modules.Crm.Domain.Entities;
 using Erp.Modules.Expenses.Application.Features.Expenses.Commands;
 using Erp.Modules.Expenses.Application.Features.Expenses.Queries;
 using Erp.Modules.Expenses.Application.Interfaces;
+using Erp.Application.Common.Events;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -20,7 +19,7 @@ public class ExpensesController : ControllerBase
     private readonly IMediator _mediator;
     private readonly IExpensesDbContext _expenses;
     private readonly IApplicationDbContext _app;
-    private readonly ICrmDbContext _crmCtx;
+    private readonly IPublisher _publisher;
     private readonly IFileStorageService _storage;
     private readonly string _bucket;
 
@@ -28,14 +27,14 @@ public class ExpensesController : ControllerBase
         IMediator mediator,
         IExpensesDbContext expenses,
         IApplicationDbContext app,
-        ICrmDbContext crmCtx,
+        IPublisher publisher,
         IFileStorageService storage,
         IConfiguration config)
     {
         _mediator = mediator;
         _expenses = expenses;
         _app = app;
-        _crmCtx = crmCtx;
+        _publisher = publisher;
         _storage = storage;
         _bucket = config["Storage:BucketName"] ?? "erp-expenses";
     }
@@ -69,13 +68,16 @@ public class ExpensesController : ControllerBase
             Comment = comment, Status = "Pending"
         };
         _expenses.ExpenseUploads.Add(upload);
-        _crmCtx.ActivityLogs.Add(new ActivityLog
-        {
-            Id = Guid.NewGuid(), CompanyId = company.Id,
-            EntityType = "ExpenseUpload", EntityId = upload.Id,
-            Action = "Uploaded", Description = $"Documento subido via QR: {file.FileName}"
-        });
         await _expenses.SaveChangesAsync(ct);
+
+        await _publisher.Publish(new ExpenseUploadCreatedEvent
+        {
+            UploadId = upload.Id,
+            CompanyId = company.Id,
+            FileName = file.FileName,
+            Comment = comment
+        }, ct);
+
         return Ok(new { message = "Documento recibido. Sera procesado automaticamente.", uploadId = upload.Id });
     }
 
@@ -97,6 +99,10 @@ public class ExpensesController : ControllerBase
     [HttpGet, Authorize]
     public async Task<IActionResult> GetDocuments(CancellationToken ct)
         => Ok(await _mediator.Send(new GetExpenseDocumentsQuery(), ct));
+
+    [HttpGet("by-supplier/{supplierId:guid}"), Authorize]
+    public async Task<IActionResult> GetBySupplier(Guid supplierId, CancellationToken ct)
+        => Ok(await _mediator.Send(new GetSupplierExpensesQuery { SupplierId = supplierId }, ct));
 
     [HttpGet("{id}"), Authorize]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)

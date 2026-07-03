@@ -12,22 +12,14 @@ de un ERP español, la valoración soporta explícitamente el método de Coste
 Medio Ponderado (PMP/CMP), habitual en el PGC, además de FIFO.
 
 El código relevante vive en `backend/Modules/Inventory/{API,Application,
-Domain,Infrastructure}`, siguiendo el patrón estándar de ADR-0001. Existe
-además una segunda ubicación, `backend/Erp.Domain/Modules/Inventory/
-Entities/`, que a primera vista parece código legacy fuera del módulo pero
-que, tras verificarlo, resulta ser parte activa del mismo módulo (mismo
-namespace, referenciada por `ProjectReference`, mapeada por
-`InventoryDbContext` con migraciones y tablas reales) — el detalle se
-explica en Decisión/Modelo de datos y se valora en Consecuencias, junto con
-la inconsistencia de que la carpeta del módulo se llama `API` (mayúsculas)
-en vez de `Api` como el resto de módulos.
+Domain,Infrastructure}` (carpeta `API/` en mayúsculas; namespace
+`Erp.Modules.Inventory.Api`, ADR-0018 #19f). Todas las entidades
+(`Product`, `Warehouse`, `Stock`, `StockMovement`, `Lot`, `SerialNumber`)
+están en `Modules/Inventory/Domain/Entities/` (ADR-0018 #14 ✅).
 
-`Program.cs` (`backend/Erp.Api/Program.cs`) confirma cuál es el módulo
-activo: registra los controllers de `Erp.Modules.Inventory.API.Controllers`
-vía `AddApplicationPart`, registra `AddInventoryInfrastructure` (que da de
-alta `InventoryDbContext`), ejecuta
-`InventoryDbContext.Database.MigrateAsync()` en el arranque, y registra los
-handlers de MediatR del ensamblado de Inventory. El frontend correspondiente
+`Program.cs` registra el módulo vía `InventoryErpModule` y namespace
+`Erp.Modules.Inventory.Api.Controllers` (ADR-0018 #19f — unificado con el
+resto de módulos; la carpeta física sigue siendo `API/` en mayúsculas).
 vive en `frontend/src/app/inventory/` (página principal más subpáginas
 `lots/`, `serials/`, `valuation/`, `warehouses/`).
 
@@ -115,16 +107,8 @@ verificado como parte de esta ADR.
 
 ### Modelo de datos
 Esquema PostgreSQL `inventory` (`InventoryDbContext`, migraciones
-`InitialCreate` y `AddLotsAndSerials`). Nota de ubicación física: `Product`,
-`Warehouse`, `Stock` y `StockMovement` están definidas en
-`backend/Erp.Domain/Modules/Inventory/Entities/` (namespace
-`Erp.Modules.Inventory.Domain.Entities`, compiladas en el módulo vía
-`ProjectReference` de `Erp.Modules.Inventory.Domain.csproj` a
-`Erp.Domain.csproj`), mientras que `Lot` y `SerialNumber` están en
-`backend/Modules/Inventory/Domain/Entities/Lot.cs`. Las cuatro primeras no
-son código muerto pese a la ubicación: `InventoryDbContext` las mapea con
-`DbSet<T>` y las migraciones del propio módulo crean sus tablas reales (ver
-Consecuencias):
+`InitialCreate` y `AddLotsAndSerials`). Entidades en
+`Modules/Inventory/Domain/Entities/`:
 
 - **`InventoryProducts`** (`Product`) — `SKU`, `Name`, `Type`
   (`Product`/`Service`), `CostPrice` (coste medio calculado), `SalePrice`,
@@ -200,20 +184,13 @@ Entrada de stock al aprobar un gasto de compra (Expenses → Inventory):
   (el comentario del propio handler menciona Accounting/Notifications como
   destinatarios previstos, pero no hay evidencia de esa integración
   implementada).
-- **Purchasing**: el módulo `backend/Modules/Purchasing/` tiene su propia
-  entidad `GoodsReceipt` y `CreateGoodsReceiptHandler`
-  (`Application/Features/Receipts/Handlers/CreateGoodsReceiptHandler.cs`),
-  pero **no publica ningún evento ni llama a Inventory** (no hay
-  `IPublisher`/`Publish` en `Application/Features/Receipts/` ni referencias
-  a `Inventory` en todo `backend/Modules/Purchasing/`). Es decir, una
-  recepción de mercancía en Purchasing hoy **no** mueve stock; el único
-  camino de entrada de stock verificado es vía `ExpenseApprovedEvent`.
-- **Sales**: el módulo `backend/Modules/Sales/` existe (con
-  `DeliveriesController`/`DeliveryNote`), pero no se ha encontrado ninguna
-  referencia a Inventory en su código; una entrega/albarán de venta no
-  decrementa stock por sí misma. El único camino de salida de stock
-  verificado es vía `InvoiceApprovedEvent` (aprobación de factura, no de
-  albarán).
+- **Purchasing:** ✅ Corregido (ADR-0018 #20) — `CreateGoodsReceiptHandler`
+  publica `GoodsReceiptCreatedEvent`; `GoodsReceiptInventoryHandler` incrementa
+  stock con idempotencia por `ReferenceType=GoodsReceipt`.
+- **Sales:** ✅ Corregido (ADR-0018 #21) — `CreateDeliveryNoteHandler`
+  publica `DeliveryNoteCreatedEvent`; `DeliveryNoteInventoryHandler`
+  decrementa stock. Además persiste el camino vía `InvoiceApprovedEvent`
+  (Billing) y `ExpenseApprovedEvent` (Expenses).
 - **Multi-tenancy y arquitectura de módulos**: Inventory sigue el patrón
   común de ADR-0001 (`ModuleDbContextBase`, esquema PostgreSQL propio
   `inventory`, filtros `HasQueryFilter` por `CompanyId`, migraciones
@@ -247,39 +224,19 @@ Entrada de stock al aprobar un gasto de compra (Expenses → Inventory):
   RequiredModule("Inventory")]` de forma consistente.
 
 ## Consecuencias
-- **`API` vs `Api`**: la carpeta y el proyecto del módulo se llaman
-  `backend/Modules/Inventory/API/Erp.Modules.Inventory.Api.csproj`, con
-  `API` en mayúsculas, mientras que el resto de módulos usan `Api`
-  (`backend/Modules/Crm/Api/`, `backend/Modules/Billing/Api/`, etc.). No
-  afecta a la compilación (el nombre del `.csproj` es el mismo,
-  `Erp.Modules.Inventory.Api.csproj`) pero es una inconsistencia de
-  convención de carpetas que conviene corregir en una futura limpieza para
-  no confundir a quien navegue el repo o escriba scripts sensibles a
-  mayúsculas/minúsculas.
-- **Entidades núcleo repartidas entre dos proyectos**: como se detalla en
-  Modelo de datos, `Product`/`Warehouse`/`Stock`/`StockMovement` viven fuera
-  del módulo (en `Erp.Domain`) mientras que `Lot`/`SerialNumber` viven
-  dentro. No es código muerto, pero es deuda técnica: dificulta saber, sin
-  comprobarlo como se ha hecho aquí, qué contiene realmente el módulo. La
-  ruta tampoco sigue el precedente de Accounting (ADR-0006, que usa
-  `Erp.Domain/Entities/Accounting/`), así que ni siquiera hay una convención
-  uniforme para este patrón entre módulos. Se recomienda mover las cuatro
-  entidades a `backend/Modules/Inventory/Domain/Entities/` en una futura
-  limpieza (cambio mecánico: mismo namespace, solo cambia la ruta física).
-- **Inconsistencia interna de estilo entre controllers**: `Products`,
+- **Namespace `Api`:** ✅ corregido (#19f) — `Erp.Modules.Inventory.Api.Controllers`.
+  La carpeta física `API/` en mayúsculas es cosmética (ADR-0018 §3).
+- **Entidades:** ✅ todas en `Modules/Inventory/Domain/Entities/` (#14).
+- **Inconsistencia interna de estilo entre controllers:** `Products`,
   `Warehouses`, `Stock`, `Lots`, `Serials` y `Valuation` usan CQRS/MediatR;
   `Products`/`Warehouses`/`Stock` usan rutas sin versionar
   (`api/inventory/...`) y `[Authorize, RequiredModule("Inventory")]`; los
   tres controllers versionados (`Lots`/`Serials`/`Valuation`) usan
   `api/v{version}/inventory/...` y no llevan esos atributos de autorización
   explícitos — a confirmar si hay autorización global a nivel de pipeline.
-- **Integraciones cruzadas incompletas**: ni Purchasing (recepción de
-  mercancía) ni Sales (entrega/albarán) mueven stock hoy; el movimiento de
-  stock depende de que se apruebe una factura de venta (Billing) o un gasto
-  (Expenses) con líneas de producto, lo cual es una aproximación razonable
-  a corto plazo pero deja huecos: una recepción de mercancía sin factura de
-  proveedor asociada, o una entrega parcial sin facturar, no actualizan
-  stock.
+- **Integraciones cruzadas:** recepción de compra y albarán de venta ya mueven
+  stock (#20/#21). Permanece el hueco de entrega/facturación solo vía Billing
+  si no se usa el flujo Purchasing/Sales.
 - **Sin validadores FluentValidation dedicados**: a diferencia de otros
   módulos que registran `IValidator<TRequest>` para sus comandos, Inventory
   valida a mano en los handlers; el pipeline `ValidationBehavior` de

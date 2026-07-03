@@ -43,6 +43,8 @@ export default function PurchaseOrderDetailPage() {
     const [order, setOrder] = useState<PurchaseOrderDetail | null>(null);
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
+    const [actionError, setActionError] = useState<string | null>(null);
+    const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -59,10 +61,12 @@ export default function PurchaseOrderDetailPage() {
 
     const doAction = async (action: string) => {
         setActionLoading(action);
+        setActionError(null);
+        setSuccessMsg(null);
         try {
             const res = await fetch(`/api/proxy/v1/purchasing/orders/${id}/${action}`, { method: 'PATCH' });
-            if (res.ok) { alert('Acción realizada'); load(); }
-            else { const e = await res.json(); alert(e.error || 'Error'); }
+            if (res.ok) { setSuccessMsg('Acción realizada'); load(); }
+            else { const e = await res.json(); setActionError(e.error || 'Error'); }
         } finally {
             setActionLoading(null);
         }
@@ -82,6 +86,16 @@ export default function PurchaseOrderDetailPage() {
                 </div>
                 <a href="/purchasing/orders" className="btn btn-secondary">← Volver</a>
             </div>
+
+            {(actionError || successMsg) && (
+                <div className="erp-card" style={{
+                    padding: '12px 16px', marginBottom: 16,
+                    color: actionError ? 'var(--danger)' : 'var(--success)',
+                    background: actionError ? 'var(--danger-bg)' : 'var(--success-bg)',
+                }}>
+                    {actionError || successMsg}
+                </div>
+            )}
 
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '20px', marginBottom: '20px' }}>
                 <div className="erp-card">

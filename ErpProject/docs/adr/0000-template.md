@@ -55,6 +55,10 @@ entender el módulo.>
 > y hallazgos transversales en `ADR-0018` — aquí solo se responde el
 > checklist para ESTE módulo/pieza concreto, citando archivo real (no
 > inventar ni asumir cumplimiento sin verificar el código).
+>
+> **Antes de cerrar la revisión:** ¿alguna frase de este ADR contradice
+> `ADR-0018` (backlog cerrado) o el código en `main`? Si sí, actualizar o
+> eliminar la frase obsoleta — no dejar notas de deuda ya corregida.
 
 - **SOLID**: ¿alguna clase concentra más de una razón de cambio (SRP)? ¿hay
   reglas de negocio que cambian con frecuencia codificadas como

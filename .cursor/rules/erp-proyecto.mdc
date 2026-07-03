@@ -46,6 +46,20 @@ no asumir que todo funciona.
 Si un cambio modifica la estructura descrita en un ADR (nuevo endpoint,
 entidad, integración), actualiza ese ADR en el mismo cambio.
 
+**Mantener ADRs de módulo alineados:** al cerrar un ítem en ADR-0018
+(✅ Corregido) o modificar código de un módulo, actualiza el ADR del
+módulo en el mismo cambio. No basta con una nota al final ni con dejar
+ADR-0018 al día si **Decisión**, **Consecuencias** o **Evaluación de
+calidad arquitectónica** siguen describiendo el estado anterior:
+
+1. Revisar y actualizar esas tres secciones para reflejar el estado real
+   tras el cambio (no solo añadir un párrafo al final del documento).
+2. Buscar y eliminar o actualizar frases obsoletas (p. ej. «sin
+   IMediator», «mock», «código muerto», entidades en `Erp.Domain` cuando
+   ya viven en el módulo).
+3. Pasar el checklist de `0000-template.md`: ¿alguna frase contradice
+   ADR-0018 o el código actual?
+
 ## Antes de dar por terminado un cambio, pasa el checklist de calidad
 
 **Obligatorio:** antes de considerar terminada cualquier implementación, pasa

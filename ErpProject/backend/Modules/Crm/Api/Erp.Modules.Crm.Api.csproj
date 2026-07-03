@@ -12,7 +12,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Application\Erp.Modules.Crm.Application.csproj" />
-    <ProjectReference Include="..\..\..\Modules\Expenses\Application\Erp.Modules.Expenses.Application.csproj" />
+    <ProjectReference Include="..\Infrastructure\Erp.Modules.Crm.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

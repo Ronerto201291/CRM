@@ -12,14 +12,16 @@ interface JournalEntry {
     totalDebit: number; totalCredit: number;
 }
 interface BalanceRow { accountCode: string; accountName: string; totalDebit: number; totalCredit: number; balance: number; }
+interface IvaDetailRow { taxRate?: number; base?: number; amount?: number; label?: string; }
+interface LiquidacionIva { ivaRepercutido?: number; ivaSoportado?: number; resultado?: number; }
 
 export default function AccountingPage() {
     const [tab, setTab] = useState<Tab>('diario');
     const [journal, setJournal] = useState<JournalEntry[]>([]);
     const [balance, setBalance] = useState<BalanceRow[]>([]);
-    const [ivaSoportado, setIvaSoportado] = useState<{ total: number; details: any[] }>({ total: 0, details: [] });
-    const [ivaRepercutido, setIvaRepercutido] = useState<{ total: number; details: any[] }>({ total: 0, details: [] });
-    const [liquidacion, setLiquidacion] = useState<any>(null);
+    const [ivaSoportado, setIvaSoportado] = useState<{ total: number; details: IvaDetailRow[] }>({ total: 0, details: [] });
+    const [ivaRepercutido, setIvaRepercutido] = useState<{ total: number; details: IvaDetailRow[] }>({ total: 0, details: [] });
+    const [liquidacion, setLiquidacion] = useState<LiquidacionIva | null>(null);
     const year = new Date().getFullYear();
 
     useEffect(() => {
@@ -179,7 +181,7 @@ export default function AccountingPage() {
                             <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--danger)' }}>{fmt(ivaSoportado.total)}</div>
                         </div>
                         <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-                            {ivaSoportado.details?.map((d: any, i: number) => (
+                            {ivaSoportado.details?.map((d, i) => (
                                 <div key={i} style={{ padding: '10px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
                                     <span style={{ color: 'var(--text-secondary)' }}>{d.reference}</span>
                                     <span style={{ fontWeight: 600 }}>{fmt(d.debit)}</span>
@@ -194,7 +196,7 @@ export default function AccountingPage() {
                             <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--success)' }}>{fmt(ivaRepercutido.total)}</div>
                         </div>
                         <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-                            {ivaRepercutido.details?.map((d: any, i: number) => (
+                            {ivaRepercutido.details?.map((d, i) => (
                                 <div key={i} style={{ padding: '10px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
                                     <span style={{ color: 'var(--text-secondary)' }}>{d.reference}</span>
                                     <span style={{ fontWeight: 600 }}>{fmt(d.credit)}</span>

@@ -78,30 +78,17 @@ Sales). Cada módulo tiene:
   (`grep HasDefaultSchema backend/Modules/*/Infrastructure/Data/*.cs`).
 
 Todos los módulos se registran en un único host ASP.NET Core desde
-`backend/Erp.Api/Program.cs`:
+`backend/Erp.Api/Program.cs` mediante **autoregistro modular** (ADR-0018 #19e):
 
-- Los controllers de cada módulo se añaden como "application parts" del
-  host principal (líneas ~53-61):
-  ```csharp
-  .AddApplicationPart(typeof(Erp.Modules.Billing.Api.Controllers.InvoicesController).Assembly)
-  .AddApplicationPart(typeof(Erp.Modules.Crm.Api.Controllers.ClientsController).Assembly)
-  .AddApplicationPart(typeof(Erp.Modules.Inventory.API.Controllers.ProductsController).Assembly)
-  .AddApplicationPart(typeof(Erp.Modules.Accounting.Api.Controllers.AccountingController).Assembly)
-  .AddApplicationPart(typeof(Erp.Modules.Expenses.Api.Controllers.ExpensesController).Assembly)
-  .AddApplicationPart(typeof(Erp.Modules.Treasury.Api.Controllers.TreasuryController).Assembly)
-  .AddApplicationPart(typeof(Erp.Modules.Payroll.Api.Controllers.PayrollController).Assembly)
-  .AddApplicationPart(typeof(Erp.Modules.Purchasing.Api.Controllers.ReceiptsController).Assembly)
-  .AddApplicationPart(typeof(Erp.Modules.Sales.Api.Controllers.SalesOrdersController).Assembly);
-  ```
-- Cada módulo expone un método `Add<Nombre>Infrastructure(configuration)`
-  que registra su DbContext y sus servicios (p. ej.
-  `builder.Services.AddCrmInfrastructure(builder.Configuration)`).
-- Los handlers de MediatR de cada módulo se registran explícitamente con
-  `AddMediatR(cfg => cfg.RegisterServicesFromAssembly(...))`, uno por
-  módulo, apuntando a un handler concreto de esa ensambladura como ancla.
+- Cada módulo expone `*ErpModule` (`IErpModule`) con
+  `AddErpModule(instance, configuration)` y
+  `AddErpModuleControllers(instance)` — p. ej.
+  `Erp.Modules.Inventory.Api.InventoryErpModule.Instance`. `Program.cs` no
+  lista tipos de controller ni bloques `AddMediatR` por módulo manualmente.
+- Cada módulo registra su DbContext, servicios, handlers MediatR y validators
+  en su propio `DependencyInjection.cs` / `*ErpModule`.
 - En el arranque, cada `DbContext` (core + los nueve módulos) ejecuta
-  `Database.MigrateAsync()` de forma independiente (líneas ~357-369), de
-  modo que cada módulo gestiona su propio historial de esquema.
+  `Database.MigrateAsync()` de forma independiente.
 
 **CQRS con MediatR.** La aplicación sigue CQRS: comandos y queries son
 clases `IRequest<T>` gestionadas por handlers `IRequestHandler<T,R>`,
@@ -130,26 +117,20 @@ transacción** que la operación de negocio, garantizando entrega
 "at-least-once" sin pérdida silenciosa si el proceso cae entre el commit y
 el procesamiento. Un job recurrente de Hangfire, `outbox-processor`
 (`Erp.Infrastructure.Services.OutboxProcessorJob`, registrado en
-`Program.cs` con `Cron.Minutely()`), procesa los mensajes pendientes;
-también existe `Erp.Infrastructure.BackgroundJobs.OutboxMessageProcessorJob`.
+`Program.cs` con `Cron.Minutely()`), procesa los mensajes pendientes.
+El duplicado huérfano `OutboxMessageProcessorJob` fue eliminado (ADR-0018 #19).
 RabbitMQ es opcional (`RabbitMQ:Enabled`, por defecto `false`); si está
 desactivado, el propio job de Hangfire actúa como transporte de fallback.
 
-**Interceptores de EF Core / auditoría.** Existe
-`backend/Erp.Infrastructure/Interceptors/AuditInterceptor.cs`, una clase
-estática (`AuditInterceptor.ProcessAuditEntries`) pensada para generar
-filas `AuditLog` a partir del `ChangeTracker` de un `DbContext`. Sin
-embargo, una búsqueda en todo el backend
-(`grep -rn "AuditInterceptor" backend --include=*.cs`) muestra que **no
-está registrada como `IInterceptor` de EF Core ni invocada desde ningún
-`SaveChanges`** — es código muerto o pendiente de conectar. En la
-práctica, las filas de `AuditLog` que sí existen se crean manualmente
-dentro de handlers concretos (confirmado en
-`backend/Modules/Expenses/Application/Features/Expenses/Handlers/ExpenseCommandHandlers.cs`
-y `backend/Modules/Billing/Application/Features/Billing/Handlers/BillingHandlers.cs`
-con `new AuditLog { ... }`), no de forma automática y transversal. Ver
-ADR-0017 (Audit Logs) para el detalle de qué operaciones quedan
-efectivamente auditadas.
+**Interceptores de EF Core / auditoría.** `AuditSaveChangesInterceptor`
+(`backend/Erp.Infrastructure/Interceptors/AuditSaveChangesInterceptor.cs`)
+está registrado en `ErpDbContext` y en los nueve DbContext de módulo (vía
+cada `DependencyInjection` del módulo). Genera filas `AuditLog` con hash
+SHA-256 a partir del `ChangeTracker` en cada `SaveChangesAsync` (ADR-0018 #31).
+La clase estática `AuditInterceptor.ProcessAuditEntries` sigue en el repo como
+referencia histórica pero **no** es la implementación activa. Algunos handlers
+(Billing, Expenses) además escriben `AuditLog` manualmente en puntos críticos
+fiscales — ver ADR-0017.
 
 ### Frontend
 El frontend es una única aplicación Next.js 15 (App Router) en
@@ -222,16 +203,16 @@ dominio sin acoplarse directamente a otros módulos. La resolución de
 ## Evaluación de calidad arquitectónica
 > Metodología completa y hallazgos transversales en `ADR-0018`.
 
-La dirección de dependencias prevista aquí (core → nada, módulos → core) se
-incumple en la práctica: `backend/Erp.Infrastructure.csproj` referencia las
-capas Application de 5 módulos (Inventory, Billing, Crm, Accounting,
-Expenses), y `PgcSeeder.cs` (core) inyecta `IAccountingDbContext`. El patrón
-de "ancla de assembly" para registrar `AddMediatR` por módulo en `Program.cs`
-es frágil (Payroll no tiene el bloque porque no tiene handlers, y nadie lo
-detectó) y depende de que exista al menos un tipo en cada módulo, lo que en
-CRM llevó a mantener un archivo de handlers muertos solo para ese propósito
-(ver ADR-0004). El patrón CQRS que aquí se describe como estándar se
-incumple en 26 de 43 controllers de todo el backend (ver ADR-0018 §5 y §7).
+- **Dirección de dependencias:** ✅ corregido (#13) — `Erp.Infrastructure` ya no
+  referencia `*.Application` de módulos; integración cross-módulo vía puertos
+  en `Erp.Application`.
+- **Controllers delgados:** ✅ 43/43 controllers con `IMediator`/`ISender` (#3c–#11).
+- **Registro de módulos:** ✅ `IErpModule` + `AddErpModule` (#19e); sustituye el
+  patrón frágil de anclas `AddMediatR` en `Program.cs`.
+- **Tests:** 🟡 ampliado (#32) — `Erp.ArchitectureTests` + tests unitarios/
+  integración; sin Testcontainers en CI todavía.
+- **Pendiente:** Sales/Purchasing tenían un solo assembly — ✅ corregido (#12):
+  cuatro `.csproj` por módulo; todos los módulos en `Erp.slnx`.
 
 ## Buenas prácticas aplicables
 - Todo módulo nuevo debe seguir la misma subestructura de cuatro proyectos
@@ -243,48 +224,21 @@ incumple en 26 de 43 controllers de todo el backend (ver ADR-0018 §5 y §7).
 - Cualquier `IRequest`/`IRequestHandler` nuevo debe tener su
   `IValidator<T>` de FluentValidation si requiere validación de entrada,
   ya que es el único pipeline behavior activo.
-- **No existe ningún proyecto de tests** en el repositorio (verificado:
-  `find . -iname "*.Tests.csproj"` no devuelve resultados, y
-  `frontend/package.json` no define ningún script de test ni depende de un
-  test runner — solo `dev`, `build`, `start`, `lint`). Cualquier cambio en
-  cualquier módulo se hace hoy sin red de seguridad de regresión
-  automatizada; conviene verificar manualmente (build, smoke test del
-  endpoint/página afectada) antes de dar un cambio por terminado.
-- Si se decide activar el interceptor de auditoría automático, hacerlo de
-  forma centralizada (p. ej. como `SaveChangesInterceptor` de EF Core
-  registrado en cada `ModuleDbContextBase`) en vez de seguir añadiendo
-  llamadas manuales `new AuditLog{...}` módulo a módulo.
+- **Tests automatizados:** existe `Erp.ArchitectureTests` (controllers sin
+  DbContext directo, Domain sin EF) y tests unitarios/integración parciales
+  (ADR-0018 #32, #35). No sustituyen smoke test manual en flujos fiscales.
+- La auditoría automática está activa vía `AuditSaveChangesInterceptor` en
+  todos los DbContext; no añadir `new AuditLog{...}` salvo casos fiscales
+  que requieran formato/hash específico además del interceptor (#31).
 
 ## Consecuencias
-- **`backend/Erp.slnx` no refleja todos los módulos activos.** El archivo
-  de solución solo registra explícitamente los cuatro proyectos de
-  Inventory, Billing y CRM (además de los cuatro núcleo). Sin embargo,
-  `Program.cs` referencia y registra explícitamente además Accounting,
-  Expenses, Treasury, Payroll, Purchasing y Sales — módulos que existen
-  como carpetas de proyecto completas bajo `backend/Modules/` con su
-  propio `.csproj`, y que compilan porque `Erp.Api.csproj` los referencia
-  directamente (no depende del `.slnx` para resolver dependencias de
-  proyecto). Esto es una **inconsistencia de tooling**: IDEs que abran la
-  solución vía `Erp.slnx` (Visual Studio, Rider) no mostrarán seis de los
-  nueve módulos de negocio, lo que puede llevar a desincronización al
-  añadir archivos nuevos o a confusión sobre qué módulos existen. Conviene
-  reconciliar `Erp.slnx` para que liste los cuatro proyectos de cada uno
-  de los nueve módulos.
+- **`Erp.slnx`:** ✅ actualizado (#12) — registra los cuatro proyectos de
+  cada uno de los nueve módulos de negocio más el núcleo.
 - El **outbox** garantiza entrega at-least-once pero no order-preserving
   entre distintos tipos de evento; los consumidores deben ser idempotentes.
-- El interceptor de auditoría transversal (`AuditInterceptor.cs`) está
-  definido pero no conectado — quien busque "por qué esta operación no
-  generó AuditLog" debe revisar el handler específico, no asumir que hay
-  auditoría automática.
-- La ausencia total de tests automatizados (backend y frontend) es el
-  mayor riesgo estructural del repositorio: cualquier refactor amplio
-  (p. ej. tocar `ModuleDbContextBase` o el pipeline de MediatR) solo puede
-  validarse manualmente o mediante build + smoke test.
-- Existen **dos implementaciones distintas del procesador de outbox**:
-  `Erp.Infrastructure/Services/OutboxProcessorJob.cs` (la real, registrada
-  en `Program.cs:322`, con `SELECT ... FOR UPDATE SKIP LOCKED` para escalado
-  horizontal) y `Erp.Infrastructure/BackgroundJobs/OutboxMessageProcessorJob.cs`
-  (completa y correcta, pero huérfana — nunca se registra en Hangfire).
-  Cualquiera que audite el patrón outbox debe saber cuál de las dos es la
-  que realmente corre (ver catálogo de mock/código muerto en ADR-0018, ítem
-  19 del backlog).
+- **Auditoría transversal:** `AuditSaveChangesInterceptor` registra cambios en
+  todos los módulos; `settings/audit-logs` consulta datos reales (#31).
+- **Exception handling:** `ExceptionHandlingMiddleware` devuelve
+  `application/problem+json` (#33).
+- La cobertura de tests sigue siendo limitada frente a la complejidad fiscal;
+  priorizar integración en flujos críticos antes de refactors amplios (#32).

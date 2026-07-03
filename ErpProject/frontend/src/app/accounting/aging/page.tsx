@@ -1,7 +1,17 @@
 "use client";
 import React, { useState } from "react";
+
+interface AgingReport {
+  type: string;
+  totalAmount: number;
+  current: number;
+  days31To60: number;
+  days61To90: number;
+  days91Plus: number;
+}
+
 export default function AgingPage() {
-  const [agingData, setAgingData] = useState<any>(null);
+  const [agingData, setAgingData] = useState<AgingReport | null>(null);
   const [dso, setDso] = useState<number | null>(null);
   const [dpo, setDpo] = useState<number | null>(null);
   const fetchAging = async (type: string) => {

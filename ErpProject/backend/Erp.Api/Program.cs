@@ -3,8 +3,6 @@ using Erp.Api.HealthChecks;
 using Erp.Infrastructure.Data;
 using Erp.Infrastructure.Services;
 using Erp.Infrastructure.Tenancy;
-using Erp.Infrastructure.BackgroundJobs;
-using Erp.Infrastructure.Seeding;
 using Hangfire;
 using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -16,6 +14,7 @@ using Serilog;
 using System.Text;
 using System.Text.Json;
 using Erp.Application;
+using Erp.Application.Modularity;
 using Erp.Infrastructure;
 using Erp.Modules.Billing.Infrastructure;
 using Erp.Modules.Crm.Infrastructure;
@@ -26,6 +25,9 @@ using Erp.Modules.Treasury.Infrastructure;
 using Erp.Modules.Payroll.Infrastructure;
 using Erp.Modules.Purchasing.Infrastructure;
 using Erp.Modules.Sales.Infrastructure;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -40,6 +42,9 @@ builder.Host.UseSerilog((context, services, configuration) => configuration
     .Enrich.FromLogContext()
     .WriteTo.Console());
 
+var env = builder.Environment;
+var isIntegrationTest = env.IsEnvironment("IntegrationTests");
+
 // 2. Add services to the container.
 // AbacAuthorizationFilter is added to MVC filters so it runs on every controller action.
 // It is a no-op on endpoints without [RequirePermission].
@@ -50,17 +55,34 @@ builder.Services.AddControllers(options =>
     // Provides action-level granularity within a module.
     options.Filters.AddService<Erp.Infrastructure.Security.AbacAuthorizationFilter>();
 })
-    .AddApplicationPart(typeof(Erp.Modules.Billing.Api.Controllers.InvoicesController).Assembly)
-    .AddApplicationPart(typeof(Erp.Modules.Crm.Api.Controllers.ClientsController).Assembly)
-    .AddApplicationPart(typeof(Erp.Modules.Inventory.API.Controllers.ProductsController).Assembly)
-    .AddApplicationPart(typeof(Erp.Modules.Accounting.Api.Controllers.AccountingController).Assembly)
-    .AddApplicationPart(typeof(Erp.Modules.Expenses.Api.Controllers.ExpensesController).Assembly)
-    .AddApplicationPart(typeof(Erp.Modules.Treasury.Api.Controllers.TreasuryController).Assembly)
-    .AddApplicationPart(typeof(Erp.Modules.Payroll.Api.Controllers.PayrollController).Assembly)
-    .AddApplicationPart(typeof(Erp.Modules.Purchasing.Api.Controllers.ReceiptsController).Assembly)
-    .AddApplicationPart(typeof(Erp.Modules.Sales.Api.Controllers.SalesOrdersController).Assembly);
+    .AddErpModuleControllers(Erp.Modules.Accounting.Api.AccountingErpModule.Instance)
+    .AddErpModuleControllers(Erp.Modules.Billing.Api.BillingErpModule.Instance)
+    .AddErpModuleControllers(Erp.Modules.Crm.Api.CrmErpModule.Instance)
+    .AddErpModuleControllers(Erp.Modules.Inventory.Api.InventoryErpModule.Instance)
+    .AddErpModuleControllers(Erp.Modules.Expenses.Api.ExpensesErpModule.Instance)
+    .AddErpModuleControllers(Erp.Modules.Treasury.Api.TreasuryErpModule.Instance)
+    .AddErpModuleControllers(Erp.Modules.Payroll.Api.PayrollErpModule.Instance)
+    .AddErpModuleControllers(Erp.Modules.Purchasing.Api.PurchasingErpModule.Instance)
+    .AddErpModuleControllers(Erp.Modules.Sales.Api.SalesErpModule.Instance);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+// OpenTelemetry métricas + tracing OTLP opcional (ADR-0018 #36)
+var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(resource => resource.AddService("Erp.Api"))
+    .WithMetrics(metrics => metrics
+        .AddAspNetCoreInstrumentation()
+        .AddRuntimeInstrumentation()
+        .AddPrometheusExporter())
+    .WithTracing(tracing =>
+    {
+        tracing.AddAspNetCoreInstrumentation();
+        if (!string.IsNullOrWhiteSpace(otlpEndpoint))
+        {
+            tracing.AddOtlpExporter(options => options.Endpoint = new Uri(otlpEndpoint));
+        }
+    });
 
 // JWT Auth Setup
 var jwtSecret = builder.Configuration["Jwt:Secret"];
@@ -111,8 +133,8 @@ builder.Services.AddCors(options =>
             .WithExposedHeaders(
                 "X-Total-Count",
                 "Authorization",
-                Erp.Infrastructure.Fiscal.FiscalExportHeaders.ExportDisclaimerHeader,
-                Erp.Infrastructure.Fiscal.FiscalExportHeaders.OfficialFormatHeader)
+                Erp.Application.Common.Fiscal.FiscalExportHeaders.ExportDisclaimerHeader,
+                Erp.Application.Common.Fiscal.FiscalExportHeaders.OfficialFormatHeader)
     );
 });
 
@@ -126,8 +148,9 @@ if (string.IsNullOrEmpty(connectionString))
         "Database connection string missing. Set ConnectionStrings__DefaultConnection in environment or appsettings.");
 }
 
-builder.Services.AddDbContext<ErpDbContext>(options =>
+builder.Services.AddDbContext<ErpDbContext>((sp, options) =>
     options.UseNpgsql(connectionString)
+           .AddInterceptors(sp.GetRequiredService<Erp.Infrastructure.Interceptors.AuditSaveChangesInterceptor>())
            .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
 
 // 4. Configure Multi-tenancy and Infrastructure
@@ -146,16 +169,16 @@ builder.Services.AddScoped<Microsoft.AspNetCore.Mvc.Filters.IAsyncAuthorizationF
 builder.Services.AddInfrastructureServices();
 builder.Services.AddApplicationServices();
 
-// Per-module DbContexts (physical extraction: each module owns its own DbContext)
-builder.Services.AddBillingInfrastructure(builder.Configuration);
-builder.Services.AddCrmInfrastructure(builder.Configuration);
-builder.Services.AddInventoryInfrastructure(builder.Configuration);
-builder.Services.AddAccountingInfrastructure(builder.Configuration);
-builder.Services.AddExpensesInfrastructure(builder.Configuration);
-builder.Services.AddTreasuryInfrastructure(builder.Configuration);
-builder.Services.AddPayrollInfrastructure(builder.Configuration);
-builder.Services.AddPurchasingInfrastructure(builder.Configuration);
-builder.Services.AddSalesInfrastructure(builder.Configuration);
+// Per-module DbContexts (todos vía IErpModule — ADR-0018 #19e)
+builder.Services.AddErpModule(Erp.Modules.Accounting.Api.AccountingErpModule.Instance, builder.Configuration);
+builder.Services.AddErpModule(Erp.Modules.Billing.Api.BillingErpModule.Instance, builder.Configuration);
+builder.Services.AddErpModule(Erp.Modules.Crm.Api.CrmErpModule.Instance, builder.Configuration);
+builder.Services.AddErpModule(Erp.Modules.Inventory.Api.InventoryErpModule.Instance, builder.Configuration);
+builder.Services.AddErpModule(Erp.Modules.Expenses.Api.ExpensesErpModule.Instance, builder.Configuration);
+builder.Services.AddErpModule(Erp.Modules.Treasury.Api.TreasuryErpModule.Instance, builder.Configuration);
+builder.Services.AddErpModule(Erp.Modules.Payroll.Api.PayrollErpModule.Instance, builder.Configuration);
+builder.Services.AddErpModule(Erp.Modules.Purchasing.Api.PurchasingErpModule.Instance, builder.Configuration);
+builder.Services.AddErpModule(Erp.Modules.Sales.Api.SalesErpModule.Instance, builder.Configuration);
 
 // RabbitMQ is optional — if disabled, Hangfire OutboxProcessorJob is the fallback transport.
 // Set RabbitMQ:Enabled = false in appsettings to run without a RabbitMQ instance.
@@ -165,78 +188,57 @@ if (rabbitEnabled)
     builder.Services.AddRabbitMqMessaging();
 }
 
-// Register Inventory module MediatR handlers (avoids circular reference via Program.cs)
+// Todos los módulos de negocio registran MediatR vía IErpModule (#19e)
+
+// Infrastructure automation handlers (realtime rule evaluation)
 builder.Services.AddMediatR(cfg =>
     cfg.RegisterServicesFromAssembly(
-        typeof(Erp.Modules.Inventory.Application.EventHandlers.InvoiceApprovedInventoryHandler).Assembly));
+        typeof(Erp.Infrastructure.Automation.LeadStatusChangedRuleHandler).Assembly));
 
-// Register Billing module MediatR handlers
-builder.Services.AddMediatR(cfg =>
-    cfg.RegisterServicesFromAssembly(
-        typeof(Erp.Modules.Billing.Application.Handlers.GetInvoicesByStatusHandler).Assembly));
-
-// Register CRM module MediatR handlers
-builder.Services.AddMediatR(cfg =>
-    cfg.RegisterServicesFromAssembly(
-        typeof(Erp.Modules.Crm.Application.Features.Crm.Handlers.GetClientsHandler).Assembly));
-
-// Register Accounting module MediatR handlers (includes Phase 1, 2, 3)
-builder.Services.AddMediatR(cfg =>
-    cfg.RegisterServicesFromAssembly(
-        typeof(Erp.Modules.Accounting.Application.Handlers.InvoiceApprovedEventHandler).Assembly));
-builder.Services.AddScoped<Erp.Modules.Accounting.Application.Services.AccountingService>();
-
-// Register Expenses module MediatR handlers
-builder.Services.AddMediatR(cfg =>
-    cfg.RegisterServicesFromAssembly(
-        typeof(Erp.Modules.Expenses.Application.Features.Expenses.Handlers.GetExpenseUploadsHandler).Assembly));
-
-// Register Treasury module MediatR handlers
-builder.Services.AddMediatR(cfg =>
-    cfg.RegisterServicesFromAssembly(
-        typeof(Erp.Modules.Treasury.Application.Features.Treasury.Handlers.CreateBankAccountHandler).Assembly));
-
-// Register Purchasing module MediatR handlers
-builder.Services.AddMediatR(cfg =>
-    cfg.RegisterServicesFromAssembly(
-        typeof(Erp.Modules.Purchasing.Application.Features.Receipts.Handlers.CreateGoodsReceiptHandler).Assembly));
-
-// Register Sales module MediatR handlers
-builder.Services.AddMediatR(cfg =>
-    cfg.RegisterServicesFromAssembly(
-        typeof(Erp.Modules.Sales.Application.Features.Deliveries.Handlers.CreateDeliveryNoteHandler).Assembly));
-
-// Register Payroll module MediatR handlers
-builder.Services.AddMediatR(cfg =>
-    cfg.RegisterServicesFromAssembly(
-        typeof(Erp.Modules.Payroll.Application.Features.Employees.GetEmployeesHandler).Assembly));
-
-// 5. Configure Redis
-var redisString = builder.Configuration.GetConnectionString("Redis");
-if (string.IsNullOrEmpty(redisString))
-    throw new InvalidOperationException("Redis connection string missing. Set ConnectionStrings__Redis in environment.");
-builder.Services.AddStackExchangeRedisCache(options =>
+// 5. Configure Redis (or in-memory cache for integration tests)
+if (isIntegrationTest)
 {
-    options.Configuration = redisString;
-});
+    builder.Services.AddDistributedMemoryCache();
+}
+else
+{
+    var redisString = builder.Configuration.GetConnectionString("Redis");
+    if (string.IsNullOrEmpty(redisString))
+        throw new InvalidOperationException("Redis connection string missing. Set ConnectionStrings__Redis in environment.");
+    builder.Services.AddStackExchangeRedisCache(options =>
+    {
+        options.Configuration = redisString;
+    });
+}
 
-// 6. Configure Hangfire
-builder.Services.AddHangfire(config => config
-    .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
-    .UseSimpleAssemblyNameTypeSerializer()
-    .UseRecommendedSerializerSettings()
-    .UsePostgreSqlStorage(c => c.UseNpgsqlConnection(connectionString)));
+// 6. Configure Hangfire (skipped in integration tests — no DB required at host startup)
+if (!isIntegrationTest)
+{
+    builder.Services.AddHangfire(config => config
+        .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+        .UseSimpleAssemblyNameTypeSerializer()
+        .UseRecommendedSerializerSettings()
+        .UsePostgreSqlStorage(c => c.UseNpgsqlConnection(connectionString)));
     
-builder.Services.AddHangfireServer();
+    builder.Services.AddHangfireServer();
+}
 
 // 7. Health Checks (DB + Redis + optional RabbitMQ)
-builder.Services.AddHealthChecks()
-    .AddCheck<PostgresHealthCheck>("postgres", tags: new[] { "db", "ready" })
-    .AddCheck<RedisHealthCheck>("redis",    tags: new[] { "cache", "ready" });
+var healthChecks = builder.Services.AddHealthChecks();
+if (isIntegrationTest)
+{
+    healthChecks
+        .AddCheck("postgres", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy("stub"), tags: new[] { "db", "ready" })
+        .AddCheck("redis", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy("stub"), tags: new[] { "cache", "ready" });
+}
+else
+{
+    healthChecks
+        .AddCheck<PostgresHealthCheck>("postgres", tags: new[] { "db", "ready" })
+        .AddCheck<RedisHealthCheck>("redis",    tags: new[] { "cache", "ready" });
+}
 
 // 8. OCR Background Service
-builder.Services.AddHostedService<Erp.Infrastructure.Services.OcrBackgroundService>();
-
 // 9. API versioning support (route-based v1)
 builder.Services.AddApiVersioning(options =>
 {
@@ -249,9 +251,8 @@ builder.Services.AddApiVersioning(options =>
     options.SubstituteApiVersionInUrl = true;
 });
 
-var env = builder.Environment;
-
 var application = builder.Build();
+var appStartedUtc = DateTime.UtcNow;
 
 // Configure the HTTP request pipeline.
 if (application.Environment.IsDevelopment())
@@ -261,6 +262,7 @@ if (application.Environment.IsDevelopment())
 }
 
 application.UseSerilogRequestLogging();
+application.UseMiddleware<Erp.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 application.UseCors();  // ? AGREGAR CORS MIDDLEWARE
 application.UseStaticFiles();
 application.UseHttpsRedirection();
@@ -272,10 +274,22 @@ application.UseMiddleware<TenantResolverMiddleware>();
 application.UseMiddleware<Erp.Infrastructure.Security.LoginRateLimitMiddleware>();
 
 application.UseAuthentication();
+application.UseMiddleware<Erp.Infrastructure.Security.TenantMembershipMiddleware>();
 application.UseAuthorization();
 application.MapControllers();
 
+// Métricas scrape Prometheus (sin auth — uso interno /monitoring)
+application.MapPrometheusScrapingEndpoint("/metrics");
+
 // Health Check endpoints (no auth required — used by load balancers / container orchestrators)
+application.MapGet("/health/info", (IWebHostEnvironment env) => Results.Json(new
+{
+    service = "Erp.Api",
+    environment = env.EnvironmentName,
+    uptimeSeconds = (int)(DateTime.UtcNow - appStartedUtc).TotalSeconds,
+    version = typeof(Program).Assembly.GetName().Version?.ToString() ?? "0.0.0",
+}, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
+
 application.MapHealthChecks("/health", new HealthCheckOptions
 {
     ResponseWriter = async (ctx, report) =>
@@ -311,15 +325,20 @@ application.MapHealthChecks("/health/ready", new HealthCheckOptions
 });
 
 // Hangfire Dashboard — restringido a localhost en producción
-application.UseHangfireDashboard("/hangfire", new DashboardOptions
+if (!isIntegrationTest)
 {
-    Authorization = new[] { new Hangfire.Dashboard.LocalRequestsOnlyAuthorizationFilter() }
-});
+    application.UseHangfireDashboard("/hangfire", new DashboardOptions
+    {
+        Authorization = new[] { new Hangfire.Dashboard.LocalRequestsOnlyAuthorizationFilter() }
+    });
+}
 
 // ApiKey Rate Limiting Middleware
 application.UseMiddleware<Erp.Infrastructure.Security.ApiKeyRateLimitMiddleware>();
 
 // Hangfire recurring jobs — retry on transient DNS/socket errors at startup
+if (!isIntegrationTest)
+{
 for (int attempt = 1; attempt <= 10; attempt++)
 {
     try
@@ -339,6 +358,11 @@ for (int attempt = 1; attempt <= 10; attempt++)
             job => job.ExecuteAsync(),
             "0 8 * * *"); // Diario a las 8:00
 
+        RecurringJob.AddOrUpdate<Erp.Infrastructure.Automation.RuleEvaluatorJob>(
+            "rule-evaluator",
+            job => job.EvaluateRulesAsync(CancellationToken.None),
+            "0 9 * * *"); // Diario a las 9:00 — facturas vencidas + stock bajo
+
         Erp.Modules.Accounting.Infrastructure.DependencyInjection.RegisterAccountingRecurringJobs();
         break;
     }
@@ -348,8 +372,11 @@ for (int attempt = 1; attempt <= 10; attempt++)
         Thread.Sleep(3000);
     }
 }
+}
 
 // Auto-Migrate and Seed
+if (!isIntegrationTest)
+{
 using (var scope = application.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<ErpDbContext>();
@@ -483,7 +510,7 @@ using (var scope = application.Services.CreateScope())
             };
             foreach (var (code, name, type) in pgcAccounts)
             {
-                accountingDb.Accounts.Add(new Erp.Domain.Entities.Accounting.Account
+                accountingDb.Accounts.Add(new Erp.Modules.Accounting.Domain.Entities.Account
                 {
                     Id = Guid.NewGuid(),
                     CompanyId = company.Id,
@@ -516,5 +543,9 @@ using (var scope = application.Services.CreateScope())
         Log.Error(ex, "An error occurred while migrating or seeding the database.");
     }
 }
+}
 
 application.Run();
+
+/// <summary>Expone el entry point para WebApplicationFactory en tests de integración.</summary>
+public partial class Program { }

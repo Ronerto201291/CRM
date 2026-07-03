@@ -26,17 +26,21 @@ PermissionsController,CompanyController}.cs`,
 `POST /forgot-password`, `POST /reset-password`,
 `POST /resend-confirmation`, `GET /confirm-email`.
 
-- `LoginCommand` → `LoginCommandHandler`
-  (`backend/Erp.Application/Features/Auth/Handlers/LoginCommandHandler.cs`):
-  busca el usuario por email **ignorando el filtro de tenant**
-  (`IgnoreQueryFilters()`, porque el tenant aún no está resuelto en el
-  login), verifica la contraseña con BCrypt (sin fallback en texto plano),
-  y si `user.TwoFactorEnabled` es `true` devuelve `RequiresTwoFactor = true`
-  sin emitir JWT todavía; si no, emite el JWT directamente.
-- El JWT lo genera `JwtProvider.Generate(user)`
-  (`backend/Erp.Infrastructure/Security/JwtProvider.cs`) con claims `sub`
-  (UserId), `email`, `CompanyId` y `name`, firmado HMAC-SHA256, válido 8
-  horas (`DateTime.UtcNow.AddHours(8)`).
+- `POST /login` devuelve JWT con `CompanyId` activo y lista de empresas
+  accesibles (`CompanyMembershipDto[]`) cuando el usuario tiene varias
+  membresías (`UserCompany`).
+- `GET /api/auth/companies` — empresas del usuario autenticado.
+- `POST /api/auth/switch-company` — emite JWT nuevo con otra empresa activa
+  sin re-login (Fase 1, ADR-0018 #42a).
+- `POST /api/auth/add-company` — alta de empresa adicional desde cuenta
+  existente (`AddCompanyFromAccountCommand`).
+- `LoginCommand` → `LoginCommandHandler`: busca usuario por email con
+  `IgnoreQueryFilters()`, verifica BCrypt, soporta 2FA, resuelve empresa
+  activa (membresía por defecto o `User.CompanyId` legacy) y emite JWT.
+- `JwtProvider` incluye claim `CompanyId` de la **empresa activa** (cambiable
+  vía `switch-company` sin re-login).
+- `TenantMembershipMiddleware` valida que el usuario autenticado pertenece a
+  la empresa del `X-Tenant-Id` / claim activo (Fase 1 #42a).
 - `RefreshTokenCommand` / `RefreshTokenHandler` implementan rotación de
   refresh tokens: busca un `RefreshToken` no revocado y no expirado,
   lo marca `IsRevoked = true` y emite un access token + refresh token
@@ -67,9 +71,9 @@ PermissionsController,CompanyController}.cs`,
 `[controller]`) expone `GET /` (listar usuarios), `GET /roles`,
 `POST /` (alta de usuario); los comandos/queries viven en
 `backend/Erp.Application/Features/Users/{Commands/UserCommands.cs,
-Queries/UserQueries.cs,Handlers/UserHandlers.cs}`. Cada `User`
-(`backend/Erp.Domain/Entities/Core/User.cs`) pertenece a una `Company`
-(`CompanyId`) y tiene un único `Role` opcional vía `RoleId`.
+Queries/UserQueries.cs,Handlers/UserHandlers.cs}`. Cada `User` tiene
+`CompanyId` legacy (empresa de alta original) y puede tener **varias**
+membresías vía `UserCompany` (`UserId`, `CompanyId`, `RoleId` por empresa).
 
 **Permisos (RBAC + ABAC).** El modelo combina roles con reglas de
 grano fino:
@@ -161,8 +165,8 @@ tenant aún no está resuelto o se necesita mirar "a través" de tenants).
 
 ### Frontend
 - `frontend/src/context/TenantContext.tsx` (`TenantProvider`/`useTenant`)
-  mantiene `tenantId`/`tenantName` en `localStorage`, hidratado en el
-  cliente tras el primer render.
+  mantiene `tenantId`/`tenantName` en `localStorage`; `CompanySwitcher` en
+  layout permite cambiar empresa activa (`switch-company`) sin re-login (#42a).
 - `frontend/src/middleware.ts` es el middleware de Next.js: para rutas
   bajo `/api/proxy/*`, toma las cookies `erp_token` y `tenantId` y las
   reinyecta como cabeceras `Authorization: Bearer <token>` y
@@ -178,14 +182,11 @@ tenant aún no está resuelto o se necesita mirar "a través" de tenants).
   `subscription/`).
 
 ### Modelo de datos
-`Company` 1—N `User`, 1—N `Role`. `Role` 1—N `RolePermission` N—1
-`Permission`. `User` N—1 `Role` (opcional), 1—N `UserPermission` N—1
-`Permission`, 1—N `RefreshToken`. `TenantInvitation` referencia una
-`Company` pendiente de completar alta. `TenantModule` (`CompanyId`,
-`ModuleName`, `IsEnabled`) es el flag de activación por tenant y módulo
-que consulta `ModuleAuthorizationHandler`. Todas las entidades
-"core" con datos de negocio llevan `CompanyId` y están sujetas al filtro
-global de tenant salvo cuando se ignora explícitamente.
+`Company` 1—N `User` (legacy `User.CompanyId`), 1—N `UserCompany` (membresías
+muchos-a-muchos con rol por empresa). `Role` 1—N `RolePermission` N—1
+`Permission`. Índice único `(Email, CompanyId)` en `User` (email ya no es
+único a nivel plataforma entera). `TenantInvitation`, `TenantModule`,
+`RefreshToken` como antes.
 
 ### Flujo end-to-end representativo
 1. El usuario envía credenciales en `/admin` (o `/register`); el frontend
@@ -222,6 +223,14 @@ de ejecutar cualquier acción. Ningún módulo de negocio implementa su
 propia lógica de autenticación o resolución de tenant: todos reutilizan
 este pipeline compartido.
 
+## Evaluación de calidad arquitectónica
+> Metodología en `ADR-0018`.
+
+- **Multi-empresa Fase 1:** ✅ `UserCompany`, switch-company, middleware (#42a).
+- **Pendiente producto:** suscripción gestoría, fases 4–5 de #42a.
+- **Seguridad:** validación JWT↔tenant reforzada vía `TenantMembershipMiddleware`;
+  API pública sigue requiriendo revisión (ADR-0016).
+
 ## Buenas prácticas aplicables
 - Cualquier query directa contra un `DbSet` debe **no** usar
   `IgnoreQueryFilters()` salvo que exista una razón explícita y
@@ -240,39 +249,13 @@ este pipeline compartido.
   que borrar esa clave explícitamente.
 
 ## Consecuencias
-- El aislamiento multi-tenant depende enteramente de que
-  `TenantResolverMiddleware` reciba una cabecera `X-Tenant-Id` correcta
-  (o un subdominio válido). No se ha encontrado, en el código revisado,
-  ninguna comprobación cruzada que confirme que el `CompanyId` embebido en
-  el JWT del usuario autenticado coincide con el tenant resuelto por esa
-  cabecera — `PermissionService.GetCurrentUserId()` resuelve el usuario
-  únicamente a partir del claim `sub` del JWT, sin comparar contra
-  `ITenantContext.TenantId`. En la práctica, el frontend siempre envía el
-  `tenantId` asociado al login (vía `TenantContext`/cookies), pero esto es
-  una convención de cliente, no una validación de servidor. Vale la pena
-  revisar/reforzar esta comprobación si se expone la API a clientes no
-  controlados por el propio frontend (p. ej. la API pública, ver
-  ADR-0016).
-- La resolución de tenant por subdominio existe en el middleware pero no
-  parece estar en uso por el frontend actual (que siempre usa
-  `X-Tenant-Id`); si se retoma habrá que revisar CORS y la configuración
-  de DNS/hosts.
-- No existen tests automatizados que verifiquen el aislamiento entre
-  tenants (ni ningún otro flujo de auth); cualquier cambio en
-  `TenantResolverMiddleware`, `ModuleDbContextBase` o `PermissionService`
-  debe verificarse manualmente con al menos dos tenants distintos antes de
-  desplegar.
-- **El modelo `User`↔`Company` es 1:N rígido (un `User.CompanyId` fijo, sin
-  tabla `UserCompany`), no soporta multi-empresa real** (un mismo login con
-  acceso a varias empresas — caso de uso relevante para gestorías que llevan
-  varias pymes clientas). El email de login es único a nivel de toda la
-  plataforma (`RegisterCompanyCommand.cs:54-56`), y el `CompanyId` queda
-  grabado como claim fijo e inmutable en el JWT al emitirlo
-  (`JwtProvider.cs:33`) — no hay concepto de "empresa activa" cambiable en
-  sesión. Si se aborda, implica una migración de esquema real (tabla
-  `UserCompany` muchos-a-muchos con rol por membresía, relajar la unicidad
-  de email a `(Email, CompanyId)`, y rehacer el JWT para llevar una lista de
-  empresas accesibles + una activa conmutable). Backlog y justificación de
-  negocio completa en `ADR-0018` ítem 42a — no implementar como parte de un
-  cambio menor de auth, es un cambio de esquema con decisión de producto
-  detrás (modelo de suscripción por empresa vs. por cuenta/gestoría).
+- El aislamiento multi-tenant depende de `X-Tenant-Id` correcto y de
+  `TenantMembershipMiddleware` (#42a) que cruza JWT con tenant resuelto.
+- **Multi-empresa (Fase 1 ✅, fases 2–5 🟡):** un usuario puede acceder a
+  varias `Company` vía `UserCompany`, cambiar empresa activa en sesión y
+  dar de alta empresas adicionales. **Pendiente:** modelo de suscripción
+  gestoría (¿plan por Company o por cuenta?), email único global en algunos
+  flujos legacy, y fases 4–5 del ítem 42a en ADR-0018.
+- La resolución por subdominio existe pero el frontend usa `X-Tenant-Id`.
+- Tests de aislamiento multi-tenant: parcialmente cubiertos (#32); conviene
+  smoke manual con dos tenants antes de desplegar cambios en auth.

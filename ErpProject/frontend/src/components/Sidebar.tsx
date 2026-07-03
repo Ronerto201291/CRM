@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { logoutAction } from '@/app/actions/auth';
 import Logo from '@/components/Logo';
+import CompanySwitcher from '@/components/CompanySwitcher';
 
 const navGroups = [
     {
@@ -86,6 +87,8 @@ export default function Sidebar() {
                 </div>
                 <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontWeight: 500, letterSpacing: '0.02em' }}>Gestión Empresarial</div>
             </div>
+
+            <CompanySwitcher />
 
             {/* Nav Groups */}
             <nav style={{ flex: 1, padding: '12px 8px', overflowY: 'auto' }}>

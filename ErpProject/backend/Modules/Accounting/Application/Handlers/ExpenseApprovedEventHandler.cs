@@ -1,6 +1,6 @@
 using Erp.Application.Common.Events;
 using Erp.Modules.Accounting.Application.Interfaces;
-using Erp.Domain.Entities.Accounting;
+using Erp.Modules.Accounting.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;

@@ -1,5 +1,7 @@
+using Erp.Application.Common;
 using Erp.Application.Common.Events;
 using Erp.Application.Common.Interfaces;
+using Erp.Application.Common.Validation;
 using Erp.Application.DTOs;
 using Erp.Domain.Entities.Audit;
 using Erp.Modules.Billing.Application.Features.Billing.Commands;
@@ -101,6 +103,9 @@ public class CreateInvoiceHandler : IRequestHandler<CreateInvoiceCommand, Invoic
             clientEmail   = req.ClientEmail;
             clientAddress = req.ClientAddress;
         }
+
+        if (!string.IsNullOrWhiteSpace(clientNif) && !SpanishTaxIdValidator.IsValid(clientNif))
+            throw new InvalidOperationException($"NIF/CIF/NIE del cliente no válido: {clientNif}");
 
         var invType = (req.InvoiceType ?? "Normal").Trim();
         if (string.Equals(invType, "Rectificativa", StringComparison.OrdinalIgnoreCase))
@@ -325,6 +330,7 @@ public class LockInvoiceHandler : IRequestHandler<LockInvoiceCommand, bool>
     private readonly IVerifactuSubmissionService _verifactuSub;
     private readonly IPublisher _publisher;
     private readonly IVerifactuSubmissionGateway _verifactuGateway;
+    private readonly IVerifactuModeSettings _verifactuMode;
     private readonly Microsoft.Extensions.Logging.ILogger<LockInvoiceHandler> _log;
 
     public LockInvoiceHandler(
@@ -334,6 +340,7 @@ public class LockInvoiceHandler : IRequestHandler<LockInvoiceCommand, bool>
         IVerifactuSubmissionService verifactuSub,
         IPublisher publisher,
         IVerifactuSubmissionGateway verifactuGateway,
+        IVerifactuModeSettings verifactuMode,
         Microsoft.Extensions.Logging.ILogger<LockInvoiceHandler> log)
     {
         _ctx              = ctx;
@@ -342,6 +349,7 @@ public class LockInvoiceHandler : IRequestHandler<LockInvoiceCommand, bool>
         _verifactuSub     = verifactuSub;
         _publisher        = publisher;
         _verifactuGateway = verifactuGateway;
+        _verifactuMode    = verifactuMode;
         _log              = log;
     }
 
@@ -378,12 +386,9 @@ public class LockInvoiceHandler : IRequestHandler<LockInvoiceCommand, bool>
                 .Select(i => i.VerifactuHuella)
                 .FirstOrDefaultAsync(ct);
 
-            var tipoFactura = inv.InvoiceType switch
-            {
-                "Rectificativa" => "R1",
-                "Simplificada"  => "F2",
-                _               => "F1"
-            };
+            var tipoFactura = VerifactuTipoFactura.Resolve(inv.InvoiceType);
+
+            inv.VerifactuRealtimeSubmission = _verifactuMode.RealtimeSubmissionEnabled;
 
             (inv.VerifactuHuella, inv.VerifactuQrUrl) = _verifactu.Compute(
                 nifEmisor:        company.TaxId,
@@ -395,14 +400,15 @@ public class LockInvoiceHandler : IRequestHandler<LockInvoiceCommand, bool>
                 huellaAnterior:   previousHuella,
                 numeroRegistro:   inv.SequenceNumber,
                 fechaHoraHuella:  lockedAt);
+
+            if (!inv.VerifactuRealtimeSubmission)
+                inv.VerifactuQrUrl = null;
         }
 
         await _ctx.SaveChangesAsync(ct);
 
         // ── Verifactu per-invoice submission via Hangfire (RD 1007/2023) ──────
-        // La factura queda bloqueada independientemente del resultado del envío.
-        // Errores se registran en el log del job y se reintentan automáticamente.
-        if (!string.IsNullOrEmpty(inv.VerifactuHuella))
+        if (!string.IsNullOrEmpty(inv.VerifactuHuella) && inv.VerifactuRealtimeSubmission)
         {
             _verifactuGateway.EnqueueVerifactuSubmission(inv.Id);
             _log.LogInformation("VerifactuSubmissionJob enqueued for invoice {Number}", inv.Number);

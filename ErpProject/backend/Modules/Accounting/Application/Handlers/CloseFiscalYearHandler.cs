@@ -1,5 +1,6 @@
 using Erp.Application.Common.Interfaces;
-using Erp.Domain.Entities.Accounting;
+using Erp.Modules.Accounting.Domain.Entities;
+using Erp.Modules.Accounting.Domain.Entities;
 using Erp.Modules.Accounting.Application.Commands;
 using Erp.Modules.Accounting.Application.Interfaces;
 using MediatR;

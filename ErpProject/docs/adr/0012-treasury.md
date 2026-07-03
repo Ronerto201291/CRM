@@ -178,30 +178,19 @@ otro módulo, no vía evento — acoplamiento real, no solo de lectura trivial.
   `PaymentReceivedEvent`.
 
 ## Auditoría de corrección frente a especificación externa — SEPA (`SepaService.cs`)
-Verificado con lectura completa del archivo: `GenerateCreditTransferXml`
-**no está conectado a nada** — es código muerto, ninguna clase del backend
-lo invoca. Aun si se conectara, el XML que produce hoy no sería válido:
-- Usa nombres de elemento completos en inglés
-  (`CustomerCreditTransferInitiation`, `GroupHeader`, `PaymentInformation`,
-  `SepaService.cs:33,34,41`) en vez de los códigos cortos ISO 20022 que
-  exige el XSD real (`CstmrCdtTrfInitn`, `GrpHdr`, `PmtInf`) — rechazo
-  garantizado en la raíz del documento.
-- Paréntesis mal cerrado (`SepaService.cs:55`) anida por error el bloque de
-  transacción completo (`CdtTrfTxInf`) dentro de `DbtrAgt` en vez de como
-  hermano de `PmtInf` — jerarquía inválida independientemente del nombrado.
-- Sin validación de IBAN (dígito de control mod-97): se pasa tal cual, solo
-  se le quitan espacios. Cuando falta el BIC, se inventa un placeholder
-  `"XXXXESMM"` (`SepaService.cs:55,66`) — un BIC inválido que el banco
-  rechazará, en vez de omitirlo con seguridad.
-- **Solo genera transferencias (`pain.001`, TRF), no adeudos domiciliados
-  (`pain.008`/SDD)** — pese a que el método está documentado como para
-  "cobrar un efecto" (`CashEffect`). Cobrar requiere SEPA Direct Debit, no
-  Credit Transfer; de hecho el código mapea la empresa como `Dbtr` (pagador)
-  y al cliente como `Cdtr` (cobrador) — el sentido invertido de lo que
-  significa "cobrar".
-- Lo que sí está bien: namespace `pain.001.001.03` correcto, formato de
-  importe correcto (`F2`, `InvariantCulture`, atributo `Ccy="EUR"`),
-  `EndToEndId`/`RmtInf` presentes.
+**🟡 Parcial+ (ADR-0018 #0d):** conectado vía `POST/GET /api/treasury/effects/{id}/sepa`
+(`GenerateCashEffectSepaCommand`, pain.001) y `POST/GET .../sepa/sdd`
+(`GenerateCashEffectSddCommand`, pain.008 SDD); `GenerateCollectionXml` con deudor=cliente y
+acreedor=empresa; validación IBAN; `SepaXmlStructureValidator` offline (pain.001/pain.008) en handlers.
+- ~~Nombres en inglés (`GroupHeader`, etc.)~~ **✅ Corregido** — elementos ISO
+  20022 `pain.001.001.03` (`CstmrCdtTrfInitn`, `GrpHdr`, `PmtInf`, `CdtTrfTxInf`).
+- ~~Paréntesis mal cerrado / jerarquía inválida~~ **✅ Corregido** — estructura
+  `GrpHdr` + `PmtInf` + `CdtTrfTxInf` como hermanos correctos.
+- ~~Sin validación IBAN~~ **✅ Corregido** — `IbanValidator` (mod-97) en
+  `Erp.Application/Common/Validation/IbanValidator.cs`.
+- Pendiente: homologación bancaria; BIC placeholder cuando falta.
+- Lo que sí está bien: namespace `pain.001.001.03`, formato de importe
+  (`F2`, `InvariantCulture`, `Ccy="EUR"`), `EndToEndId`/`RmtInf`.
 
 ## Consecuencias
 - La falta de un handler de `PaymentReceivedEvent` en Treasury significa que
@@ -210,21 +199,15 @@ lo invoca. Aun si se conectara, el XML que produce hoy no sería válido:
   dependen de la importación manual/periódica del extracto bancario real y
   de la conciliación posterior. Cualquier feature que necesite tesorería en
   tiempo real debe tenerlo en cuenta.
-- `ConsolidationController.ConsolidateGroup` es, en la práctica, un stub:
-  valida la existencia del grupo y responde `"Consolidated"`, pero no genera
-  `ConsolidatedFinancialStatement` reales ni aplica `ConsolidationAdjustments`
-  — confirmado que esa tabla **nunca se escribe en ningún punto del código**,
-  así que `GetFinancialStatements` (que lee de ahí) siempre devuelve vacío.
-  La consolidación de grupos multi-sociedad no está implementada, solo
-  aparenta estarlo (ver catálogo de mock en ADR-0018, ítem 15 del backlog).
-- `ExchangeRateRefreshJob` (actualización diaria de tipos de cambio desde el
-  BCE) nunca hace nada en la práctica: corre como `BackgroundService` fuera
-  de un request HTTP, y `TenantContext.TenantId` solo lo puebla
-  `TenantResolverMiddleware` por petición — fuera de ese contexto siempre es
-  `null`, así que el job hace no-op silencioso todos los días, sin log ni
-  error. `EcbExchangeRateProvider` (el cliente HTTP real contra el BCE) está
-  bien implementado pero es inalcanzable en producción tal como está cableado
-  (ver ADR-0018, ítem 16 del backlog).
+- `ConsolidationController.ConsolidateGroup` ✅ Corregido (ADR-0018 #15/#19c):
+  `ConsolidateGroupHandler` agrega métricas vía `IConsolidationMetricsQuery`
+  (cuentas PGC 6/7/1-5 por `JournalEntryLine`) ponderadas por
+  `OwnershipPercentage` de cada filial, suma la matriz al 100%, y persiste
+  `ConsolidatedFinancialStatement` (IncomeStatement + BalanceSheet).
+- `ExchangeRateRefreshJob` ✅ Corregido (ADR-0018 #16): llama a
+  `IExchangeRateService.RefreshAllTenantsRatesAsync`, que itera todas las
+  empresas con divisas activas vía `IgnoreQueryFilters` — ya no depende de
+  `TenantContext` en background.
 - La conciliación bancaria automática es heurística (coincidencia de importe
   + fecha/regex de referencia) y no criptográficamente determinista; en
   cuentas con muchos movimientos del mismo importe y fecha puede producir

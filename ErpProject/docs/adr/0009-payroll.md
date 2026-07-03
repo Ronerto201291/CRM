@@ -91,12 +91,11 @@ Cierre de una liquidación mensual y su reflejo contable:
 2. Al pulsar "Finalizar", `POST /settlements/{id}/finalize` despacha
    `FinalizeSettlementCommand`, que suma bruto, SS empresa, SS trabajador,
    IRPF retenido y líquido de todas las líneas, y llama a
-   `AccountingService.GenerateEntryFromPayrollSettlement(...)`
-   (`backend/Modules/Accounting/Application/Services/AccountingService.cs`),
-   pasando esos totales y la fecha de devengo (día 1 del mes).
-3. `AccountingService` genera el asiento contable (cuentas 640/642/476/4751/465
-   según el comentario en `PayrollSettlement.JournalEntryId`) en el
-   esquema `accounting`, y devuelve su `Id`.
+   `IPayrollJournalEntryGenerator.GenerateFromPayrollSettlementAsync(...)`
+   (puerto en `Erp.Application`, implementado en Accounting.Infrastructure —
+   ADR-0018 #19c), pasando totales y fecha de devengo (día 1 del mes).
+3. El generador crea el asiento contable (cuentas 640/642/476/4751/465) en el
+   esquema `accounting` y devuelve su `Id`.
 4. El handler marca `Status = "Final"` y guarda `JournalEntryId` en la
    liquidación — llamadas repetidas a `finalize` sobre una liquidación ya
    cerrada devuelven el mismo `journalEntryId` sin duplicar el asiento
@@ -105,14 +104,9 @@ Cierre de una liquidación mensual y su reflejo contable:
    liquidación desde la UI.
 
 ## Relación con otros módulos
-- **Accounting (ADR-0006):** la única integración cross-módulo real del
-  módulo es esta — `FinalizeSettlementHandler` invoca
-  `AccountingService.GenerateEntryFromPayrollSettlement` directamente
-  (llamada a servicio, no vía outbox/eventos como en el resto de
-  integraciones entre módulos descritas en ADR-0001). Es una dependencia
-  explícita de compilación de `Erp.Modules.Payroll.Api` sobre
-  `Erp.Modules.Accounting.Application`, distinta del patrón de outbox
-  transaccional usado por CRM o Billing.
+- **Accounting (ADR-0006):** integración vía puerto `IPayrollJournalEntryGenerator`
+  (#19c) — `Payroll.Application` no referencia `Accounting.Application`
+  directamente; la implementación vive en `Accounting.Infrastructure`.
 - No hay integración con Expenses, Treasury ni con el motor de
   automatización (ADR-0015): no se ha encontrado ningún trigger de
   nómina en `RuleEvaluatorJob` ni en el resto del backend.
@@ -125,7 +119,8 @@ Cierre de una liquidación mensual y su reflejo contable:
 Payroll cumple CQRS en su superficie actual: `Features/Employees/`,
 `Features/Settlements/` y `Features/Exports/` cubren los 8 endpoints.
 `PayrollController` solo inyecta `IMediator` (controller delgado, backlog #10 ✅).
-`FinalizeSettlementHandler` referencia `AccountingService` (acoplamiento 19c ya documentado).
+`FinalizeSettlementHandler` usa `IPayrollJournalEntryGenerator` (acoplamiento
+resuelto vía puerto #19c).
 
 ## Buenas prácticas aplicables
 - Cualquier extensión de este módulo (p. ej. activar
@@ -149,13 +144,8 @@ Payroll cumple CQRS en su superficie actual: `Features/Employees/`,
   o tablas de IRPF/SS — todos los importes de cada `PayrollLine` los
   introduce el usuario a mano. No hay gestión de bajas médicas,
   vacaciones, finiquitos, ni generación del recibo de salario en PDF.
-- La ausencia de capa CQRS/MediatR en este módulo (a diferencia de los
-  otros ocho) es una inconsistencia arquitectónica respecto a ADR-0001;
-  quien trabaje aquí debe tenerlo presente y no asumir que existen
-  `Commands`/`Queries` como en Billing o CRM.
-- El acoplamiento directo a `AccountingService` (en vez de outbox) hace
-  que `Erp.Modules.Payroll.Api` dependa en tiempo de compilación de
-  `Erp.Modules.Accounting.Application`; un cambio de firma en
-  `GenerateEntryFromPayrollSettlement` rompe Payroll de inmediato, sin
-  el desacoplamiento que da el patrón de eventos usado en el resto del
-  sistema.
+- **Corregido (#10):** capa CQRS/MediatR completa para los 8 endpoints;
+  `PayrollController` solo inyecta `IMediator`.
+- La integración contable usa puerto `IPayrollJournalEntryGenerator` (#19c),
+  no referencia directa a `Accounting.Application` desde Payroll.
+- Exportes TC1/TC2/RED siguen siendo orientativos (#29 pendiente — RED real).

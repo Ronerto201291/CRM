@@ -1,5 +1,6 @@
 using Erp.Application.Common.Interfaces;
 using Erp.Infrastructure.Services.Sii;
+using Erp.Modules.Billing.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Text;
@@ -19,7 +20,7 @@ public class SiiController : ControllerBase
     private readonly SiiXmlGenerator         _generator;
     private readonly SiiSigningService       _signer;
     private readonly SiiSubmissionService    _submission;
-    private readonly VerifactuXmlGenerator   _verifactuGen;
+    private readonly IVerifactuXmlGenerator _verifactuGen;
     private readonly VerifactuSubmissionService _verifactuSub;
     private readonly ITenantContext          _tenantContext;
 
@@ -27,7 +28,7 @@ public class SiiController : ControllerBase
         SiiXmlGenerator generator,
         SiiSigningService signer,
         SiiSubmissionService submission,
-        VerifactuXmlGenerator verifactuGen,
+        IVerifactuXmlGenerator verifactuGen,
         VerifactuSubmissionService verifactuSub,
         ITenantContext tenantContext)
     {
@@ -79,6 +80,41 @@ public class SiiController : ControllerBase
         var fileName = $"SII_FacturasRecibidas_{year}_{month:D2}.xml";
 
         return File(bytes, "application/xml", fileName);
+    }
+
+    /// <summary>
+    /// Valida estructura XML SII (namespaces, Cabecera, Contraparte) sin certificado.
+    /// GET /api/sii/validate?year=2026&month=3&type=emitidas
+    /// </summary>
+    [HttpGet("validate")]
+    public async Task<IActionResult> Validate(
+        [FromQuery] int year, [FromQuery] int month, [FromQuery] string? type, CancellationToken ct)
+    {
+        if (month < 1 || month > 12)
+            return BadRequest(new { error = "Month must be between 1 and 12" });
+
+        var tenantId = _tenantContext.TenantId
+            ?? throw new InvalidOperationException("Tenant not resolved");
+
+        var invoiceType = type?.ToLower() == "recibidas"
+            ? SiiInvoiceType.Recibidas
+            : SiiInvoiceType.Emitidas;
+
+        var xml = invoiceType == SiiInvoiceType.Emitidas
+            ? await _generator.GenerateFacturasEmitidasAsync(tenantId, year, month, ct)
+            : await _generator.GenerateFacturasRecibidasAsync(tenantId, year, month, ct);
+
+        var result = SiiXmlStructureValidator.Validate(xml, invoiceType);
+
+        return Ok(new
+        {
+            period = $"{year}-{month:D2}",
+            type = invoiceType.ToString().ToLowerInvariant(),
+            valid = result.IsValid,
+            errors = result.Errors,
+            warnings = result.Warnings,
+            signerConfigured = _signer.IsConfigured
+        });
     }
 
     /// <summary>

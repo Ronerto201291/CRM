@@ -1,5 +1,5 @@
 using Erp.Modules.Accounting.Application.Interfaces;
-using Erp.Domain.Entities.Accounting;
+using Erp.Modules.Accounting.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace Erp.Modules.Accounting.Application.Services;

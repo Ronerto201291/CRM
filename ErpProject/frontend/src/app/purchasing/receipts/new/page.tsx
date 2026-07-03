@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import PageContainer from "@/components/PageContainer";
+import { updateLineAt } from "@/lib/lineForm";
 import { PurchaseOrder } from "@/types/api";
 
 interface ReceiptLine {
@@ -25,6 +26,7 @@ export default function NewReceiptPage() {
         lines: [emptyLine()] as ReceiptLine[],
     });
     const [saving, setSaving] = useState(false);
+    const [formError, setFormError] = useState<string | null>(null);
 
     React.useEffect(() => {
         fetch('/api/proxy/v1/purchasing/orders')
@@ -39,16 +41,14 @@ export default function NewReceiptPage() {
         setForm(f => ({ ...f, purchaseOrderId: orderId }));
     };
 
-    const updateLine = (i: number, key: keyof ReceiptLine, val: any) => {
-        const lines = [...form.lines];
-        (lines[i] as any)[key] = val;
-        setForm({ ...form, lines });
-    };
+    const updateLine = <K extends keyof ReceiptLine>(i: number, key: K, val: ReceiptLine[K]) =>
+        setForm({ ...form, lines: updateLineAt(form.lines, i, key, val) });
     const addLine = () => setForm({ ...form, lines: [...form.lines, emptyLine()] });
     const removeLine = (i: number) => setForm({ ...form, lines: form.lines.filter((_, idx) => idx !== i) });
 
     const submit = async () => {
-        if (!form.number) { alert('Introduce el número de recepción'); return; }
+        setFormError(null);
+        if (!form.number) { setFormError('Introduce el número de recepción'); return; }
         setSaving(true);
         try {
             const res = await fetch('/api/proxy/v1/purchasing/receipts', {
@@ -57,11 +57,10 @@ export default function NewReceiptPage() {
                 body: JSON.stringify(form),
             });
             if (res.ok) {
-                alert('Recepción creada correctamente');
                 window.location.href = '/purchasing/receipts';
             } else {
                 const e = await res.json();
-                alert(e.error || e.message || 'Error al crear la recepción');
+                setFormError(e.error || e.message || 'Error al crear la recepción');
             }
         } finally {
             setSaving(false);
@@ -77,6 +76,12 @@ export default function NewReceiptPage() {
                 </div>
                 <a href="/purchasing/receipts" className="btn btn-secondary">← Volver</a>
             </div>
+
+            {formError && (
+                <div className="erp-card" style={{ padding: '12px 16px', marginBottom: 16, color: 'var(--danger)', background: 'var(--danger-bg)' }}>
+                    {formError}
+                </div>
+            )}
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '20px' }}>
                 <div className="form-group">

@@ -44,6 +44,7 @@ export default function PublicQuotePage() {
     const [rejectReason, setRejectReason] = useState('');
     const [rejected, setRejected] = useState(false);
     const [rejecting, setRejecting] = useState(false);
+    const [actionError, setActionError] = useState<string | null>(null);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -60,6 +61,7 @@ export default function PublicQuotePage() {
     useEffect(() => { load(); }, [load]);
 
     const handleAccept = async () => {
+        setActionError(null);
         setAccepting(true);
         try {
             const res = await fetch(`/api/proxy/v1/public/quotes/${token}/accept`, {
@@ -68,11 +70,12 @@ export default function PublicQuotePage() {
                 body: JSON.stringify({}),
             });
             if (res.ok) { setShowAccept(false); setAccepted(true); load(); }
-            else { const e = await res.json(); alert(e.error || 'Error al procesar'); }
+            else { const e = await res.json(); setActionError(e.error || 'Error al procesar'); }
         } finally { setAccepting(false); }
     };
 
     const handleReject = async () => {
+        setActionError(null);
         setRejecting(true);
         try {
             const res = await fetch(`/api/proxy/v1/public/quotes/${token}/reject`, {
@@ -81,7 +84,7 @@ export default function PublicQuotePage() {
                 body: JSON.stringify({ reason: rejectReason }),
             });
             if (res.ok) { setShowReject(false); setRejected(true); load(); }
-            else { const e = await res.json(); alert(e.error || 'Error al procesar'); }
+            else { const e = await res.json(); setActionError(e.error || 'Error al procesar'); }
         } finally { setRejecting(false); }
     };
 
@@ -115,6 +118,12 @@ export default function PublicQuotePage() {
     return (
         <div style={{ minHeight: '100vh', background: '#f1f5f9', fontFamily: 'Inter, sans-serif', padding: '24px 16px' }}>
             <div style={{ maxWidth: '860px', margin: '0 auto' }}>
+
+                {actionError && (
+                    <div style={{ padding: '12px 16px', marginBottom: 16, borderRadius: 8, color: DANGER, background: '#fee2e2', fontSize: 14 }}>
+                        {actionError}
+                    </div>
+                )}
 
                 {/* Header banner */}
                 <div style={{ background: PRIMARY, borderRadius: '12px 12px 0 0', padding: '24px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>

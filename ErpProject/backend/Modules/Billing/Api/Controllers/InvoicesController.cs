@@ -78,6 +78,42 @@ public class InvoicesController : ControllerBase
         }
     }
 
+    /// <summary>Encola anulación VERI*FACTU en AEAT (factura previamente enviada).</summary>
+    [HttpPost("{id}/verifactu/anular")]
+    public async Task<IActionResult> AnulVerifactu(Guid id, CancellationToken ct)
+    {
+        try
+        {
+            var ok = await _mediator.Send(new AnulVerifactuInvoiceCommand { InvoiceId = id }, ct);
+            return ok
+                ? Ok(new { message = "Anulación VeriFactu encolada." })
+                : NotFound();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpGet("{id}/verifactu/submissions")]
+    public async Task<IActionResult> GetVerifactuSubmissions(Guid id, CancellationToken ct)
+    {
+        var logs = await _billingCtx.VerifactuSubmissionLogs
+            .AsNoTracking()
+            .Where(l => l.InvoiceId == id)
+            .OrderByDescending(l => l.SubmittedAt)
+            .Select(l => new
+            {
+                l.SubmissionType,
+                l.EstadoEnvio,
+                l.Success,
+                l.IsProduction,
+                l.SubmittedAt
+            })
+            .ToListAsync(ct);
+        return Ok(logs);
+    }
+
     /// <summary>
     /// Marca la factura como cobrada y genera el asiento de cobro (572 Banco / 430 Clientes).
     /// POST /api/invoices/{id}/pay

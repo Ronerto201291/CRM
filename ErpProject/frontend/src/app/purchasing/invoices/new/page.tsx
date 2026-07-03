@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import PageContainer from "@/components/PageContainer";
+import { updateLineAt } from "@/lib/lineForm";
 import { parseListResponse } from "@/lib/parseListResponse";
 import { Supplier } from "@/types/api";
 
@@ -27,6 +28,7 @@ export default function NewSupplierInvoicePage() {
         lines: [emptyLine()] as InvoiceLine[],
     });
     const [saving, setSaving] = useState(false);
+    const [formError, setFormError] = useState<string | null>(null);
 
     React.useEffect(() => {
         fetch('/api/proxy/suppliers?pageSize=500')
@@ -35,11 +37,8 @@ export default function NewSupplierInvoicePage() {
             .catch(() => {});
     }, []);
 
-    const updateLine = (i: number, key: keyof InvoiceLine, val: any) => {
-        const lines = [...form.lines];
-        (lines[i] as any)[key] = val;
-        setForm({ ...form, lines });
-    };
+    const updateLine = <K extends keyof InvoiceLine>(i: number, key: K, val: InvoiceLine[K]) =>
+        setForm({ ...form, lines: updateLineAt(form.lines, i, key, val) });
     const addLine = () => setForm({ ...form, lines: [...form.lines, emptyLine()] });
     const removeLine = (i: number) => setForm({ ...form, lines: form.lines.filter((_, idx) => idx !== i) });
 
@@ -49,8 +48,9 @@ export default function NewSupplierInvoicePage() {
     const fmt = (n: number) => `€ ${n.toLocaleString('es-ES', { minimumFractionDigits: 2 })}`;
 
     const submit = async () => {
-        if (!form.supplierId) { alert('Selecciona un proveedor'); return; }
-        if (!form.number) { alert('Introduce el número de factura'); return; }
+        setFormError(null);
+        if (!form.supplierId) { setFormError('Selecciona un proveedor'); return; }
+        if (!form.number) { setFormError('Introduce el número de factura'); return; }
         setSaving(true);
         try {
             const body = {
@@ -65,11 +65,10 @@ export default function NewSupplierInvoicePage() {
                 body: JSON.stringify(body),
             });
             if (res.ok) {
-                alert('Factura creada correctamente');
                 window.location.href = '/purchasing/invoices';
             } else {
                 const e = await res.json();
-                alert(e.error || e.message || 'Error al crear la factura');
+                setFormError(e.error || e.message || 'Error al crear la factura');
             }
         } finally {
             setSaving(false);
@@ -85,6 +84,12 @@ export default function NewSupplierInvoicePage() {
                 </div>
                 <a href="/purchasing/invoices" className="btn btn-secondary">← Volver</a>
             </div>
+
+            {formError && (
+                <div className="erp-card" style={{ padding: '12px 16px', marginBottom: 16, color: 'var(--danger)', background: 'var(--danger-bg)' }}>
+                    {formError}
+                </div>
+            )}
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
                 <div className="form-group">

@@ -1,4 +1,4 @@
-﻿using Erp.Infrastructure.Fiscal;
+﻿using Erp.Application.Common.Fiscal;
 using Erp.Modules.Accounting.Application.Features.Export;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -177,6 +177,17 @@ public class AccountingExportController : ControllerBase
     {
         var result = await _mediator.Send(new ExportModelo347AeatTxtQuery(year), ct);
         return FileFiscal(this, result.Content, result.ContentType, result.FileName, result.Disclaimer);
+    }
+
+    /// <summary>
+    /// GET /api/accounting/export/modelo347-json?year=2026
+    /// Vista previa JSON del modelo 347 (operadores ≥ 3.005,06 €).
+    /// </summary>
+    [HttpGet("modelo347-json")]
+    public async Task<IActionResult> GetModelo347Json([FromQuery] int year, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new GetModelo347JsonQuery(year), ct);
+        return Ok(result);
     }
 
     /// <summary>

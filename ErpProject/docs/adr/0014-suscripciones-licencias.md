@@ -182,11 +182,9 @@ webhook está bien hecha**: usa `EventUtility.ConstructEvent` sobre el body
 crudo (no reserializado) antes de confiar en el payload
 (`StripeService.cs:141`), y devuelve 400 si falta la firma. Hallazgos reales
 más allá de eso:
-- **Sin idempotencia por `stripeEvent.Id`** (riesgo alto): no hay tabla de
-  eventos procesados ni comprobación de duplicados — confirmado que el
-  identificador del evento nunca se usa en el código. Stripe reentrega
-  eventos por diseño; una reentrega de `invoice.payment_succeeded` extiende
-  de nuevo `ExpirationDate` sin control.
+- **Sin idempotencia por `stripeEvent.Id`** (riesgo alto): ~~no hay tabla de
+  eventos procesados~~ **✅ Corregido (ADR-0018 #0e)** — `StripeWebhookEvents` +
+  skip si `event.Id` ya procesado. Pendiente: distinción test/live de clave API.
 - **Sin distinción test/live de la clave API**: a diferencia del guard
   PRE/PROD de `VerifactuOptions`, no hay ninguna comprobación de que
   `Stripe:SecretKey` sea `sk_live_`/`sk_test_` acorde al entorno.

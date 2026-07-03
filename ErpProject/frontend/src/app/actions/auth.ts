@@ -97,8 +97,6 @@ async function setAuthCookies(data: {
     cookieStore.set('tenantId', data.companyId ?? '', cookieOpts(false));
 
     cookieStore.set('tenantName', data.companyName || (data.email?.split('@')[0] ?? ''), cookieOpts(false));
-
-    // Backend returns userId (camelCase via System.Text.Json)
     cookieStore.set('userId', String(data.userId ?? ''), cookieOpts(true));
 }
 

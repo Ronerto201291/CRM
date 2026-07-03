@@ -1,4 +1,6 @@
+using Erp.Application.Common.Interfaces;
 using Erp.Modules.Accounting.Application.Interfaces;
+using Erp.Modules.Accounting.Application.Services;
 using Erp.Modules.Accounting.Infrastructure.Data;
 using Erp.Modules.Accounting.Infrastructure.Jobs;
 using Erp.Modules.Accounting.Infrastructure.Services;
@@ -18,15 +20,21 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("DefaultConnection missing.");
 
-        services.AddDbContext<AccountingDbContext>(options =>
+        services.AddDbContext<AccountingDbContext>((sp, options) =>
             options.UseNpgsql(connectionString)
+               .AddInterceptors(sp.GetRequiredService<Erp.Infrastructure.Interceptors.AuditSaveChangesInterceptor>())
                .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
 
         services.AddScoped<IAccountingDbContext>(p => p.GetRequiredService<AccountingDbContext>());
+        services.AddScoped<IBankReconciliationLedgerQuery, BankReconciliationLedgerQuery>();
+        services.AddScoped<IPayrollJournalEntryGenerator, PayrollJournalEntryGenerator>();
+        services.AddScoped<IConsolidationMetricsQuery, ConsolidationMetricsQuery>();
+        services.AddScoped<AccountingService>();
         services.AddScoped<IRecargoInvoiceReader, RecargoInvoiceReader>();
         services.AddScoped<ILibroIvaEmitidasExporter, LibroIvaEmitidasExporter>();
         services.AddScoped<ILibroIvaRecibidasExporter, LibroIvaRecibidasExporter>();
         services.AddScoped<IModelo347Exporter, Modelo347Exporter>();
+        services.AddScoped<IModelo347Reader, Modelo347Reader>();
         services.AddScoped<IModelo303Exporter, Modelo303Exporter>();
         services.AddScoped<IModelo111Reader, Modelo111Reader>();
         services.AddScoped<IModelo190Reader, Modelo190Reader>();

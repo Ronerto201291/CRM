@@ -1,5 +1,6 @@
 using Erp.Domain.Entities.Api;
 using Erp.Domain.Entities.Audit;
+using Erp.Domain.Entities.Automation;
 using Erp.Domain.Entities.Core;
 using Erp.Domain.Entities.Licensing;
 using Erp.Domain.Entities.Outbox;
@@ -17,6 +18,7 @@ public interface IApplicationDbContext
     DbSet<Permission> Permissions { get; }
     DbSet<RolePermission> RolePermissions { get; }
     DbSet<UserPermission> UserPermissions { get; }
+    DbSet<UserCompany> UserCompanies { get; }
     DbSet<RefreshToken> RefreshTokens { get; }
     DbSet<TenantInvitation> TenantInvitations { get; }
 
@@ -38,6 +40,11 @@ public interface IApplicationDbContext
 
     // Audit
     DbSet<AuditLog> AuditLogs { get; }
+
+    // Automation
+    DbSet<Rule> Rules { get; }
+    DbSet<Condition> Conditions { get; }
+    DbSet<Erp.Domain.Entities.Automation.Action> Actions { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

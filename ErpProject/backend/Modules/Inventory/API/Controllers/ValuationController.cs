@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Asp.Versioning;
 
-namespace Erp.Modules.Inventory.API.Controllers
+namespace Erp.Modules.Inventory.Api.Controllers
 {
     [ApiController]
     [Route("api/v{version:apiVersion}/inventory/valuation")]

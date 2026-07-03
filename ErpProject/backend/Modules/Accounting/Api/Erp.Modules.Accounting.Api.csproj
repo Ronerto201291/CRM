@@ -11,13 +11,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\Erp.Infrastructure\Erp.Infrastructure.csproj" />
     <ProjectReference Include="..\Application\Erp.Modules.Accounting.Application.csproj" />
-    <ProjectReference Include="..\..\..\Modules\Billing\Application\Erp.Modules.Billing.Application.csproj" />
-    <ProjectReference Include="..\..\..\Modules\Crm\Application\Erp.Modules.Crm.Application.csproj" />
-    <ProjectReference Include="..\..\..\Modules\Expenses\Application\Erp.Modules.Expenses.Application.csproj" />
-    <ProjectReference Include="..\..\..\Modules\Payroll\Application\Erp.Modules.Payroll.Application.csproj" />
-    <ProjectReference Include="..\..\..\Modules\Payroll\Domain\Erp.Modules.Payroll.Domain.csproj" />
+    <ProjectReference Include="..\Infrastructure\Erp.Modules.Accounting.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

@@ -3,6 +3,8 @@
 import React, { useState, useCallback, useEffect } from "react";
 import PageContainer from "@/components/PageContainer";
 import { parseListResponse } from "@/lib/parseListResponse";
+import { updateLineAt } from "@/lib/lineForm";
+import { salesOrderCreateSchema } from '@/lib/schemas/salesOrderCreateSchema';
 
 interface Client {
     id: string;
@@ -32,6 +34,7 @@ export default function NewSalesOrderPage() {
         lines: [emptyLine()] as OrderLine[],
     });
     const [saving, setSaving] = useState(false);
+    const [formError, setFormError] = useState<string | null>(null);
 
     useEffect(() => {
         fetch('/api/proxy/clients?pageSize=500')
@@ -40,11 +43,8 @@ export default function NewSalesOrderPage() {
             .catch(() => {});
     }, []);
 
-    const updateLine = (i: number, key: keyof OrderLine, val: any) => {
-        const lines = [...form.lines];
-        (lines[i] as any)[key] = val;
-        setForm({ ...form, lines });
-    };
+    const updateLine = <K extends keyof OrderLine>(i: number, key: K, val: OrderLine[K]) =>
+        setForm({ ...form, lines: updateLineAt(form.lines, i, key, val) });
     const addLine = () => setForm({ ...form, lines: [...form.lines, emptyLine()] });
     const removeLine = (i: number) => setForm({ ...form, lines: form.lines.filter((_, idx) => idx !== i) });
 
@@ -54,16 +54,31 @@ export default function NewSalesOrderPage() {
     const fmt = (n: number) => `€ ${n.toLocaleString('es-ES', { minimumFractionDigits: 2 })}`;
 
     const submit = async () => {
-        if (!form.customerId) { alert('Selecciona un cliente'); return; }
-        if (!form.number) { alert('Introduce el número de pedido'); return; }
+        setFormError(null);
+        const parsed = salesOrderCreateSchema.safeParse({
+            customerId: form.customerId,
+            number: form.number,
+            orderDate: form.orderDate,
+            notes: form.notes,
+            lines: form.lines,
+        });
+        if (!parsed.success) {
+            setFormError(parsed.error.issues[0]?.message ?? 'Revisa el formulario');
+            return;
+        }
+        const selectedClient = clients.find(c => c.id === form.customerId);
         setSaving(true);
         try {
             const body = {
-                customerId: form.customerId,
+                clientId: form.customerId,
+                clientName: selectedClient?.name ?? '',
                 number: form.number,
                 orderDate: form.orderDate,
-                notes: form.notes,
-                lines: form.lines,
+                lines: form.lines.map(l => ({
+                    productId: l.productId || null,
+                    quantity: l.quantity,
+                    unitPrice: l.unitPrice,
+                })),
             };
             const res = await fetch('/api/proxy/v1/sales/orders', {
                 method: 'POST',
@@ -71,11 +86,10 @@ export default function NewSalesOrderPage() {
                 body: JSON.stringify(body),
             });
             if (res.ok) {
-                alert('Pedido creado correctamente');
                 window.location.href = '/sales/orders';
             } else {
                 const e = await res.json();
-                alert(e.error || e.message || 'Error al crear el pedido');
+                setFormError(e.error || e.message || 'Error al crear el pedido');
             }
         } finally {
             setSaving(false);
@@ -91,6 +105,12 @@ export default function NewSalesOrderPage() {
                 </div>
                 <a href="/sales/orders" className="btn btn-secondary">← Volver</a>
             </div>
+
+            {formError && (
+                <div className="erp-card" style={{ padding: '12px 16px', marginBottom: 16, color: 'var(--danger)', background: 'var(--danger-bg)' }}>
+                    {formError}
+                </div>
+            )}
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
                 <div className="form-group">

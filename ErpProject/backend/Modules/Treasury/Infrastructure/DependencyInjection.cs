@@ -17,14 +17,17 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("DefaultConnection missing.");
 
-        services.AddDbContext<TreasuryDbContext>(options =>
+        services.AddDbContext<TreasuryDbContext>((sp, options) =>
             options.UseNpgsql(connectionString)
+               .AddInterceptors(sp.GetRequiredService<Erp.Infrastructure.Interceptors.AuditSaveChangesInterceptor>())
                .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
 
         services.AddScoped<ITreasuryDbContext>(p => p.GetRequiredService<TreasuryDbContext>());
 
         // Servicios de dominio
         services.AddScoped<BankReconciliationService>();
+        services.AddScoped<IBankReconciliationService>(sp => sp.GetRequiredService<BankReconciliationService>());
+        services.AddScoped<ISepaXmlGenerator, SepaXmlGenerator>();
 
         // Exchange rate provider (ECB) + service
         services.AddHttpClient<EcbExchangeRateProvider>();

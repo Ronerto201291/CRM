@@ -1,5 +1,7 @@
 using Erp.Application.Common.Interfaces;
+using Erp.Application.Common.Validation;
 using Erp.Domain.Entities.Core;
+using Erp.Infrastructure.Services.Sii;
 using Erp.Modules.Billing.Application.Interfaces;
 using Erp.Modules.Billing.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -22,15 +24,28 @@ public sealed class FacturaEService : IFacturaEService
 
     private readonly IBillingDbContext     _billing;
     private readonly IApplicationDbContext _app;
+    private readonly SiiSigningService     _signer;
 
-    public FacturaEService(IBillingDbContext billing, IApplicationDbContext app)
+    public FacturaEService(
+        IBillingDbContext billing,
+        IApplicationDbContext app,
+        SiiSigningService signer)
     {
         _billing = billing;
         _app     = app;
+        _signer  = signer;
     }
 
-    public async Task<(byte[] XmlBytes, string FileName)> GenerateAsync(
-        Guid invoiceId, Guid tenantId, CancellationToken ct = default)
+    public Task<(byte[] XmlBytes, string FileName)> GenerateAsync(
+        Guid invoiceId, Guid tenantId, CancellationToken ct = default) =>
+        GenerateCoreAsync(invoiceId, tenantId, sign: false, ct);
+
+    public Task<(byte[] XmlBytes, string FileName)> GenerateSignedAsync(
+        Guid invoiceId, Guid tenantId, CancellationToken ct = default) =>
+        GenerateCoreAsync(invoiceId, tenantId, sign: true, ct);
+
+    private async Task<(byte[] XmlBytes, string FileName)> GenerateCoreAsync(
+        Guid invoiceId, Guid tenantId, bool sign, CancellationToken ct)
     {
         var invoice = await _billing.Invoices
             .Include(i => i.InvoiceLines)
@@ -48,9 +63,23 @@ public sealed class FacturaEService : IFacturaEService
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == tenantId, ct);
 
+        ValidateTaxId(company?.TaxId, "emisor");
+        ValidateTaxId(invoice.ClientNif, "cliente");
+
         var xml = BuildFacturaE(invoice, company);
-        var bytes = Encoding.UTF8.GetBytes(xml.Declaration + "\n" + xml.ToString());
-        var fileName = $"FacturaE_{invoice.Number.Replace("/", "-")}_{invoice.IssueDate:yyyyMMdd}.xsig";
+        var xmlString = xml.Declaration + "\n" + xml.ToString();
+
+        if (sign)
+        {
+            if (!_signer.IsConfigured)
+                throw new InvalidOperationException(
+                    "Certificado de firma no configurado. Configure Sii:CertPath y Sii:CertPass.");
+            xmlString = _signer.Sign(xmlString);
+        }
+
+        var bytes = Encoding.UTF8.GetBytes(xmlString);
+        var ext = sign ? "xsig" : "xml";
+        var fileName = $"FacturaE_{invoice.Number.Replace("/", "-")}_{invoice.IssueDate:yyyyMMdd}.{ext}";
 
         return (bytes, fileName);
     }
@@ -274,13 +303,15 @@ public sealed class FacturaEService : IFacturaEService
         var countryCode = CountryCodeToIso3(country);
 
         // Choose AddressInSpain vs OverseasAddress
+        var town = ExtractTown(address);
+        var postCode = ExtractPostCode(address);
+
         XElement addressEl = string.Equals(country, "ES", StringComparison.OrdinalIgnoreCase)
             ? new XElement(ns + "AddressInSpain",
-                new XElement(ns + "Address",  address.Length > 80
-                    ? address[..80] : address),
-                new XElement(ns + "PostCode",  "00000"),
-                new XElement(ns + "Town",      "N/D"),
-                new XElement(ns + "Province",  "N/D"),
+                new XElement(ns + "Address",  address.Length > 80 ? address[..80] : address),
+                new XElement(ns + "PostCode",  postCode),
+                new XElement(ns + "Town",      town),
+                new XElement(ns + "Province",  town),
                 new XElement(ns + "CountryCode", "ESP"))
             : new XElement(ns + "OverseasAddress",
                 new XElement(ns + "Address",  address.Length > 80
@@ -310,6 +341,32 @@ public sealed class FacturaEService : IFacturaEService
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────
+
+    private static string ExtractPostCode(string address)
+    {
+        if (string.IsNullOrWhiteSpace(address)) return "00000";
+        var match = System.Text.RegularExpressions.Regex.Match(address, @"\b(\d{5})\b");
+        return match.Success ? match.Groups[1].Value : "00000";
+    }
+
+    private static void ValidateTaxId(string? taxId, string role)
+    {
+        if (string.IsNullOrWhiteSpace(taxId)) return;
+        if (!SpanishTaxIdValidator.IsValid(taxId))
+            throw new InvalidOperationException($"NIF/CIF/NIE del {role} no válido: {taxId}");
+    }
+
+    private static string ExtractTown(string address)
+    {
+        if (string.IsNullOrWhiteSpace(address)) return "Desconocido";
+        var parts = address.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length > 1)
+        {
+            var last = parts[^1];
+            return last.Length > 50 ? last[..50] : last;
+        }
+        return address.Length > 50 ? address[..50] : address;
+    }
 
     /// <summary>
     /// Heuristic: Spanish company NIFs start with a letter (B, A, C, …) or are 9 chars.

@@ -1,4 +1,4 @@
-using Erp.Infrastructure.Fiscal;
+using Erp.Application.Common.Fiscal;
 using Erp.Modules.Payroll.Application.Features.Employees;
 using Erp.Modules.Payroll.Application.Features.Exports;
 using Erp.Modules.Payroll.Application.Features.Settlements;

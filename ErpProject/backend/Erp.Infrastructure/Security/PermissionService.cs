@@ -23,15 +23,18 @@ public class PermissionService : IPermissionService
     private readonly Erp.Infrastructure.Data.ErpDbContext _ctx;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IDistributedCache _cache;
+    private readonly ITenantContext _tenantContext;
 
     public PermissionService(
         Erp.Infrastructure.Data.ErpDbContext ctx,
         IHttpContextAccessor httpContextAccessor,
-        IDistributedCache cache)
+        IDistributedCache cache,
+        ITenantContext tenantContext)
     {
         _ctx = ctx;
         _httpContextAccessor = httpContextAccessor;
         _cache = cache;
+        _tenantContext = tenantContext;
     }
 
     /// <inheritdoc/>
@@ -90,18 +93,36 @@ public class PermissionService : IPermissionService
                 denied.Add(key);  // explicit deny — wins over everything
         }
 
-        // ── Step 2: Role-based permissions ─────────────────────────────────────
-        // User has a single Role (via RoleId FK). We load the role name and
-        // look up RolePermissions by RoleName (string-based ABAC approach).
+        // ── Step 2: Role-based permissions (rol de la membresía activa si existe) ─
         var user = await _ctx.Users
             .AsNoTracking()
             .IgnoreQueryFilters()
             .Include(u => u.Role)
             .FirstOrDefaultAsync(u => u.Id == userId, ct);
 
-        if (user?.Role != null)
+        string? roleName = null;
+        if (_tenantContext.TenantId is Guid activeCompanyId)
         {
-            var roleName = user.Role.Name;
+            var membership = await _ctx.UserCompanies
+                .AsNoTracking()
+                .IgnoreQueryFilters()
+                .Include(uc => uc.Role)
+                .FirstOrDefaultAsync(uc => uc.UserId == userId && uc.CompanyId == activeCompanyId, ct);
+
+            roleName = membership?.Role?.Name;
+            if (roleName == null && membership?.RoleId != null)
+            {
+                roleName = await _ctx.Roles.IgnoreQueryFilters()
+                    .Where(r => r.Id == membership.RoleId)
+                    .Select(r => r.Name)
+                    .FirstOrDefaultAsync(ct);
+            }
+        }
+
+        roleName ??= user?.Role?.Name;
+
+        if (!string.IsNullOrEmpty(roleName))
+        {
             var rolePerms = await _ctx.RolePermissions
                 .AsNoTracking()
                 .Include(rp => rp.Permission)

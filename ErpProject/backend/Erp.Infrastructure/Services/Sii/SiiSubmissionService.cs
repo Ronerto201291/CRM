@@ -20,6 +20,7 @@ public class SiiSubmissionService
     private readonly ILogger<SiiSubmissionService> _logger;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly string _endpoint;
+    private readonly bool _sendEnabled;
 
     private const string TestEndpoint = "https://www1.agenciatributaria.gob.es/wlpl/SSII-FACT/ws/fe/SiiFactFEV1SOAP";
     private const string ProdEndpoint = "https://www2.agenciatributaria.gob.es/wlpl/SSII-FACT/ws/fe/SiiFactFEV1SOAP";
@@ -29,6 +30,7 @@ public class SiiSubmissionService
         _logger             = logger;
         _httpClientFactory  = httpClientFactory;
         _endpoint           = (config["Sii:Environment"] ?? "test") == "prod" ? ProdEndpoint : TestEndpoint;
+        _sendEnabled        = config.GetValue("Sii:SendEnabled", false);
     }
 
     /// <summary>
@@ -49,6 +51,17 @@ public class SiiSubmissionService
             : "SuministroLRFacturasRecibidas";
 
         var envelope = BuildSoapEnvelope(signedXml, soapBody);
+
+        if (!_sendEnabled)
+        {
+            _logger.LogInformation(
+                "SII {Type}: envío deshabilitado (Sii:SendEnabled=false). SOAP preparado ({Len} chars) para {Endpoint}.",
+                invoiceType, envelope.Length, _endpoint);
+            return new SiiSubmissionResult(
+                false,
+                $"SII: SOAP preparado para {_endpoint}. Active Sii:SendEnabled=true para envío HTTP.",
+                null);
+        }
 
         try
         {
@@ -83,17 +96,21 @@ public class SiiSubmissionService
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private static string BuildSoapEnvelope(string signedXml, string soapBodyElement)
+    private static string BuildSoapEnvelope(string signedXml, string _)
     {
+        var bodyContent = signedXml.Trim();
+        if (bodyContent.StartsWith("<?xml", StringComparison.Ordinal))
+        {
+            var idx = bodyContent.IndexOf("?>", StringComparison.Ordinal);
+            if (idx >= 0) bodyContent = bodyContent[(idx + 2)..].Trim();
+        }
+
         return $"""
             <?xml version="1.0" encoding="UTF-8"?>
-            <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
-                              xmlns:sii="https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/ssii/fact/ws/SuministroLR.xsd">
+            <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
               <soapenv:Header/>
               <soapenv:Body>
-                <sii:{soapBodyElement}>
-                  {signedXml}
-                </sii:{soapBodyElement}>
+                {bodyContent}
               </soapenv:Body>
             </soapenv:Envelope>
             """;

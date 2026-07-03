@@ -17,8 +17,9 @@ public class JwtProvider : IJwtProvider
         _configuration = configuration;
     }
 
-    public string Generate(User user)
+    public string Generate(User user, Guid? activeCompanyId = null)
     {
+        var companyId = activeCompanyId ?? user.CompanyId;
         var secret = _configuration["Jwt:Secret"]
             ?? throw new InvalidOperationException("Jwt:Secret is not configured.");
         var issuer = _configuration["Jwt:Issuer"]
@@ -30,7 +31,7 @@ public class JwtProvider : IJwtProvider
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new Claim(JwtRegisteredClaimNames.Email, user.Email),
-            new Claim("CompanyId", user.CompanyId.ToString()),
+            new Claim("CompanyId", companyId.ToString()),
             new Claim(ClaimTypes.Name, $"{user.FirstName} {user.LastName}")
         };
 

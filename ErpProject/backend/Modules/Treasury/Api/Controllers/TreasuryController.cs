@@ -150,6 +150,68 @@ public class TreasuryController : ControllerBase
         catch (InvalidOperationException) { return NotFound(); }
     }
 
+    /// <summary>Genera XML SEPA pain.001 para cobrar el efecto (cliente → empresa).</summary>
+    [HttpPost("effects/{id:guid}/sepa")]
+    public async Task<IActionResult> GenerateEffectSepa(
+        Guid id, [FromBody] GenerateEffectSepaRequest req, CancellationToken ct)
+    {
+        try
+        {
+            var result = await _mediator.Send(
+                new GenerateCashEffectSepaCommand(id, req.ClientIban, req.ClientBic), ct);
+            return File(result.XmlBytes, "application/xml", result.FileName);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>Descarga el último XML SEPA generado para el efecto.</summary>
+    [HttpGet("effects/{id:guid}/sepa")]
+    public async Task<IActionResult> DownloadEffectSepa(Guid id, CancellationToken ct)
+    {
+        var effect = await _mediator.Send(new GetCashEffectByIdQuery(id), ct);
+        if (effect?.SEPAXml is null)
+            return NotFound(new { error = "No hay XML SEPA generado para este efecto." });
+
+        var bytes = System.Text.Encoding.UTF8.GetBytes(effect.SEPAXml);
+        var fileName = $"SEPA_Cobro_{effect.EffectNumber}.xml";
+        return File(bytes, "application/xml", fileName);
+    }
+
+    /// <summary>Genera XML SEPA pain.008 (adeudo directo) para cobrar el efecto.</summary>
+    [HttpPost("effects/{id:guid}/sepa/sdd")]
+    public async Task<IActionResult> GenerateEffectSdd(
+        Guid id, [FromBody] GenerateEffectSddRequest req, CancellationToken ct)
+    {
+        try
+        {
+            var result = await _mediator.Send(
+                new GenerateCashEffectSddCommand(
+                    id, req.ClientIban, req.ClientBic,
+                    req.CreditorId, req.MandateId, req.MandateSignatureDate), ct);
+            return File(result.XmlBytes, "application/xml", result.FileName);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>Descarga el último XML SEPA SDD generado para el efecto.</summary>
+    [HttpGet("effects/{id:guid}/sepa/sdd")]
+    public async Task<IActionResult> DownloadEffectSdd(Guid id, CancellationToken ct)
+    {
+        var effect = await _mediator.Send(new GetCashEffectByIdQuery(id), ct);
+        if (effect?.SEPAXml is null || !effect.SEPAXml.Contains("CstmrDrctDbtInitn", StringComparison.Ordinal))
+            return NotFound(new { error = "No hay XML SEPA SDD generado para este efecto." });
+
+        var bytes = System.Text.Encoding.UTF8.GetBytes(effect.SEPAXml);
+        var fileName = $"SEPA_SDD_{effect.EffectNumber}.xml";
+        return File(bytes, "application/xml", fileName);
+    }
+
     // ─── Payment Orders ─────────────────────────────────────────────────────────
 
     [HttpGet("payment-orders")]
@@ -221,6 +283,15 @@ public record CreateCashEffectRequest(
     decimal Amount, Guid? BankAccountId, string? Notes);
 
 public record UpdateEffectStatusRequest(string NewStatus);
+
+public record GenerateEffectSepaRequest(string ClientIban, string? ClientBic);
+
+public record GenerateEffectSddRequest(
+    string ClientIban,
+    string? ClientBic,
+    string CreditorId,
+    string MandateId,
+    DateTime MandateSignatureDate);
 
 public record CreatePaymentOrderRequest(
     string PaymentType, string BeneficiaryName, string BeneficiaryTaxId,

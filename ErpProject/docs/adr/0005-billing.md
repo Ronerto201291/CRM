@@ -69,6 +69,11 @@ pageSize }`) con header `X-Total-Count`; parámetros `page` (default 1) y
   hash, y finalmente se publica `InvoiceApprovedEvent` (MediatR) para que
   Accounting genere el asiento contable. Intentar bloquear una factura ya
   bloqueada lanza `InvalidOperationException`.
+- **Veri*Factu — anulación y auditoría** (ADR-0018 #0a ✅): `POST
+  /api/invoices/{id}/verifactu/anular`; `VerifactuSubmissionLog`;
+  `GET /api/invoices/{id}/verifactu/submissions`; leyenda PDF.
+- **Modo no-VERI*FACTU**: `Verifactu:SubmissionMode=LocalOnly` — registro local
+  sin remisión TIKE (`VerifactuRealtimeSubmission=false` en factura).
 - **IVA español**: `InvoiceLine.TaxRate` (21/10/4/0-Exento), con
   `TipoOperacion` ("Nacional" / "IntraComunitario" art. 25 LIVA /
   "Exportacion" art. 21 LIVA) para casillas del Modelo 303. Si la línea es
@@ -97,6 +102,10 @@ pageSize }`) con header `X-Total-Count`; parámetros `page` (default 1) y
   (`/api/v1/billing/facturae/{invoiceId}`) despacha `GenerateFacturaEQuery` →
   `IFacturaEService` genera el XML bajo demanda (requiere factura bloqueada).
   Es un servicio sin estado: genera el XML a partir del `Invoice` en cada llamada.
+  **Nota (ADR-0018 #0c):** `GET .../signed` (XAdES si cert SII); `GET .../validate`
+  (`FacturaEXmlStructureValidator` offline); `POST .../submit-face` (SOAP validado
+  con `FaceSoapStructureValidator` + HTTP opcional `Face:SendEnabled`); `.xml` sin
+  firmar en descarga estándar.
 - **PDF**: `GET /api/invoices/{id}/pdf` (`IInvoicePdfService`) y envío por
   email (`POST /api/invoices/{id}/send`), ambos exigen `IsLocked`.
 

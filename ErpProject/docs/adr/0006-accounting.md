@@ -15,10 +15,8 @@ recargo de equivalencia e inversión del sujeto pasivo (ISP).
 El código vive en `backend/Modules/Accounting/` siguiendo la estructura
 estándar descrita en ADR-0001 (`Api/Controllers`, `Application/{Commands,
 Queries,Handlers}`, `Domain/Entities`, `Infrastructure/{Data,Migrations}`).
-Las entidades núcleo de contabilidad (`Account`, `JournalEntry`,
-`JournalEntryLine`, `FiscalPeriod`) están definidas en el proyecto core
-`Erp.Domain/Entities/Accounting/` en lugar de en el propio módulo, y se
-consumen a través de `IAccountingDbContext`. El frontend vive bajo
+Las entidades núcleo de contabilidad viven en `Modules/Accounting/Domain/Entities/`
+(ADR-0018 #14 ✅). Se consumen a través de `IAccountingDbContext`. El frontend vive bajo
 `frontend/src/app/accounting/`.
 
 ## Decisión
@@ -61,7 +59,7 @@ Los 16 controladores de `Api/Controllers/` se agrupan así:
   1065/2007), Modelo 190, Modelo 130, Modelo 200/202 IS (esqueletos XML),
   Modelo 390 (XML oficial AEAT, resumen anual de los 4 trimestres) y Modelo
   349 (operaciones intracomunitarias). Todas las respuestas de fichero pasan
-  por `FiscalExportHeaders.MarkAsNonOfficial` (`Erp.Infrastructure.Fiscal`)
+  por `FiscalExportHeaders.MarkAsNonOfficial` (`Erp.Application/Common/Fiscal`)
   para advertir que no sustituyen la presentación oficial sin validación.
 - `DeferredEntriesController` (`api/deferred-entries`) — periodificación
   contable (cuentas 480/485 PGC), con reconocimiento mensual manual o vía job
@@ -82,13 +80,12 @@ Los 16 controladores de `Api/Controllers/` se agrupan así:
   de dotación automático (cuentas 6xx/4xx-14x PGC) y liberación con asiento
   inverso a cuenta 795 (Exceso de provisiones).
 
-**IVA, modelos AEAT y fiscalidad especial (mayoritariamente stubs/mock):**
-`AeatModelsController` e
-`IvaManagementController`/`InversionSujetoActivoController` (rutas bajo
-`api/v1/accounting/{aeat,iva,isp}`) exponen endpoints de
-cálculo/consulta, pero la mayoría **devuelven datos simulados hardcodeados**
-(`Guid.NewGuid()`, importes fijos) en lugar de persistir o leer del DbContext —
-son claramente placeholders pendientes de conectar a datos reales.
+**IVA, modelos AEAT y fiscalidad especial:**
+Los controllers mock (`AeatModelsController`, `IvaManagementController`,
+`InversionSujetoActivoController`, `AgingController`) fueron **eliminados**
+(ADR-0018 #3c). Modelo 303/347 reales vía `Modelo303Reader`/`Modelo347Reader`
+y rutas de export (`#24`/`#25`); estados financieros vía `ReportsController`
+(PyG/balance) y `FinancialStatementsController` (EFE/patrimonio, `#26`).
 `ViesController` (`api/v1/accounting/vies`) despacha `ValidateViesCommand` vía
 `IMediator`, invocando el mismo `IViesService` SOAP que `TaxController` y
 registrando la consulta en `IntraEuOperations` (ver Evaluación de calidad
@@ -105,9 +102,9 @@ de ser mock (ver Evaluación de calidad arquitectónica más abajo); `VatControl
 sigue siendo un stub. Validación VIES real disponible en dos rutas equivalentes:
 `TaxController` (`api/tax/vies/validate`, ver ADR-0013) y `ViesController`
 (`api/v1/accounting/vies/validate`, con persistencia en `IntraEuOperations`).
-`FinancialStatementsController` (`cash-flow`, `equity`) y
-`AgingController` (`receivables`, `payables`) también devuelven datos fijos
-de ejemplo.
+`FinancialStatementsController` (`cash-flow`, `equity`, `income-statement`, `balance-sheet`)
+y `ReportsController` (`diario`, `mayor`, `balance`, `pyg`) calculan desde
+`JournalEntry`/`JournalEntryLine` y plan de cuentas PGC.
 
 ### Frontend
 `frontend/src/app/accounting/` contiene subrutas para cada área: `aeat`,
@@ -172,8 +169,9 @@ dominio, sin intervención manual):
   sentido Treasury → Accounting.
 - **Fiscal/SII/VeriFactu (ADR-0013):** los modelos AEAT (303, 390, 347, etc.)
   generados aquí son insumo para la presentación telemática que documenta
-  ADR-0013; la validación VIES "real" vive en `Erp.Api/Controllers/TaxController.cs`,
-  no en el `ViesController` (stub) de este módulo.
+  ADR-0013; la validación VIES real está disponible en dos rutas equivalentes:
+  `TaxController` (`api/tax/vies/validate`) y `ViesController` (con
+  persistencia en `IntraEuOperations`, ADR-0018 #5).
 - **CRM/Payroll:** `AccountingExportController` también agrega datos de
   `ICrmDbContext` e `IPayrollDbContext` para Modelo 347 y Modelo 190/111
   respectivamente (retenciones a trabajadores vía nóminas).
@@ -181,12 +179,14 @@ dominio, sin intervención manual):
 ## Evaluación de calidad arquitectónica
 > Metodología completa y hallazgos transversales en `ADR-0018`.
 
-Este es el módulo con más incumplimientos históricos del checklist:
-`IAccountingDbContext` expone 29 DbSets (ISP, ver
-`GetFiscalPeriodsHandler` que solo usa uno); y 5 de sus 16 controllers todavía
-no usan `IMediator` — tienen lógica de negocio inline (los ya documentados
-como mock: AeatModels, IvaManagement, InversionSujetoActivo,
-FinancialStatements, Aging).
+**Controllers delgados:** los 16/16 controllers usan `IMediator` (ADR-0018 #3c,
+#4, #5). Los stubs mock fueron eliminados; `FinancialStatementsController`
+delega en handlers con cálculo real parcial (#26).
+
+**Pendiente (sin cerrar en backlog):** `IAccountingDbContext` expone 29 DbSets
+(ISP — `GetFiscalPeriodsHandler` solo usa `FiscalPeriods`). `RecargoController.Create`
+sigue siendo stub sin persistencia. `VatController.DeclareModelo330` sigue sin
+implementar. OCP: tasas IVA en `Dictionary`/`switch` (`CalculateVatCommand`).
 
 **Corregido (backlog #4):** `AccountingExportController` (~350 líneas, 16 rutas)
 delega todas las exportaciones en `IMediator` + exporters en Infrastructure;
@@ -231,35 +231,22 @@ usado por `TaxController`). El frontend
   reprocesamiento de eventos.
 - Las cuentas contables se resuelven siempre por `CompanyId` + `Code`
   (multi-tenant); nunca hardcodear un `AccountId`.
-- Antes de extender los controladores "stub" (`AeatModelsController`,
-  `IvaManagementController`,
-  `InversionSujetoActivoController`, `FinancialStatementsController`,
-  `AgingController`), verificar si ya existe lógica real equivalente en
-  `AccountingExportController` o en `Erp.Api/Controllers/TaxController.cs`
-  para no duplicar. `VatController`, `ProrrataController`, `RecargoController`
-  y `ViesController` ya no están en esta lista (ver Evaluación de calidad
-  arquitectónica).
+- Antes de añadir endpoints de IVA/modelos AEAT nuevos, verificar si ya existe
+  lógica en `AccountingExportController`, `ReportsController` o
+  `Erp.Api/Controllers/TaxController.cs` para no duplicar. No reintroducir
+  controllers mock — implementar en handlers MediatR con datos reales.
 - Respetar el prefijo `FiscalExportHeaders.MarkAsNonOfficial` en cualquier
   exportación fiscal nueva, para no inducir a pensar que sustituye la
   presentación oficial ante la AEAT.
 
 ## Consecuencias
-- Existe una inconsistencia real de madurez dentro del módulo: los
-  controladores de cierre, presupuestos, activos fijos, provisiones y
-  exportación fiscal están completamente implementados sobre datos reales,
-  mientras que buena parte de los controladores de IVA especial (ISP, modelos
-  AEAT vía `AeatModelsController`) son stubs que devuelven datos de ejemplo —
-  cualquier trabajo futuro debe verificar primero si un endpoint es real o mock
-  antes de asumir su comportamiento.
-- Las entidades núcleo (`Account`, `JournalEntry`) viven en `Erp.Domain`
-  (core) y no en `Modules/Accounting/Domain`, lo que rompe ligeramente el
-  aislamiento modular descrito en ADR-0001; cualquier cambio de esquema en
-  esas entidades afecta directamente a Billing, Expenses y Treasury a través
-  de `IAccountingDbContext`.
-- **Corregido:** `ViesController` ya no es mock — despacha
-  `ValidateViesCommand` vía `IMediator` (mismo `IViesService` que
-  `TaxController`, ver ítem corregido arriba en Evaluación de calidad
-  arquitectónica).
+- La madurez del módulo es heterogénea: cierre, presupuestos, activos fijos,
+  provisiones, exportación fiscal y modelos 303/347 están sobre datos reales;
+  quedan huecos puntuales (`RecargoController.Create`, `DeclareModelo330`,
+  ISP/aging sin controller dedicado tras eliminar los stubs).
+- **Corregido (ADR-0018 #14):** las entidades núcleo (`Account`,
+  `JournalEntry`, `FiscalPeriod`, etc.) viven en
+  `Modules/Accounting/Domain/Entities/`, no en `Erp.Domain`.
 - **Corregido:** `ProrrataController.CalculateProrrata` ya no calcula inline
   con un `CalculateProrrataRequest` propio — ahora despacha
   `CalculateProrrataCommand` vía `IMediator`, que persiste un
@@ -274,9 +261,8 @@ usado por `TaxController`). El frontend
   nombres de campo del frontend (es una calculadora manual: el usuario
   introduce los ingresos, no se derivan de `VatTransactions`) y corrige ese
   bug real de contrato, además de la duplicación de lógica.
-- `frontend/src/app/accounting/iva-registers/page.tsx` es una página 100%
-  estática: cifras de cabecera hardcodeadas que ni siquiera coinciden con
-  las de la tabla que muestra debajo, y botones "Descargar .TXT"/"Enviar a
-  SII" sin `onClick`. Es el contrapunto de frontend al ya conocido
-  `IvaManagementController` (backend) mock (ver catálogo de mock en
-  ADR-0018, ítem 18 del backlog).
+- **Corregido (ADR-0018 #18):** `frontend/src/app/accounting/iva-registers/page.tsx`
+  carga resumen real desde facturas/gastos, descarga CSV vía export y enlaza a
+  `/sii` para envío.
+- **Corregido (ADR-0018 #19b):** lectura cross-módulo de exportadores solo en
+  `Accounting.Infrastructure`; `Accounting.Api` sin refs a otros módulos.

@@ -1,6 +1,4 @@
 using Erp.Application.Common.Interfaces;
-using Erp.Modules.Billing.Application.Interfaces;
-using Erp.Modules.Inventory.Application.Interfaces;
 using Hangfire;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -18,15 +16,15 @@ namespace Erp.Infrastructure.Automation;
 /// </summary>
 public class RuleEvaluatorJob
 {
-    private readonly IBillingDbContext   _billing;
-    private readonly IInventoryDbContext _inventory;
+    private readonly IAutomationBillingQuery _billing;
+    private readonly IAutomationInventoryQuery _inventory;
     private readonly IEmailService       _email;
     private readonly IApplicationDbContext _app;
     private readonly ILogger<RuleEvaluatorJob> _logger;
 
     public RuleEvaluatorJob(
-        IBillingDbContext billing,
-        IInventoryDbContext inventory,
+        IAutomationBillingQuery billing,
+        IAutomationInventoryQuery inventory,
         IEmailService email,
         IApplicationDbContext app,
         ILogger<RuleEvaluatorJob> logger)
@@ -43,10 +41,12 @@ public class RuleEvaluatorJob
     {
         _logger.LogInformation("RuleEvaluatorJob: iniciando evaluación a {Time}", DateTime.UtcNow);
 
+        var dbEvaluator = new DatabaseRuleEvaluator(_app, _billing, _inventory, _email, _logger);
+        var dbTask = dbEvaluator.EvaluateAsync(ct);
         var overdueTask = CheckOverdueInvoicesAsync(ct);
         var stockTask   = CheckStockReorderPointsAsync(ct);
 
-        await Task.WhenAll(overdueTask, stockTask);
+        await Task.WhenAll(dbTask, overdueTask, stockTask);
 
         _logger.LogInformation("RuleEvaluatorJob: completado.");
     }
@@ -61,24 +61,7 @@ public class RuleEvaluatorJob
     {
         var today = DateTime.UtcNow.Date;
 
-        // Facturas vencidas (DueDate < hoy, no pagadas, no canceladas)
-        var overdueInvoices = await _billing.Invoices
-            .IgnoreQueryFilters()
-            .Where(i => i.DueDate.Date < today
-                     && i.Status != "Paid"
-                     && i.Status != "Cancelled"
-                     && i.Status != "Draft")
-            .Select(i => new
-            {
-                i.Id,
-                i.Number,
-                i.CompanyId,
-                i.ClientName,
-                i.Total,
-                DueDate = i.DueDate
-            })
-            .AsNoTracking()
-            .ToListAsync(ct);
+        var overdueInvoices = await _billing.GetOverdueInvoicesAsync(today, ct);
 
         if (!overdueInvoices.Any())
         {
@@ -150,28 +133,8 @@ public class RuleEvaluatorJob
     /// </summary>
     private async Task CheckStockReorderPointsAsync(CancellationToken ct)
     {
-        // Cargar todos los productos con punto de reorden configurado
-        var products = await _inventory.InventoryProducts
-            .IgnoreQueryFilters()
-            .Where(p => p.ReorderPoint > 0)
-            .Select(p => new { p.Id, p.CompanyId, p.Name, p.SKU, p.ReorderPoint, p.ReorderQty })
-            .AsNoTracking()
-            .ToListAsync(ct);
-
-        if (!products.Any()) return;
-
-        // Stock actual por producto (suma de todos los almacenes)
-        var stockByProduct = await _inventory.Stocks
-            .IgnoreQueryFilters()
-            .GroupBy(s => s.ProductId)
-            .Select(g => new { ProductId = g.Key, TotalQty = g.Sum(s => s.Quantity) })
-            .AsNoTracking()
-            .ToListAsync(ct);
-
-        var stockMap = stockByProduct.ToDictionary(s => s.ProductId, s => s.TotalQty);
-
-        var alertProducts = products
-            .Where(p => stockMap.GetValueOrDefault(p.Id, 0) <= p.ReorderPoint)
+        var alertProducts = (await _inventory.GetProductsWithReorderPointAsync(ct))
+            .Where(p => p.CurrentStock <= p.ReorderPoint)
             .ToList();
 
         if (!alertProducts.Any())
@@ -206,10 +169,7 @@ public class RuleEvaluatorJob
             var subject = $"[ERP] Alerta de stock: {count} producto{(count > 1 ? "s" : "")} por debajo del punto de reorden";
 
             var bodyLines = items.Select(p =>
-            {
-                var actual = stockMap.GetValueOrDefault(p.Id, 0);
-                return $"  • {p.Name} ({p.SKU}) — Stock actual: {actual} | Punto de reorden: {p.ReorderPoint} | Cantidad a pedir: {p.ReorderQty}";
-            });
+                $"  • {p.Name} ({p.SKU}) — Stock actual: {p.CurrentStock} | Punto de reorden: {p.ReorderPoint} | Cantidad a pedir: {p.ReorderQty}");
 
             var body = $"""
                 Estimado equipo de {company.Name},

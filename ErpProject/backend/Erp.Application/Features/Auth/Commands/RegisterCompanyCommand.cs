@@ -53,7 +53,8 @@ public class RegisterCompanyHandler : IRequestHandler<RegisterCompanyCommand, Re
         // Validar unicidad de email
         var emailExists = await _ctx.Users.IgnoreQueryFilters()
             .AnyAsync(u => u.Email == req.AdminEmail, ct);
-        if (emailExists) throw new InvalidOperationException("El email ya está registrado.");
+        if (emailExists)
+            throw new InvalidOperationException("El email ya está registrado. Usa «Añadir empresa» si ya tienes cuenta.");
 
         // Crear suscripción Free
         var subscription = new Subscription
@@ -103,6 +104,15 @@ public class RegisterCompanyHandler : IRequestHandler<RegisterCompanyCommand, Re
             IsActive = true
         };
         _ctx.Users.Add(user);
+
+        _ctx.UserCompanies.Add(new UserCompany
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            CompanyId = company.Id,
+            RoleId = adminRole.Id,
+            IsDefault = true
+        });
 
         await _ctx.SaveChangesAsync(ct);
 

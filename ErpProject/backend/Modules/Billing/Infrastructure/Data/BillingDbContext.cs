@@ -19,6 +19,7 @@ public class BillingDbContext : ModuleDbContextBase, IBillingDbContext
     public DbSet<QuoteLine> QuoteLines { get; set; } = null!;
     public DbSet<QuoteStatusHistory> QuoteStatusHistory { get; set; } = null!;
     public DbSet<QuoteNumberSeries> QuoteNumberSeries { get; set; } = null!;
+    public DbSet<VerifactuSubmissionLog> VerifactuSubmissionLogs { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -100,6 +101,9 @@ public class BillingDbContext : ModuleDbContextBase, IBillingDbContext
         // QuoteNumberSeries: único por (CompanyId, Year, Prefix)
         modelBuilder.Entity<QuoteNumberSeries>()
             .HasIndex(s => new { s.CompanyId, s.Year, s.Prefix }).IsUnique();
+
+        modelBuilder.Entity<VerifactuSubmissionLog>()
+            .HasIndex(l => new { l.CompanyId, l.InvoiceId });
 
         // Soft cross-module references (columnas sin FK EF, aplicadas en application layer)
         // Quote.ClientId → CRM.Clients / Leads

@@ -60,6 +60,27 @@ public record UpdateCashEffectStatusCommand(
     string NewStatus
 ) : IRequest<CashEffectDto>;
 
+public record GenerateCashEffectSepaCommand(
+    Guid EffectId,
+    string ClientIban,
+    string? ClientBic
+) : IRequest<CashEffectSepaResult>;
+
+public record GenerateCashEffectSddCommand(
+    Guid EffectId,
+    string ClientIban,
+    string? ClientBic,
+    string CreditorId,
+    string MandateId,
+    DateTime MandateSignatureDate
+) : IRequest<CashEffectSepaResult>;
+
+public record CashEffectSepaResult(
+    Guid EffectId,
+    byte[] XmlBytes,
+    string FileName,
+    bool Stored);
+
 // ─── Payment Orders ───────────────────────────────────────────────────────────
 
 public record CreatePaymentOrderCommand(

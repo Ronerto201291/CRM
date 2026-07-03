@@ -146,7 +146,15 @@ public class StripeService
             throw;
         }
 
-        _logger.LogInformation("Stripe webhook received: {EventType}", stripeEvent.Type);
+        _logger.LogInformation("Stripe webhook received: {EventType} ({EventId})", stripeEvent.Type, stripeEvent.Id);
+
+        var alreadyProcessed = await _licensing.StripeWebhookEvents
+            .AnyAsync(e => e.EventId == stripeEvent.Id, ct);
+        if (alreadyProcessed)
+        {
+            _logger.LogInformation("Stripe webhook {EventId} already processed — skipping", stripeEvent.Id);
+            return;
+        }
 
         switch (stripeEvent.Type)
         {
@@ -174,6 +182,14 @@ public class StripeService
                 _logger.LogInformation("Unhandled Stripe event: {Type}", stripeEvent.Type);
                 break;
         }
+
+        _licensing.StripeWebhookEvents.Add(new StripeWebhookEvent
+        {
+            EventId = stripeEvent.Id,
+            EventType = stripeEvent.Type,
+            ProcessedAt = DateTime.UtcNow
+        });
+        await _licensing.SaveChangesAsync(ct);
     }
 
     private async Task HandleCheckoutCompleted(Session session, CancellationToken ct)

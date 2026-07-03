@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Application\Erp.Modules.Inventory.Application.csproj" />
+    <ProjectReference Include="..\Infrastructure\Erp.Modules.Inventory.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

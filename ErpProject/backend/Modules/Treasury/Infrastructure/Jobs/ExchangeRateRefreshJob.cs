@@ -43,7 +43,7 @@ public class ExchangeRateRefreshJob : BackgroundService
             {
                 using var scope = _serviceProvider.CreateScope();
                 var rateService = scope.ServiceProvider.GetRequiredService<IExchangeRateService>();
-                await rateService.RefreshRatesAsync(stoppingToken);
+                await rateService.RefreshAllTenantsRatesAsync(stoppingToken);
             }
             catch (Exception ex)
             {

@@ -15,7 +15,6 @@ using Microsoft.EntityFrameworkCore;
 // by per-module DbContexts (BillingDbContext, CrmDbContext, etc.).
 using Erp.Modules.Billing.Domain.Entities;
 using Erp.Modules.Crm.Domain.Entities;
-using Erp.Domain.Entities.Accounting;
 using Erp.Modules.Expenses.Domain.Entities;
 using Erp.Modules.Inventory.Domain.Entities;
 
@@ -44,6 +43,7 @@ public class ErpDbContext : DbContext, IApplicationDbContext, ILicensingDbContex
     public DbSet<Permission> Permissions { get; set; } = null!;
     public DbSet<RolePermission> RolePermissions { get; set; } = null!;
     public DbSet<UserPermission> UserPermissions { get; set; } = null!;
+    public DbSet<UserCompany> UserCompanies { get; set; } = null!;
     public DbSet<RefreshToken> RefreshTokens { get; set; } = null!;
 
     // Core Modules
@@ -58,6 +58,7 @@ public class ErpDbContext : DbContext, IApplicationDbContext, ILicensingDbContex
     public DbSet<Subscription> Subscriptions { get; set; } = null!;
     public DbSet<Plan> Plans { get; set; } = null!;
     public DbSet<PlanModule> PlanModules { get; set; } = null!;
+    public DbSet<StripeWebhookEvent> StripeWebhookEvents { get; set; } = null!;
 
     // Outbox (event delivery guarantee)
     public DbSet<OutboxMessage> OutboxMessages { get; set; } = null!;
@@ -88,9 +89,9 @@ public class ErpDbContext : DbContext, IApplicationDbContext, ILicensingDbContex
         modelBuilder.Ignore<Supplier>();
         modelBuilder.Ignore<Contact>();
         modelBuilder.Ignore<ActivityLog>();
-        modelBuilder.Ignore<Account>();
-        modelBuilder.Ignore<JournalEntry>();
-        modelBuilder.Ignore<JournalEntryLine>();
+        modelBuilder.Ignore<Erp.Modules.Accounting.Domain.Entities.Account>();
+        modelBuilder.Ignore<Erp.Modules.Accounting.Domain.Entities.JournalEntry>();
+        modelBuilder.Ignore<Erp.Modules.Accounting.Domain.Entities.JournalEntryLine>();
         modelBuilder.Ignore<ExpenseUpload>();
         modelBuilder.Ignore<ExpenseDocument>();
         modelBuilder.Ignore<ExpenseDocumentLine>();
@@ -144,8 +145,29 @@ public class ErpDbContext : DbContext, IApplicationDbContext, ILicensingDbContex
             .HasForeignKey(up => up.PermissionId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        modelBuilder.Entity<UserCompany>()
+            .HasIndex(uc => new { uc.UserId, uc.CompanyId })
+            .IsUnique();
+
+        modelBuilder.Entity<UserCompany>()
+            .HasOne(uc => uc.User)
+            .WithMany()
+            .HasForeignKey(uc => uc.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<UserCompany>()
+            .HasOne(uc => uc.Company)
+            .WithMany()
+            .HasForeignKey(uc => uc.CompanyId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         // Multi-tenant Query Filters (core entities only)
         modelBuilder.Entity<User>().HasQueryFilter(e => e.CompanyId == _tenantContext.TenantId);
+        modelBuilder.Entity<User>()
+            .HasIndex(u => new { u.Email, u.CompanyId })
+            .IsUnique();
+
+        modelBuilder.Entity<StripeWebhookEvent>().HasKey(e => e.EventId);
         modelBuilder.Entity<Role>().HasQueryFilter(e => e.CompanyId == _tenantContext.TenantId);
         modelBuilder.Entity<TaxReport>().HasQueryFilter(e => e.CompanyId == _tenantContext.TenantId);
         modelBuilder.Entity<Subscription>().HasQueryFilter(e => e.CompanyId == _tenantContext.TenantId);

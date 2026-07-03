@@ -10,7 +10,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Application\Erp.Modules.Payroll.Application.csproj" />
-    <ProjectReference Include="..\..\Accounting\Application\Erp.Modules.Accounting.Application.csproj" />
-    <ProjectReference Include="..\..\..\Erp.Infrastructure\Erp.Infrastructure.csproj" />
+    <ProjectReference Include="..\Infrastructure\Erp.Modules.Payroll.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

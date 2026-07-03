@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import PageContainer from '@/components/PageContainer';
+import AccessibleModal from '@/components/AccessibleModal';
 import { parseListResponse } from '@/lib/parseListResponse';
 
 type TreasuryTab = 'accounts' | 'movements' | 'effects' | 'orders' | 'forecast';
@@ -30,6 +31,8 @@ const EMPTY_ACCOUNT = { name: '', iban: '', bic: '', bankName: '', notes: '' };
 const EMPTY_EFFECT = { clientName: '', clientTaxId: '', effectNumber: '', issueDate: '', dueDate: '', amount: '', bankAccountId: '' };
 const EMPTY_ORDER = { paymentType: 'Supplier', beneficiaryName: '', beneficiaryTaxId: '', beneficiaryIban: '', description: '', amount: '', scheduledDate: '', bankAccountId: '' };
 
+type TreasuryForm = Partial<typeof EMPTY_ACCOUNT & typeof EMPTY_EFFECT & typeof EMPTY_ORDER & { csv: string }>;
+
 const STATUS_EFFECT: Record<string, string> = {
     Pending: 'badge-warning', Accepted: 'badge-info', Paid: 'badge-success',
     Returned: 'badge-danger', Cancelled: 'badge-gray',
@@ -48,7 +51,7 @@ export default function TreasuryPage() {
     const [forecast, setForecast] = useState<ForecastItem[]>([]);
     const [loading, setLoading] = useState(false);
     const [showModal, setShowModal] = useState<string | null>(null);
-    const [form, setForm] = useState<any>({});
+    const [form, setForm] = useState<TreasuryForm>({});
     const [saving, setSaving] = useState(false);
     const [importCsv, setImportCsv] = useState('');
     const [reconciling, setReconciling] = useState(false);
@@ -438,13 +441,11 @@ export default function TreasuryPage() {
             )}
 
             {/* ── MODAL: Nueva cuenta ── */}
-            {showModal === 'account' && (
-                <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowModal(null); }}>
-                    <div className="modal-box" style={{ maxWidth: '520px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                            <h2 style={{ fontSize: '18px', fontWeight: 700 }}>Nueva Cuenta Bancaria</h2>
-                            <button onClick={() => setShowModal(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '20px', color: 'var(--text-muted)' }}>✕</button>
-                        </div>
+            <AccessibleModal open={showModal === 'account'} onClose={() => setShowModal(null)} title="Nueva Cuenta Bancaria" maxWidth="520px"
+                footer={(<div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                    <button className="btn btn-secondary" onClick={() => setShowModal(null)}>Cancelar</button>
+                    <button className="btn btn-primary" onClick={saveAccount} disabled={saving}>{saving ? 'Guardando...' : '✓ Crear Cuenta'}</button>
+                </div>)}>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
                             <div className="form-group" style={{ gridColumn: 'span 2' }}>
                                 <label className="erp-label">NOMBRE *</label>
@@ -467,22 +468,13 @@ export default function TreasuryPage() {
                                 <input className="erp-input" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Observaciones opcionales" />
                             </div>
                         </div>
-                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                            <button className="btn btn-secondary" onClick={() => setShowModal(null)}>Cancelar</button>
-                            <button className="btn btn-primary" onClick={saveAccount} disabled={saving}>{saving ? 'Guardando...' : '✓ Crear Cuenta'}</button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            </AccessibleModal>
 
-            {/* ── MODAL: Nuevo efecto ── */}
-            {showModal === 'effect' && (
-                <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowModal(null); }}>
-                    <div className="modal-box" style={{ maxWidth: '520px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                            <h2 style={{ fontSize: '18px', fontWeight: 700 }}>Nuevo Efecto Comercial</h2>
-                            <button onClick={() => setShowModal(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '20px', color: 'var(--text-muted)' }}>✕</button>
-                        </div>
+            <AccessibleModal open={showModal === 'effect'} onClose={() => setShowModal(null)} title="Nuevo Efecto Comercial" maxWidth="520px"
+                footer={(<div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                    <button className="btn btn-secondary" onClick={() => setShowModal(null)}>Cancelar</button>
+                    <button className="btn btn-primary" onClick={saveEffect} disabled={saving}>{saving ? 'Guardando...' : '✓ Crear Efecto'}</button>
+                </div>)}>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
                             <div className="form-group"><label className="erp-label">CLIENTE *</label><input className="erp-input" value={form.clientName} onChange={e => setForm({ ...form, clientName: e.target.value })} placeholder="Empresa SA" /></div>
                             <div className="form-group"><label className="erp-label">CIF / NIF *</label><input className="erp-input" value={form.clientTaxId} onChange={e => setForm({ ...form, clientTaxId: e.target.value })} placeholder="B12345678" /></div>
@@ -498,22 +490,13 @@ export default function TreasuryPage() {
                                 </select>
                             </div>
                         </div>
-                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                            <button className="btn btn-secondary" onClick={() => setShowModal(null)}>Cancelar</button>
-                            <button className="btn btn-primary" onClick={saveEffect} disabled={saving}>{saving ? 'Guardando...' : '✓ Crear Efecto'}</button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            </AccessibleModal>
 
-            {/* ── MODAL: Nueva orden de pago ── */}
-            {showModal === 'order' && (
-                <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowModal(null); }}>
-                    <div className="modal-box" style={{ maxWidth: '520px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                            <h2 style={{ fontSize: '18px', fontWeight: 700 }}>Nueva Orden de Pago</h2>
-                            <button onClick={() => setShowModal(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '20px', color: 'var(--text-muted)' }}>✕</button>
-                        </div>
+            <AccessibleModal open={showModal === 'order'} onClose={() => setShowModal(null)} title="Nueva Orden de Pago" maxWidth="520px"
+                footer={(<div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                    <button className="btn btn-secondary" onClick={() => setShowModal(null)}>Cancelar</button>
+                    <button className="btn btn-primary" onClick={saveOrder} disabled={saving}>{saving ? 'Guardando...' : '✓ Crear Orden'}</button>
+                </div>)}>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
                             <div className="form-group"><label className="erp-label">TIPO *</label>
                                 <select className="erp-input" value={form.paymentType} onChange={e => setForm({ ...form, paymentType: e.target.value })}>
@@ -537,22 +520,13 @@ export default function TreasuryPage() {
                                 </select>
                             </div>
                         </div>
-                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                            <button className="btn btn-secondary" onClick={() => setShowModal(null)}>Cancelar</button>
-                            <button className="btn btn-primary" onClick={saveOrder} disabled={saving}>{saving ? 'Guardando...' : '✓ Crear Orden'}</button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            </AccessibleModal>
 
-            {/* ── MODAL: Importar CSV ── */}
-            {showModal === 'import' && (
-                <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowModal(null); }}>
-                    <div className="modal-box" style={{ maxWidth: '560px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                            <h2 style={{ fontSize: '18px', fontWeight: 700 }}>Importar Extracto CSV</h2>
-                            <button onClick={() => setShowModal(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '20px', color: 'var(--text-muted)' }}>✕</button>
-                        </div>
+            <AccessibleModal open={showModal === 'import'} onClose={() => setShowModal(null)} title="Importar Extracto CSV" maxWidth="560px"
+                footer={(<div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                    <button className="btn btn-secondary" onClick={() => setShowModal(null)}>Cancelar</button>
+                    <button className="btn btn-primary" onClick={importStatement} disabled={saving || !importCsv.trim()}>{saving ? 'Importando...' : '⬆ Importar'}</button>
+                </div>)}>
                         <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px' }}>
                             Formato CSV: <code>Date,Amount,Concept,Reference</code><br />
                             Ejemplo: <code>2026-04-01,-1250.00,Pago proveedor,REF-001</code>
@@ -564,13 +538,7 @@ export default function TreasuryPage() {
                             onChange={e => setImportCsv(e.target.value)}
                             placeholder={"Date,Amount,Concept,Reference\n2026-04-01,5000.00,Cobro factura FAC-001,REF-001\n2026-04-02,-1200.00,Pago proveedor,REF-002"}
                         />
-                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '16px' }}>
-                            <button className="btn btn-secondary" onClick={() => setShowModal(null)}>Cancelar</button>
-                            <button className="btn btn-primary" onClick={importStatement} disabled={saving || !importCsv.trim()}>{saving ? 'Importando...' : '⬆ Importar'}</button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            </AccessibleModal>
         </PageContainer>
     );
 }

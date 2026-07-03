@@ -7,4 +7,5 @@ namespace Erp.Modules.Billing.Application.Interfaces;
 public interface IVerifactuSubmissionGateway
 {
     void EnqueueVerifactuSubmission(Guid invoiceId);
+    void EnqueueVerifactuAnulacion(Guid invoiceId);
 }

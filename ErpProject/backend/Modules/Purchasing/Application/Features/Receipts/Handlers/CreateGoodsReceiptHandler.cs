@@ -1,3 +1,4 @@
+using Erp.Application.Common.Events;
 using Erp.Modules.Purchasing.Application.Features.Receipts.Commands;
 using Erp.Modules.Purchasing.Application.Interfaces;
 using Erp.Modules.Purchasing.Domain.Entities;
@@ -9,10 +10,12 @@ namespace Erp.Modules.Purchasing.Application.Features.Receipts.Handlers;
 public class CreateGoodsReceiptHandler : IRequestHandler<CreateGoodsReceiptCommand, Guid>
 {
     private readonly IPurchasingDbContext _context;
+    private readonly IPublisher _publisher;
 
-    public CreateGoodsReceiptHandler(IPurchasingDbContext context)
+    public CreateGoodsReceiptHandler(IPurchasingDbContext context, IPublisher publisher)
     {
         _context = context;
+        _publisher = publisher;
     }
 
     public async Task<Guid> Handle(CreateGoodsReceiptCommand request, CancellationToken cancellationToken)
@@ -57,6 +60,23 @@ public class CreateGoodsReceiptHandler : IRequestHandler<CreateGoodsReceiptComma
 
         _context.GoodsReceipts.Add(receipt);
         await _context.SaveChangesAsync(cancellationToken);
+
+        await _publisher.Publish(new GoodsReceiptCreatedEvent
+        {
+            GoodsReceiptId = receipt.Id,
+            CompanyId = receipt.CompanyId,
+            ReceiptNumber = receipt.Number,
+            Lines = receipt.Lines
+                .Where(l => l.ProductId.HasValue && l.QuantityReceived > 0)
+                .Select(l => new StockLineEventDto
+                {
+                    ProductId = l.ProductId,
+                    Quantity = l.QuantityReceived,
+                    UnitCost = l.UnitPrice
+                })
+                .ToList()
+        }, cancellationToken);
+
         return receipt.Id;
     }
 }

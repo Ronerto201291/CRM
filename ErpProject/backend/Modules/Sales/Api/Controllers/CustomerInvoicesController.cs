@@ -33,8 +33,8 @@ namespace Erp.Modules.Sales.Api.Controllers
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateCustomerInvoiceCommand cmd, CancellationToken ct)
         {
-            var id = await _mediator.Send(cmd, ct);
-            return CreatedAtAction(nameof(Get), new { id }, new { id });
+            var result = await _mediator.Send(cmd, ct);
+            return CreatedAtAction(nameof(Get), new { id = result.Id }, result);
         }
     }
 }

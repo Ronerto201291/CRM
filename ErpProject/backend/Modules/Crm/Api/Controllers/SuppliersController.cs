@@ -1,6 +1,5 @@
 using Erp.Modules.Crm.Application.Features.Crm.Commands;
 using Erp.Modules.Crm.Application.Features.Crm.Queries;
-using Erp.Modules.Expenses.Application.Features.Expenses.Queries;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -31,7 +30,6 @@ public class SuppliersController : ControllerBase
         var result = await _mediator.Send(new GetSupplierByIdQuery { Id = id }, ct);
         if (result == null) return NotFound();
 
-        result.Expenses = await _mediator.Send(new GetSupplierExpensesQuery { SupplierId = id }, ct);
         return Ok(result);
     }
 

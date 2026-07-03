@@ -1,8 +1,10 @@
 using Erp.Application.Common.Interfaces;
 using Erp.Modules.Sales.Application.Interfaces;
 using Erp.Modules.Sales.Domain.Entities;
+using FluentValidation.Results;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using ValidationException = FluentValidation.ValidationException;
 
 namespace Erp.Modules.Sales.Application.Features.Orders;
 
@@ -87,16 +89,47 @@ public class CreateSalesOrderHandler : IRequestHandler<CreateSalesOrderCommand, 
 {
     private readonly ISalesDbContext _ctx;
     private readonly ITenantContext _tenant;
+    private readonly IClientInfoService _clientInfo;
 
-    public CreateSalesOrderHandler(ISalesDbContext ctx, ITenantContext tenant)
+    public CreateSalesOrderHandler(
+        ISalesDbContext ctx,
+        ITenantContext tenant,
+        IClientInfoService clientInfo)
     {
         _ctx = ctx;
         _tenant = tenant;
+        _clientInfo = clientInfo;
     }
 
     public async Task<SalesOrderDto> Handle(CreateSalesOrderCommand request, CancellationToken ct)
     {
         var tenantId = _tenant.TenantId ?? throw new InvalidOperationException("Tenant not resolved");
+
+        string clientName;
+        if (request.ClientId.HasValue)
+        {
+            var client = await _clientInfo.GetByIdAsync(request.ClientId.Value, ct);
+            if (client is null)
+            {
+                throw new ValidationException(new[]
+                {
+                    new ValidationFailure(nameof(request.ClientId), "El cliente no existe en CRM o no pertenece a esta empresa.")
+                });
+            }
+            clientName = client.Name;
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(request.ClientName))
+            {
+                throw new ValidationException(new[]
+                {
+                    new ValidationFailure(nameof(request.ClientName), "Indica un cliente registrado o un nombre de cliente manual.")
+                });
+            }
+            clientName = request.ClientName.Trim();
+        }
+
         var so = new SalesOrder
         {
             Id = Guid.NewGuid(),
@@ -104,7 +137,7 @@ public class CreateSalesOrderHandler : IRequestHandler<CreateSalesOrderCommand, 
             Number = request.Number,
             OrderDate = request.OrderDate,
             ClientId = request.ClientId,
-            ClientName = request.ClientName,
+            ClientName = clientName,
             SubTotal = 0,
             TaxAmount = 0,
             Total = 0,

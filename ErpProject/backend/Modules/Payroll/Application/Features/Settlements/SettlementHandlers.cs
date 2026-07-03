@@ -1,5 +1,4 @@
 using Erp.Application.Common.Interfaces;
-using Erp.Modules.Accounting.Application.Services;
 using Erp.Modules.Payroll.Application.Interfaces;
 using Erp.Modules.Payroll.Domain.Entities;
 using MediatR;
@@ -136,14 +135,14 @@ public class FinalizeSettlementHandler : IRequestHandler<FinalizeSettlementComma
 {
     private readonly IPayrollDbContext _ctx;
     private readonly ITenantContext _tenant;
-    private readonly AccountingService _accounting;
+    private readonly IPayrollJournalEntryGenerator _journal;
 
     public FinalizeSettlementHandler(
-        IPayrollDbContext ctx, ITenantContext tenant, AccountingService accounting)
+        IPayrollDbContext ctx, ITenantContext tenant, IPayrollJournalEntryGenerator journal)
     {
         _ctx = ctx;
         _tenant = tenant;
-        _accounting = accounting;
+        _journal = journal;
     }
 
     public async Task<FinalizeSettlementResult> Handle(FinalizeSettlementCommand request, CancellationToken ct)
@@ -168,16 +167,16 @@ public class FinalizeSettlementHandler : IRequestHandler<FinalizeSettlementComma
         var net = settlement.Lines.Sum(l => l.NetPay);
         var accrual = new DateTime(settlement.Year, settlement.Month, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        var entry = await _accounting.GenerateEntryFromPayrollSettlement(
+        var entryId = await _journal.GenerateFromPayrollSettlementAsync(
             tenantId, settlement.Id, settlement.Year, settlement.Month,
             gross, emprSs, empSs, irpf, net, accrual, ct);
 
         if (settlement.Status == "Draft")
             settlement.Status = "Final";
-        settlement.JournalEntryId = entry.Id;
+        settlement.JournalEntryId = entryId;
         await _ctx.SaveChangesAsync(ct);
 
         return new FinalizeSettlementResult(
-            "Liquidación cerrada y asiento contable generado.", entry.Id, AlreadyFinalized: false);
+            "Liquidación cerrada y asiento contable generado.", entryId, AlreadyFinalized: false);
     }
 }

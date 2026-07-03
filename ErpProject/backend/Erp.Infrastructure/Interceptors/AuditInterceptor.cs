@@ -1,39 +1,93 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using Erp.Application.Common.Interfaces;
 using Erp.Domain.Entities.Audit;
+using Erp.Domain.Entities.Outbox;
+using Erp.Domain.Entities.Licensing;
+using Erp.Domain.Entities.Api;
+using Erp.Domain.Entities.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
-using System.Text.Json;
 
 namespace Erp.Infrastructure.Interceptors;
 
-public class AuditInterceptor
+public static class AuditInterceptor
 {
-    public static void ProcessAuditEntries(IApplicationDbContext context, Guid? userId, Guid? companyId)
-    {
-        if (context is not DbContext dbContext) return;
+    private static readonly HashSet<string> ExcludedTypes =
+    [
+        nameof(AuditLog),
+        nameof(OutboxMessage),
+        nameof(ApiUsageLog),
+        nameof(RefreshToken),
+        nameof(StripeWebhookEvent),
+    ];
 
-        var entries = dbContext.ChangeTracker.Entries()
+    public static List<AuditLog> CollectAuditEntries(DbContext source, Guid? userId, Guid? companyId)
+    {
+        var logs = new List<AuditLog>();
+        if (!userId.HasValue || !companyId.HasValue || companyId == Guid.Empty)
+            return logs;
+
+        var entries = source.ChangeTracker.Entries()
             .Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
+            .Where(e => !ExcludedTypes.Contains(e.Entity.GetType().Name))
             .ToList();
 
         foreach (var entry in entries)
         {
-            var auditLog = new AuditLog
+            var entityId = TryGetPrimaryKey(entry);
+            var oldValues = entry.State == EntityState.Added
+                ? "{}"
+                : SerializeValues(entry.OriginalValues);
+            var newValues = entry.State == EntityState.Deleted
+                ? "{}"
+                : SerializeValues(entry.CurrentValues);
+
+            var log = new AuditLog
             {
                 Id = Guid.NewGuid(),
-                CompanyId = companyId ?? Guid.Empty,
-                UserId = userId ?? Guid.Empty,
+                CompanyId = companyId.Value,
+                UserId = userId.Value,
                 Entity = entry.Entity.GetType().Name,
+                EntityId = entityId,
                 Action = entry.State.ToString(),
                 Timestamp = DateTime.UtcNow,
-                OldValues = entry.State == EntityState.Added
-                    ? "{}"
-                    : JsonSerializer.Serialize(entry.OriginalValues.Properties.ToDictionary(p => p.Name, p => entry.OriginalValues[p]?.ToString())),
-                NewValues = entry.State == EntityState.Deleted
-                    ? "{}"
-                    : JsonSerializer.Serialize(entry.CurrentValues.Properties.ToDictionary(p => p.Name, p => entry.CurrentValues[p]?.ToString()))
+                OldValues = oldValues,
+                NewValues = newValues
             };
-            dbContext.Set<AuditLog>().Add(auditLog);
+            log.Hash = ComputeHash(log);
+            logs.Add(log);
         }
+
+        return logs;
+    }
+
+    public static void ProcessAuditEntries(IApplicationDbContext context, Guid? userId, Guid? companyId)
+    {
+        if (context is not DbContext dbContext) return;
+        foreach (var log in CollectAuditEntries(dbContext, userId, companyId))
+            dbContext.Set<AuditLog>().Add(log);
+    }
+
+    private static Guid? TryGetPrimaryKey(EntityEntry entry)
+    {
+        var key = entry.Metadata.FindPrimaryKey();
+        if (key == null || key.Properties.Count != 1) return null;
+        var value = entry.Property(key.Properties[0].Name).CurrentValue
+                 ?? entry.Property(key.Properties[0].Name).OriginalValue;
+        return value is Guid g ? g : null;
+    }
+
+    private static string SerializeValues(PropertyValues values) =>
+        JsonSerializer.Serialize(values.Properties.ToDictionary(
+            p => p.Name,
+            p => values[p]?.ToString()));
+
+    private static string ComputeHash(AuditLog log)
+    {
+        var payload = $"{log.Entity}|{log.EntityId}|{log.Action}|{log.Timestamp:O}|{log.OldValues}|{log.NewValues}";
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(payload));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 }

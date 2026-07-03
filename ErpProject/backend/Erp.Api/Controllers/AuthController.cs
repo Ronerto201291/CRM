@@ -1,4 +1,5 @@
 using Erp.Application.Features.Auth.Commands;
+using Erp.Application.Features.Auth.Queries;
 using Erp.Application.Common.Interfaces;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -52,6 +53,53 @@ public class AuthController : ControllerBase
     {
         try { return Ok(await _mediator.Send(command)); }
         catch (UnauthorizedAccessException ex) { return Unauthorized(new { error = ex.Message }); }
+    }
+
+    [HttpGet("companies"), Authorize]
+    public async Task<IActionResult> GetCompanies()
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+        var companies = await _mediator.Send(new GetUserCompaniesQuery(userId.Value));
+        return Ok(companies);
+    }
+
+    [HttpPost("switch-company"), Authorize]
+    public async Task<IActionResult> SwitchCompany([FromBody] SwitchCompanyRequest request)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+        if (!Guid.TryParse(request.CompanyId, out var companyId))
+            return BadRequest(new { error = "CompanyId inválido" });
+
+        try
+        {
+            var result = await _mediator.Send(new SwitchCompanyCommand(userId.Value, companyId));
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException ex) { return Unauthorized(new { error = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
+    [HttpPost("add-company"), Authorize]
+    public async Task<IActionResult> AddCompany([FromBody] AddCompanyRequest request)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+
+        try
+        {
+            var result = await _mediator.Send(new AddCompanyFromAccountCommand
+            {
+                UserId = userId.Value,
+                CompanyName = request.CompanyName,
+                CompanyTaxId = request.CompanyTaxId,
+                CompanyAddress = request.CompanyAddress ?? string.Empty
+            });
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException ex) { return Unauthorized(new { error = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
     }
 
     // ─────── 2FA TOTP ───────
@@ -188,5 +236,7 @@ public class AuthController : ControllerBase
 
 public record ConfirmTotpRequest(string Code);
 public record VerifyTotpRequest(Guid UserId, string Code);
+public record SwitchCompanyRequest(string CompanyId);
+public record AddCompanyRequest(string CompanyName, string CompanyTaxId, string? CompanyAddress);
 public record ForgotPasswordRequest(string Email);
 public record ResetPasswordRequest(string Token, string NewPassword);

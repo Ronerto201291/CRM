@@ -18,8 +18,9 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("DefaultConnection missing.");
 
-        services.AddDbContext<BillingDbContext>(options =>
+        services.AddDbContext<BillingDbContext>((sp, options) =>
             options.UseNpgsql(connectionString)
+               .AddInterceptors(sp.GetRequiredService<Erp.Infrastructure.Interceptors.AuditSaveChangesInterceptor>())
                .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
 
         services.AddScoped<IBillingDbContext>(p => p.GetRequiredService<BillingDbContext>());
@@ -32,9 +33,13 @@ public static class DependencyInjection
 
         // FacturaE 3.2.2 (Ley 18/2022 Crea y Crece)
         services.AddScoped<IFacturaEService, FacturaEService>();
+        services.AddHttpClient("Face");
+        services.AddScoped<IFaceSubmissionService, FaceSubmissionService>();
 
         // VERI*FACTU: XML generator (bridge from Application to Infrastructure impl)
-        services.AddScoped<IVerifactuXmlGenerator, VerifactuXmlGeneratorBridge>();
+        services.AddScoped<IVerifactuXmlGenerator, VerifactuXmlGenerator>();
+        services.AddScoped<ISiiEmitidasInvoiceSource, SiiEmitidasInvoiceSource>();
+        services.AddScoped<IAutomationBillingQuery, AutomationBillingQuery>();
 
         // Job de expiración de presupuestos (Hangfire lo resuelve del DI)
         services.AddScoped<ExpireQuotesJob>();

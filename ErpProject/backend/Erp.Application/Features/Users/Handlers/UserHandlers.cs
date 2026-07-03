@@ -91,6 +91,16 @@ public class CreateUserHandler : IRequestHandler<CreateUserCommand, CreateUserRe
         _ctx.Users.Add(user);
         await _ctx.SaveChangesAsync(ct);
 
+        _ctx.UserCompanies.Add(new UserCompany
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            CompanyId = companyId,
+            RoleId = request.RoleId,
+            IsDefault = true
+        });
+        await _ctx.SaveChangesAsync(ct);
+
         return new CreateUserResult
         {
             Id = user.Id, Email = user.Email, FirstName = user.FirstName,

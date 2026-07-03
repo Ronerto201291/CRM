@@ -100,15 +100,9 @@ teoría deberían ser independientes.
 o ASP.NET encontradas en `Erp.Domain/` ni en ningún `Modules/*/Domain/`
 (excluyendo `Migrations/`) — verificado en toda la base de código.
 
-**Hallazgo nuevo — Inventory, más grave que el caso ya conocido de
-Accounting:** `Product`, `Warehouse`, `Stock` y `StockMovement` viven
-físicamente en `backend/Erp.Domain/Modules/Inventory/Entities/` (proyecto
-core), no en `Modules/Inventory/Domain/` (que solo contiene `Lot.cs` y
-existe casi únicamente para referenciar de vuelta a `Erp.Domain`). A
-diferencia de `Account`/`JournalEntry` (Accounting), que al menos están
-gateadas detrás de `IAccountingDbContext`, estas entidades de Inventory son
-públicas en el core y están disponibles para cualquier módulo sin pasar por
-ninguna interfaz.
+**Hallazgo nuevo — Inventory (✅ corregido ADR-0018 #14):** `Product`, `Warehouse`, `Stock` y
+`StockMovement` viven en `Modules/Inventory/Domain/Entities/` (antes físicamente en
+`Erp.Domain/Modules/Inventory/` con el namespace correcto pero fuera del módulo).
 
 ### 3. Estructura de carpetas
 7 de 9 módulos siguen el patrón `Api/Application/Domain/Infrastructure` con
@@ -165,15 +159,16 @@ Desviaciones:
   seis copias solo en `TreasuryController.cs`).
 
 ### 5. Código limpio — "nada de lógica en los controllers"
-**5 de 43 controllers en todo el backend no inyectan `IMediator`/`ISender`**
+**0 de 43 controllers en todo el backend quedan sin `IMediator`/`ISender`**
 (eran 26; Treasury #9, AccountingExport #4, Inventory completo, Billing
 `FacturaEController`/`PublicInvoicesController`, Payroll #10, etc.) y
-en su lugar inyectan el DbContext del módulo directamente, con lógica de
+en su lugar inyectaban el DbContext del módulo directamente, con lógica de
 negocio en el método del controller:
-- Accounting: 5 de 16 controllers (`AeatModelsController`,
-  `AgingController`, `FinancialStatementsController`,
-  `InversionSujetoActivoController`, `IvaManagementController`) — stubs mock.
-  `AccountingExportController` ✅ (#4); `RecargoController` en #3b; `ViesController` en #5.
+- Accounting: los 5 stubs mock (`AeatModelsController`, `AgingController`,
+  `InversionSujetoActivoController`, `IvaManagementController`) fueron
+  **eliminados** (#3c); `FinancialStatementsController` usa MediatR con
+  handlers honestos `NotImplemented`. `AccountingExportController` ✅ (#4);
+  `RecargoController` en #3b; `ViesController` en #5.
 - Treasury: ninguno pendiente (5/5 vía `IMediator`; ver backlog #9).
 - Payroll: `PayrollController` ✅ delgado — solo `IMediator` (#10).
 - Billing: todos los controllers del módulo usan `IMediator` (FacturaE vía
@@ -292,9 +287,9 @@ futuro — antes de dar por cerrado un módulo o una implementación, verificar:
   modular" (módulos razonablemente independientes) más que cualquier
   problema de un controller aislado.
 - El hallazgo de mayor volumen histórico fue el bypass de CQRS en controllers
-  (quedan 5/43 sin `IMediator`, todos stubs mock de Accounting). Cualquier
-  trabajo futuro en Accounting debería migrar el controller tocado a MediatR
-  en vez de añadir más lógica al patrón existente.
+  (✅ cerrado: 43/43 con `IMediator`; los stubs mock de Accounting fueron
+  eliminados en #3c). Cualquier trabajo futuro en Accounting debe implementar
+  lógica fiscal real en handlers, no reintroducir controllers con datos fijos.
 - La validación de FluentValidation "muerta" era un riesgo silencioso: el
   código daba la falsa sensación de estar validado (el validator existía,
   compilaba) pero no se ejecutaba en producción (corregido para CRM; ver
@@ -318,12 +313,12 @@ ADR-0013 (VeriFactu/SII/FacturaE), ADR-0012 (SEPA) y ADR-0014 (Stripe).
 
 | # | Hallazgo | Módulo | Prioridad |
 |---|---|---|---|
-| 0a | **VeriFactu — la huella (hash) no coincidiría con la que recalcula la AEAT**: hashea 11 campos en vez de los 8 del Anexo II del RD 1007/2023 (de más: NIF software, IdSistema, número de registro), y los concatena sin claves (`valor&valor` en vez de `clave=valor&clave=valor`). Además: factura simplificada hasheada como F2 pero declarada F1 en el XML; XML con forma de SII en vez de VeriFactu (falta `TipoHuella`/`IDVersion`, encadenamiento nunca declara `PrimerRegistro`); `AceptadoConErrores` tratado como fallo total; reenvíos duplicados del mes completo; sin registro de anulación; sin tabla de auditoría de envíos; falta la leyenda legal obligatoria en el PDF | Billing/Core (VerifactuService, VerifactuXmlGenerator, LockInvoiceHandler) | **Crítica** |
-| 0b | **SII — tres bugs independientes garantizan rechazo**: namespace único mal aplicado en `Cabecera`/`Titular`; el sobre SOAP anida el documento dos veces (`signedXml` ya es un `<SuministroLRFacturasEmitidas>` completo, se vuelve a envolver en otro) más la declaración `<?xml?>` incrustada a mitad del sobre; falta `Contraparte` en facturas emitidas y en recibidas se usa `CuotaRepercutida` en vez de `CuotaSoportada` (el campo ni existe en el modelo). La firma XAdES-BES tiene además un problema de orden de operaciones que probablemente la invalida | Core (SiiXmlGenerator, SiiSigningService, SiiSubmissionService) | **Crítica** |
-| 0c | **FacturaE — se presenta como firmado sin estarlo**: el fichero se nombra `.xsig` (implica firmado) pero nunca se genera ningún `ds:Signature`; el comentario del controller afirma "cumple el esquema oficial" sin ser cierto. Namespace probablemente incorrecto, bloque `Extensions` mal formado, dirección con placeholders hardcodeados (`Town="N/D"`), sin ningún camino de envío a FACe | Billing (FacturaEService, FacturaEController) | **Crítica** — es el único de los tres que además se anuncia como "cumple el esquema" sin serlo |
-| 0d | **SEPA — código muerto e inválido si se conectara**: `GenerateCreditTransferXml` no lo invoca nada del backend (confirmado, cero llamadas). Si se conectara, tampoco sería válido: usa nombres de elemento en inglés (`GroupHeader`) en vez de los códigos ISO 20022 (`GrpHdr`), un paréntesis mal cerrado anida mal la jerarquía, sin validación de IBAN (mod-97), inventa un BIC placeholder inválido cuando falta, y solo genera transferencias (TRF) cuando el caso de uso documentado es cobrar (requeriría SEPA Direct Debit) — de hecho mapea empresa=pagador/cliente=cobrador, el sentido invertido de "cobrar" | Treasury (SepaService) | Alta |
-| 0e | **Stripe — sin idempotencia de eventos de webhook**: no hay tabla de eventos procesados ni comprobación de `stripeEvent.Id` — Stripe reentrega eventos por diseño, así que una reentrega de `payment_succeeded` puede volver a extender `ExpirationDate` sin control. Añadir además distinción test/live de la clave API (no existe ninguna) | Core (StripeService) | Alta — la verificación de firma del webhook sí está bien hecha, esto es idempotencia, no autenticación |
-| 0f | **Sin validación de NIF/CIF/NIE en ningún sitio del backend** (confirmado por `grep`: cero funciones de validación de dígito de control, solo una heurística de primer carácter en `FacturaEService.IsCompanyNif` que decide persona física/jurídica, no valida nada). Afecta a la vez a CRM, Billing, FacturaE, SII y VeriFactu — un NIF con letra de control equivocada se acepta sin aviso en el alta | CRM/Billing/Core | Alta |
+| 0a | **VeriFactu** — ~~huella/XML/anulaciones/auditoría/leyenda~~ ✅ **Cerrado** — modo no-VERI*FACTU: `Verifactu:SubmissionMode=LocalOnly` (sin envío TIKE, sin QR, leyenda PDF alternativa, `VerifactuRealtimeSubmission` en factura, `TipoUsoPosibleSoloVerifactu=N`) | Billing/Core | ✅ Corregido |
+| 0b | **SII** — **🟡 Parcial+** — namespaces duales + XAdES; homologación offline `GET /api/sii/validate` + `SiiXmlStructureValidator`; envío HTTP real con `Sii:SendEnabled=true` (desactivado por defecto). `GET /api/fiscal/homologation/status` documenta bloqueo externo. Pendiente: homologación AEAT en entorno test | Core | **Crítica — bloqueado externo** |
+| 0c | **FacturaE** — **🟡 Parcial+** — firma XAdES + `POST .../submit-face`; homologación offline + `GET /api/fiscal/homologation/status`. Pendiente: namespace XSD oficial FACe, homologación entorno test | Billing | **Crítica — bloqueado externo** |
+| 0d | **SEPA** — **🟡 Parcial+** — endpoints pain.001/pain.008 + `SepaXmlStructureValidator` offline. `GET /api/fiscal/homologation/status` marca `bankHomologation=false`. Pendiente: homologación bancaria | Treasury | Alta — bloqueado externo |
+| 0e | **Stripe — sin idempotencia de eventos de webhook** | Core (StripeService) | ✅ Corregido — tabla `StripeWebhookEvents` + skip si `event.Id` ya procesado |
+| 0f | **Sin validación de NIF/CIF/NIE** | CRM/Billing/Core | ✅ Corregido — `SpanishTaxIdValidator` + tests unitarios; usado en alta/edición cliente, proveedor, empresa, FacturaE |
 
 **Por qué esto es más grave que el resto del backlog de código**: los ítems
 1-19 son deuda técnica que hace el código más difícil de mantener, pero
@@ -348,7 +343,7 @@ medida que se completa cada uno.
 | 2 | `ClientHandlers.cs` código muerto usado como ancla de assembly de MediatR | Crm | ✅ Corregido |
 | 3a | Duplicado ProrrataController/CalculateProrrataCommand (+ bug real: contrato no coincidía con el frontend) | Accounting | ✅ Corregido |
 | 3b | `RecargoController` sin `IMediator` (tiene lógica real: queries a `IBillingDbContext`, mapeo Modelo 303 — migración no trivial) | Accounting | ✅ Corregido |
-| 3c | `AeatModelsController`, `IvaManagementController`, `InversionSujetoActivoController`, `FinancialStatementsController`, `AgingController` sin `IMediator` | Accounting | Deprioritizado — ver nota |
+| 3c | `AeatModelsController`, `IvaManagementController`, `InversionSujetoActivoController`, `FinancialStatementsController`, `AgingController` sin `IMediator` | Accounting | ✅ Corregido — stubs mock eliminados; `FinancialStatementsController` vía MediatR (`NotImplemented` honesto); 16/16 controllers Accounting con `IMediator` |
 | 4 | `AccountingExportController` (SRP, ~350 líneas tras extracción) — el motivo estructural del acoplamiento cross-módulo está en el ítem 19b | Accounting | ✅ Corregido — 16/16 rutas vía `IMediator`; controller delgado; `modelo347-aeat-txt` en `ExportModelo347AeatTxtQuery` + `IModelo347Exporter.ExportAeatTxtAsync` |
 | 5 | `ViesController` (Accounting) sigue duplicando lo que ya resuelve `Erp.Api/TaxController` | Accounting | ✅ Corregido |
 | 6 | Validators de FluentValidation nunca registrados por módulo (`AddValidatorsFromAssembly` ausente) | Crm | ✅ Corregido |
@@ -357,23 +352,23 @@ medida que se completa cada uno.
 | 9 | Los 5 controllers de Treasury sin `IMediator` (incluye parser CSV inline) | Treasury | ✅ Corregido — los 5 controllers del módulo delegan en handlers (`TreasureHandlers`, `GuaranteeHandlers`, `FinancingHandlers`, `ConsolidationHandlers`) |
 | 10 | Payroll sin capa CQRS/MediatR | Payroll | ✅ Corregido — `PayrollController` solo `IMediator`; `Features/{Employees,Settlements,Exports}/`; exportes TC1/TC2/RED en `PayrollExportHandlers.cs` |
 | 11 | `PurchaseOrdersController` / `SalesOrdersController` sin `IMediator` | Purchasing / Sales | ✅ Corregido — handlers en `Application/Features/Orders/`; controllers delgados; filtro por tenant en queries |
-| 12 | Sales y Purchasing: un solo assembly, sin frontera de capas real (confirmado: sin violación activa hoy — es un riesgo latente porque nada impide que el próximo cambio la introduzca, al no haber frontera de compilador dentro del módulo) | Purchasing / Sales | Pendiente |
-| 13 | `Erp.Infrastructure` depende de 5 módulos (dirección invertida) — evidencia exacta: `Erp.Infrastructure/Erp.Infrastructure.csproj:5-9` referencia `Modules/{Inventory,Billing,Crm,Accounting,Expenses}/Application` | Core | Pendiente |
-| 14 | Entidades núcleo fuera de su módulo: Inventory (`Product`, `Warehouse`, `Stock`, `StockMovement` en `Erp.Domain/Modules/Inventory/Entities/`) **y Accounting, que es más grave de lo documentado — no son 2 entidades sino 6**: `Account`, `JournalEntry`, `JournalEntryLine`, `FiscalPeriod`, `FixedAsset`, `DeferredEntry`, todas en `Erp.Domain/Entities/Accounting/`, mapeadas por `AccountingDbContext`. Nota positiva verificada: pese a esto, cada módulo migra su propio esquema de forma independiente — no hay historial de migraciones compartido ni conflictivo (10 `DbContext`/carpetas `Migrations` separadas, una por módulo + core) | Inventory, Accounting | Pendiente |
-| 15 | `ConsolidationController.ConsolidateGroup` responde éxito sin consolidar nada; `ConsolidatedFinancialStatements` nunca se escribe | Treasury | Pendiente |
-| 16 | `ExchangeRateRefreshJob` no hace nada nunca: corre fuera de contexto HTTP y `TenantContext.TenantId` siempre es `null` ahí, sin log ni error | Treasury | Pendiente |
+| 12 | Sales y Purchasing: frontera de capas por compilador | Purchasing / Sales | ✅ — 4 proyectos por módulo; **todos los módulos** en `Erp.slnx` (Accounting, Expenses, Treasury, Payroll añadidos jul 2026) |
+| 13 | `Erp.Infrastructure` depende de 5 módulos (dirección invertida) | Core | ✅ Corregido — sin refs a `*.Application` de módulos; SII/automation vía puertos (`ISiiEmitidasInvoiceSource`, `ISiiRecibidasExpenseSource`, `IAutomationBillingQuery`, `IAutomationInventoryQuery`); OCR → `Expenses.Infrastructure`; Verifactu XML → `Billing.Infrastructure`; `IExpenseOcrCrmBridge` en CRM. `ErpDbContext` solo referencia `*.Domain` para `Ignore&lt;T&gt;()` |
+| 14 | Entidades núcleo fuera de su módulo (Inventory + Accounting 6 entidades en `Erp.Domain`) | Inventory, Accounting | ✅ Corregido — todas las entidades Accounting migradas a `Accounting.Domain`; Inventory (`Product`, `Warehouse`, `Stock`, `StockMovement`) físicamente en `Modules/Inventory/Domain/Entities` |
+| 15 | `ConsolidationController.ConsolidateGroup` responde éxito sin consolidar nada; `ConsolidatedFinancialStatements` nunca se escribe | Treasury | ✅ Corregido — `ConsolidateGroupHandler` agrega P&amp;L y balance desde `JournalEntryLine` (PGC 6/7/1-5) por filial + matriz, ponderado por `OwnershipPercentage`; persiste en `ConsolidatedFinancialStatements` |
+| 16 | `ExchangeRateRefreshJob` no hace nada nunca: corre fuera de contexto HTTP y `TenantContext.TenantId` siempre es `null` ahí, sin log ni error | Treasury | ✅ Corregido — `RefreshAllTenantsRatesAsync` itera empresas con `IgnoreQueryFilters`; el job llama a ese método; log cuando no hay divisas activas |
 | 17 | `frontend/billing/facturae/page.tsx` — página 100% mock, botones sin `onClick`, mientras el backend (`FacturaEController`) sí es real | Billing (frontend) | ✅ Corregido |
 | 18 | `frontend/accounting/iva-registers/page.tsx` — página 100% mock con cifras inconsistentes entre cabecera y tabla | Accounting (frontend) | ✅ Corregido — resumen desde `/api/proxy/invoices` y `/api/proxy/expenses/documents`; descarga CSV real vía `libro-iva-emitidas`/`libro-iva-recibidas`; enlace a `/sii` para envío |
-| 19 | `OutboxMessageProcessorJob.cs` — implementación completa y correcta del procesador de Outbox, pero huérfana: nunca se registra, existe un duplicado distinto que sí corre (`OutboxProcessorJob.cs`) | Core | Pendiente |
-| 19a | **Dependencia circular real entre dos módulos**: `Modules/Crm/Api/Erp.Modules.Crm.Api.csproj:15` referencia `Modules/Expenses/Application`, y a la vez `Modules/Expenses/Api/Erp.Modules.Expenses.Api.csproj:15` referencia `Modules/Crm/Application` — el grafo de ensamblados de Crm y Expenses se referencia mutuamente. Un cambio en la capa Application de cualquiera de los dos puede romper el build del otro sin que sea obvio por qué | Crm ↔ Expenses | Pendiente |
-| 19b | `Accounting.Api` referencia por `ProjectReference` directo la Application/Domain de otros 4 módulos (`Erp.Modules.Accounting.Api.csproj:16-20` → Billing, Crm, Expenses y Payroll Application + Payroll Domain), solo para que `AccountingExportController` (ítem 4) pueda inyectar sus 4 `IXxxDbContext` a la vez | Accounting, Billing, Crm, Expenses, Payroll | Pendiente |
-| 19c | Acoplamiento directo sin abstracción compartida, en ambas direcciones hacia Accounting: Treasury inyecta `IAccountingDbContext` en `BankReconciliationService.cs:20,26` y `TreasureHandlers.cs:235,240,262` (lee `JournalEntryLines` directamente); Payroll inyecta la clase concreta `AccountingService` (no una interfaz) en `FinalizeSettlementHandler` | Treasury, Payroll, Accounting | Pendiente |
-| 19d | `ExpensesController` inyecta `ICrmDbContext` y escribe directamente en `_crmCtx.ActivityLogs` (`Modules/Expenses/Api/Controllers/ExpensesController.cs:3,23,31,72`) — un módulo de negocio escribiendo en la tabla de otro sin pasar por su API/eventos. Contraste positivo ya existente en el propio código: los `EventHandlers` de Inventory y Crm (`ExpenseApprovedInventoryHandler`, `QuoteAcceptedCrmHandler`, etc.) sí reaccionan a eventos de MediatR sin inyectar el DbContext ajeno — ese es el patrón a copiar aquí | Expenses, Crm | Pendiente |
-| 19e | No existe ninguna abstracción `IModule`/self-registro: añadir un módulo 10 exige tocar `Program.cs` a mano en 6 sitios distintos (referencias de proyecto, `using`, `AddApplicationPart`, `Add<Módulo>Infrastructure`, bloque `AddMediatR`, `MigrateAsync`) — nada obliga a no olvidar uno (la ausencia de `AddMediatR` en Payroll, ya documentada arriba, es consecuencia directa de esto). Además, `Modules/Accounting/Application/DependencyInjection.cs` define `AddAccountingModule()` (con su propio `AddMediatR` interno) que **nunca se invoca** — es el único módulo con este archivo y quedó como código muerto cuando `Program.cs` empezó a registrar el `AddMediatR` de Accounting directamente | Todos (Core) | Pendiente |
-| 19f | Inventory usa `API` en vez de `Api` no solo como nombre de carpeta sino en el namespace real compilado: `namespace Erp.Modules.Inventory.API.Controllers` en sus 5 controllers, referenciado explícitamente en `Program.cs:56` (`typeof(Erp.Modules.Inventory.API.Controllers.ProductsController)`) — inconsistente con los otros 8 módulos (`Erp.Modules.<Nombre>.Api.Controllers`) | Inventory | Baja |
-| 19g | Cosmético, agrupado: carpeta de migraciones de Purchasing en `Modules/Purchasing/Migrations/` en vez de `Modules/Purchasing/Infrastructure/Migrations/` (como los otros 8 módulos); `Modules/Sales/Infrastructure/DependencyInjection.cs` usa namespace de bloque (`namespace X { }`) en vez de namespace de archivo (`namespace X;`) como el resto del código | Purchasing, Sales | Baja |
+| 19 | `OutboxMessageProcessorJob.cs` — implementación completa y correcta del procesador de Outbox, pero huérfana: nunca se registra, existe un duplicado distinto que sí corre (`OutboxProcessorJob.cs`) | Core | ✅ Corregido — eliminado `OutboxMessageProcessorJob.cs`; `OutboxProcessorJob` (registrado en `Program.cs`) es la única implementación activa |
+| 19a | **Dependencia circular real entre dos módulos**: ~~`Modules/Crm/Api/Erp.Modules.Crm.Api.csproj:15` referencia `Modules/Expenses/Application`, y a la vez `Modules/Expenses/Api/Erp.Modules.Expenses.Api.csproj:15` referencia `Modules/Crm/Application`~~ **✅ Corregido** — eliminada `ProjectReference` Crm.Api→Expenses.Application; gastos por proveedor vía `GET /api/expenses/by-supplier/{id}`; ficha proveedor (`suppliers/page.tsx`) hace fetch paralelo. `Expenses.Api` ya no referencia `Crm.Application` (véase #19d) | Crm ↔ Expenses | ✅ Corregido |
+| 19b | `Accounting.Api` referencias cruzadas a otros módulos | Accounting | ✅ Corregido — sin refs a Billing/Crm/Expenses/Payroll ni `Erp.Infrastructure`; lectura cross-módulo solo en `Accounting.Infrastructure` (exporters) |
+| 19c | Acoplamiento Treasury/Payroll → Accounting sin abstracción | Treasury, Payroll, Accounting | ✅ Corregido — `IBankReconciliationLedgerQuery`, `IPayrollJournalEntryGenerator`, `IConsolidationMetricsQuery` en `Erp.Application`; `Treasury.Application` sin ref a `Accounting.Application`; `ConsolidateGroupHandler` usa puerto de métricas |
+| 19d | `ExpensesController` inyecta `ICrmDbContext` y escribe directamente en `_crmCtx.ActivityLogs` (`Modules/Expenses/Api/Controllers/ExpensesController.cs:3,23,31,72`) — un módulo de negocio escribiendo en la tabla de otro sin pasar por su API/eventos. Contraste positivo ya existente en el propio código: los `EventHandlers` de Inventory y Crm (`ExpenseApprovedInventoryHandler`, `QuoteAcceptedCrmHandler`, etc.) sí reaccionan a eventos de MediatR sin inyectar el DbContext ajeno — ese es el patrón a copiar aquí | Expenses, Crm | ✅ Corregido — upload QR publica `ExpenseUploadCreatedEvent`; `ExpenseUploadActivityHandler` (CRM) escribe `ActivityLog`; eliminada `ProjectReference` Crm desde `Expenses.Api` |
+| 19e | Self-registro modular `IErpModule` + `ErpModuleExtensions` | Todos (Core) | ✅ Corregido — los **9 módulos** (Accounting, Billing, CRM, Treasury, Purchasing, Inventory, Expenses, Payroll, Sales) vía `*ErpModule`; `Program.cs` solo registra `AddErpModule` + `AddErpModuleControllers` por módulo |
+| 19f | Inventory usa `API` en vez de `Api` no solo como nombre de carpeta sino en el namespace real compilado: `namespace Erp.Modules.Inventory.API.Controllers` en sus 5 controllers, referenciado explícitamente en `Program.cs:56` (`typeof(Erp.Modules.Inventory.API.Controllers.ProductsController)`) — inconsistente con los otros 8 módulos (`Erp.Modules.<Nombre>.Api.Controllers`) | Inventory | ✅ Corregido jul 2026 — namespace unificado `Erp.Modules.Inventory.Api` |
+| 19g | Cosmético, agrupado: carpeta de migraciones de Purchasing en `Modules/Purchasing/Migrations/` en vez de `Modules/Purchasing/Infrastructure/Migrations/` (como los otros 8 módulos); `Modules/Sales/Infrastructure/DependencyInjection.cs` usa namespace de bloque (`namespace X { }`) en vez de namespace de archivo (`namespace X;`) como el resto del código | Purchasing, Sales | ✅ Corregido jul 2026 — Purchasing migrations + Sales DI file-scoped |
 
-**Verificaciones limpias de esta auditoría de modularidad (sin hallazgos, se deja constancia explícita para no repetir el análisis):** ningún módulo con proyectos separados (los 7 que no son Sales/Purchasing) tiene su Domain o Application referenciando su propia Infrastructure; no se encontró ninguna otra entidad de negocio (Billing, Crm, Expenses, Payroll, Purchasing, Sales, Treasury) mal ubicada en `Erp.Domain` más allá de Inventory y Accounting (ítem 14); el frontend (`frontend/src/app/`) está limpiamente separado por módulo en carpetas, sin ningún import cruzado entre carpetas de módulos distintos.
+**Verificaciones limpias de esta auditoría de modularidad (sin hallazgos, se deja constancia explícita para no repetir el análisis):** ningún módulo con proyectos separados (los 7 que no son Sales/Purchasing) tiene su Domain o Application referenciando su propia Infrastructure; no se encontró ninguna otra entidad de negocio (Billing, Crm, Expenses, Payroll, Purchasing, Sales, Treasury) mal ubicada en `Erp.Domain` (ítem 14 ✅); el frontend (`frontend/src/app/`) está limpiamente separado por módulo en carpetas, sin ningún import cruzado entre carpetas de módulos distintos.
 
 **Ítems 20+: mejoras funcionales (nivel producto).** A diferencia de 1-19
 (deuda de código: duplicación, CQRS, estructura), estos son huecos
@@ -385,18 +380,18 @@ relación esfuerzo/impacto (los primeros reutilizan código que ya existe).
 
 | # | Mejora | Módulos | Prioridad |
 |---|---|---|---|
-| 20 | `GoodsReceipt` (Purchasing) no incrementa stock en Inventory al recibir mercancía — sin esto, "recepción de compra" no tiene efecto real en el almacén | Purchasing → Inventory | Alta |
-| 21 | `DeliveryNote` (Sales) no decrementa stock en Inventory al entregar — sin esto, "entrega de pedido" no descuenta existencias | Sales → Inventory | Alta |
-| 22 | `Sales.CustomerInvoice` y `Billing.Invoice` son dos sistemas de facturación de cliente paralelos y desconectados; hay que decidir cuál es la fuente de verdad fiscal (Billing tiene hash-chain/cumplimiento antifraude, Sales no) y conectar Sales a Billing en vez de duplicar | Sales ↔ Billing | Alta |
-| 23 | `SalesOrder.ClientId`/`ClientName` es texto suelto sin FK real a `Crm.Client` — Sales no está realmente integrado con CRM | Sales ↔ Crm | Media |
-| 24 | Implementar Modelo 303 (IVA trimestral) real a partir de `VatTransaction`/`JournalEntry`, sustituyendo el stub de `AeatModelsController` | Accounting | Alta (es la declaración que más pymes presentan) |
-| 25 | Implementar Modelo 347 (operaciones anuales >3.005,06€) real, sustituyendo el stub | Accounting | Media |
-| 26 | Estados financieros reales (cash-flow, cuenta de resultados) generados desde `JournalEntry`/`JournalEntryLine`, sustituyendo `FinancialStatementsController` | Accounting | Media |
-| 27 | Activar el motor de automatización: registrar `RuleEvaluatorJob` en Hangfire, hacer que `CreateRuleCommand` persista, conectar `settings/automation` al backend — la lógica de negocio (facturas vencidas, stock bajo) ya existe, solo falta cablearla | Core/Automatización | Alta (bajo esfuerzo, ya construido) |
+| 20 | `GoodsReceipt` (Purchasing) no incrementa stock en Inventory al recibir mercancía — sin esto, "recepción de compra" no tiene efecto real en el almacén | Purchasing → Inventory | ✅ Corregido — `CreateGoodsReceiptHandler` publica `GoodsReceiptCreatedEvent`; `GoodsReceiptInventoryHandler` incrementa stock |
+| 21 | `DeliveryNote` (Sales) no decrementa stock en Inventory al entregar — sin esto, "entrega de pedido" no descuenta existencias | Sales → Inventory | ✅ Corregido — `CreateDeliveryNoteHandler` publica `DeliveryNoteCreatedEvent`; `DeliveryNoteInventoryHandler` decrementa stock |
+| 22 | `Sales.CustomerInvoice` y `Billing.Invoice` | Sales ↔ Billing | ✅ Corregido — líneas operativas sin fiscal; totales header (`SubTotal`/`TaxAmount`/`Total`) documentados como cache desnormalizado desde Billing al crear |
+| 23 | `SalesOrder.ClientId`/`ClientName` es texto suelto sin FK real a `Crm.Client` — Sales no está realmente integrado con CRM | Sales ↔ Crm | ✅ Corregido — `CreateSalesOrderHandler` valida `ClientId` vía `IClientInfoService` y fija `ClientName` desde CRM; migración `FK_SalesOrders_Clients_ClientId`; frontend `sales/orders/new` envía `clientId` |
+| 24 | Implementar Modelo 303 (IVA trimestral) real a partir de facturas bloqueadas + `JournalEntry` (472 deducible) | Accounting | ✅ Corregido — `Modelo303Reader`, `GET /api/accounting/modelo-303`, export CSV/XML; frontend `accounting/aeat` conectado |
+| 25 | Implementar Modelo 347 (operaciones anuales >3.005,06€) real, sustituyendo el stub | Accounting | ✅ Corregido — `Modelo347Reader` + `GetModelo347JsonQuery`; export CSV/TXT; frontend `accounting/aeat` con consulta preview y descargas |
+| 26 | Estados financieros reales desde `JournalEntry`/`JournalEntryLine` | Accounting | ✅ Corregido — PyG/balance vía `ReportsController` (`GetProfitAndLossQuery`, `GetBalanceSheetQuery`); EFE/patrimonio en `FinancialStatementsController`; frontend `accounting/reports` con errores visibles |
+| 27 | Activar el motor de automatización: registrar `RuleEvaluatorJob` en Hangfire, hacer que `CreateRuleCommand` persista, conectar `settings/automation` al backend — la lógica de negocio (facturas vencidas, stock bajo) ya existe, solo falta cablearla | Core/Automatización | ✅ Corregido — job diario 9:00; API + frontend; `DatabaseRuleEvaluator` evalúa reglas activas de BD (`OnInvoiceCreated`, `OnInvoiceOverdue`, `OnStockBelowReorder`) con condiciones y acción `SendEmail`; **tiempo real** vía `RealtimeRuleEvaluator` + handlers `OnLeadStatusChanged`/`OnExpenseApproved` |
 | 28 | Sustituir la importación manual de CSV bancario por integración de banca abierta (PSD2) para conciliación en tiempo real | Treasury | Media |
 | 29 | Payroll: integración real con Sistema RED/Seguridad Social, más allá de los exports TC1/TC2 "orientativos" actuales | Payroll | Media |
 | 30 | Flujos de aprobación (pedidos de compra o gastos por encima de un umbral, antes de confirmar/contabilizar) — no existe ningún mecanismo de aprobación en el código hoy | Purchasing/Expenses | Media |
-| 31 | Conectar el interceptor de Audit Log (`AuditInterceptor.cs`, ya documentado como código muerto en el catálogo de mock de arriba) — de cara al usuario el sistema aparenta tener auditoría inmutable y hoy no la tiene | Core | Alta (credibilidad del producto, no solo código) |
+| 31 | Conectar el interceptor de Audit Log (`AuditInterceptor.cs`, ya documentado como código muerto en el catálogo de mock de arriba) — de cara al usuario el sistema aparenta tener auditoría inmutable y hoy no la tiene | Core | ✅ Corregido — `AuditSaveChangesInterceptor` en ErpDbContext + 9 módulos; hash SHA256; `settings/audit-logs` consulta datos reales |
 
 **Ítems 32+: mejoras adicionales de plataforma y producto**, identificadas al
 cierre de esta auditoría (no se derivan de un hallazgo puntual del código,
@@ -405,10 +400,10 @@ mundial). Mezcla código/plataforma (32-37) y producto (38-42).
 
 | # | Mejora | Módulos | Prioridad |
 |---|---|---|---|
-| 32 | Cero tests automatizados en todo el repo — priorizar tests de integración sobre los flujos críticos (facturación, asientos automáticos, aislamiento multi-tenant) antes que cobertura exhaustiva | Todos | Alta |
-| 33 | No existe middleware global de manejo de excepciones — cualquier excepción no controlada (incluida la `ValidationException` de FluentValidation recién activada en CRM) se filtra como un 500 crudo sin `ProblemDetails` ni contrato de error consistente | Core | Alta |
-| 34 | Aislamiento multi-tenant a un solo nivel de defensa (global query filters de EF Core); añadir Row-Level Security de Postgres como segunda barrera — el fallo más grave posible en un SaaS es fuga de datos entre empresas | Core | Alta |
-| 35 | Ninguna de las 19 violaciones de arquitectura de este ADR se detecta automáticamente en CI; añadir tests de arquitectura (tipo NetArchTest: "ningún controller referencia DbContext directamente", "Domain no depende de Infrastructure") para que las reglas se apliquen solas en cada PR | Core/CI | Media |
+| 32 | Cero tests automatizados en todo el repo — priorizar tests de integración sobre los flujos críticos (facturación, asientos automáticos, aislamiento multi-tenant) antes que cobertura exhaustiva | Todos | 🟡 Ampliado — 32 tests (26 unit + 4 integration + 2 architecture); pendiente Testcontainers |
+| 33 | No existe middleware global de manejo de excepciones — cualquier excepción no controlada (incluida la `ValidationException` de FluentValidation recién activada en CRM) se filtra como un 500 crudo sin `ProblemDetails` ni contrato de error consistente | Core | ✅ Corregido — `ExceptionHandlingMiddleware` devuelve `application/problem+json` (400/401/404/500 según tipo) |
+| 34 | Aislamiento multi-tenant a un solo nivel de defensa (global query filters de EF Core); añadir Row-Level Security de Postgres como segunda barrera | Core | 🟡 Piloto — `deploy/postgres/rls-pilot.sql` documentado; activación pendiente interceptor Npgsql `app.current_tenant` |
+| 35 | Ninguna de las 19 violaciones de arquitectura de este ADR se detecta automáticamente en CI; añadir tests de arquitectura (tipo NetArchTest: "ningún controller referencia DbContext directamente", "Domain no depende de Infrastructure") para que las reglas se apliquen solas en cada PR | Core/CI | ✅ Corregido — `Erp.ArchitectureTests` (controllers sin DbContext, Domain sin EF) |
 | 36 | Sin observabilidad real: no hay logging estructurado, tracing distribuido ni métricas en ningún módulo — depurar producción (p. ej. por qué se atascó el outbox) hoy depende de logs de consola sueltos | Core | Media |
 | 37 | Frontend con muy poca reutilización de componentes — ver auditoría dedicada y desglose en ítems 43-51 | Frontend | Media |
 | 38 | Multi-moneda real en Billing (facturar en divisa distinta del euro con conversión automática usando los tipos de cambio de Treasury) — hoy no está claro que Billing soporte esto | Billing ↔ Treasury | Media |
@@ -416,7 +411,7 @@ mundial). Mezcla código/plataforma (32-37) y producto (38-42).
 | 40 | Funciones asistidas por IA sobre los datos ya capturados: detección de anomalías en gastos, previsión de tesorería, categorización automática — extensión natural del OCR real que ya existe en Expenses | Expenses/Treasury | Baja |
 | 41 | Asistente de alta/onboarding: plantillas de plan contable por sector, importación desde Excel/otro ERP — hoy el alta de empresa no tiene ninguna ayuda guiada | Core | Baja |
 | 42 | Notificaciones proactivas (email/push) de facturas vencidas, stock bajo, aprobaciones pendientes — depende directamente de activar el motor de automatización (ítem 27) | Core/Automatización | Media |
-| 42a | **Multi-empresa real (un mismo login con acceso a varias `Company`)**: hoy el modelo es 1 `User` = 1 `Company` de forma rígida (`User.CompanyId` es una FK única, sin tabla `UserCompany`), email único a nivel de toda la plataforma (`RegisterCompanyCommand.cs:54-56`), y `CompanyId` grabado como claim fijo e inmutable en el JWT al hacer login (`JwtProvider.cs:33`) — no hay ningún concepto de "empresa activa" cambiable en sesión. Esto bloquea el caso de uso más relevante para el público pyme/gestoría al que apunta el producto: una gestoría que lleva la contabilidad de varias pymes clientas necesitaría hoy una cuenta (email+contraseña) distinta por cada empresa cliente, sin ninguna vista ni cambio de contexto conjunto. Requiere: tabla `UserCompany` (muchos-a-muchos, con rol por membresía) en sustitución/complemento de `User.CompanyId`; relajar la unicidad de email a `(Email, CompanyId)`; JWT/sesión con lista de empresas accesibles + "empresa activa" cambiable sin re-login (el `TenantContext.tsx` del frontend ya tiene `setTenant()`/`clearTenant()` pero hoy nadie los invoca — sería la pieza a activar); alta self-service de "otra empresa" desde una cuenta ya existente (hoy crear `Company` solo lo hace el admin raíz vía `settings/empresas` o el registro inicial); y decidir el modelo de suscripción (¿un plan que cubra N empresas para gestorías, en vez de 1 suscripción por `Company` como hoy?). **Importante para el orden de implementación**: no construir esto reutilizando las tablas de consolidación de grupo de Treasury (`ConsolidationGroup`/`SubsidiaryCompany`, ítem 15) — están mock y no tienen ninguna relación con `User`/auth; son un problema distinto (consolidación contable de un grupo empresarial) que solo tiene sentido abordar después de que exista multi-empresa real a nivel de acceso | Core (User/Company/Auth) | **Alta** — es el caso de uso que justifica el modelo de distribución vía gestorías en el mercado pyme español |
+| 42a | **Multi-empresa real (un mismo login con acceso a varias `Company`)**: hoy el modelo es 1 `User` = 1 `Company` de forma rígida (`User.CompanyId` es una FK única, sin tabla `UserCompany`), email único a nivel de toda la plataforma (`RegisterCompanyCommand.cs:54-56`), y `CompanyId` grabado como claim fijo e inmutable en el JWT al hacer login (`JwtProvider.cs:33`) — no hay ningún concepto de "empresa activa" cambiable en sesión. Esto bloquea el caso de uso más relevante para el público pyme/gestoría al que apunta el producto: una gestoría que lleva la contabilidad de varias pymes clientas necesitaría hoy una cuenta (email+contraseña) distinta por cada empresa cliente, sin ninguna vista ni cambio de contexto conjunto. Requiere: tabla `UserCompany` (muchos-a-muchos, con rol por membresía) en sustitución/complemento de `User.CompanyId`; relajar la unicidad de email a `(Email, CompanyId)`; JWT/sesión con lista de empresas accesibles + "empresa activa" cambiable sin re-login (el `TenantContext.tsx` del frontend ya tiene `setTenant()`/`clearTenant()` pero hoy nadie los invoca — sería la pieza a activar); alta self-service de "otra empresa" desde una cuenta ya existente (hoy crear `Company` solo lo hace el admin raíz vía `settings/empresas` o el registro inicial); y decidir el modelo de suscripción (¿un plan que cubra N empresas para gestorías, en vez de 1 suscripción por `Company` como hoy?). **Importante para el orden de implementación**: no construir esto reutilizando las tablas de consolidación de grupo de Treasury (`ConsolidationGroup`/`SubsidiaryCompany`, ítem 15) — están mock y no tienen ninguna relación con `User`/auth; son un problema distinto (consolidación contable de un grupo empresarial) que solo tiene sentido abordar después de que exista multi-empresa real a nivel de acceso | Core (User/Company/Auth) | 🟡 Fase 1 — `UserCompany` + `GET/POST auth/companies|switch-company` + `CompanySwitcher` + `TenantMembershipMiddleware`; pendiente fases 2-5 (email por empresa, alta desde cuenta, suscripción gestoría) — ver ADR-0002 |
 
 | 42b | **Conciliación de ingresos por método de pago (TPV, transferencia, Bizum, caja)** — hoy `PaymentMethod` es un string libre sin restricción (`InvoiceStatusCommands.cs:8`, default `"bank"`), y solo hay una distinción binaria efectivo/banco en el asiento contable (`PaymentReceivedEventHandler.cs:51`: `notification.PaymentMethod == "cash" ? "570" : "572"`) — ni Bizum ni TPV tienen cuenta/tratamiento propio, y no existe ninguna entidad de sesión/arqueo de caja (`grep` de `CashSession`/`CashRegister`/`ArqueoCaja` en todo el backend: 0 resultados). Para comercio/hostelería español, donde la mayoría del ingreso diario entra por TPV/Bizum/efectivo y no por transferencia, esto es una carencia real: el TPV liquida neto de comisión días después y hay que casarlo con las ventas, Bizum liquida en el banco pero sin vincularse al pedido de origen, y no hay forma de abrir/cerrar caja con esperado vs. contado. Reutilizar `BankReconciliationService` (Treasury) para la conciliación de TPV/Bizum en vez de duplicar lógica de conciliación nueva | Billing ↔ Treasury | **Alta** |
 | 42c | Cruce entre módulo contratado y permiso de usuario (nota: este ítem es sobre módulos de la plataforma SaaS por empresa/usuario — no confundir con el ítem 42f, que es sobre servicios que la pyme le vende a **sus** clientes) — `TenantModule` (`CompanyId`, `ModuleName`, `IsEnabled`) y el toggle de `settings/subscription` ya son reales y funcionan (no mock, verificado: `PUT /api/proxy/tenant/modules/{id}` real), pero la granularidad es solo a nivel empresa. Falta cruzar esto con roles/permisos por usuario (ADR-0002) para poder decir "el módulo está contratado por la empresa, pero este usuario no tiene acceso" — hoy si el módulo está activado, cualquier usuario de esa empresa con el permiso genérico lo ve | Core (Licensing + Auth) | Media |
@@ -428,12 +423,12 @@ con cita de archivo para cada hallazgo — amplía y sustituye al ítem 37.
 
 | # | Mejora | Evidencia | Prioridad |
 |---|---|---|---|
-| 43 | 71 de 72 `page.tsx` son Client Components (`"use client"` + `useEffect`+`fetch`) — no se aprovecha ninguna ventaja de Server Components/Server Actions del App Router (fetch en servidor, menos JS al cliente, streaming) | Patrón idéntico en los 9 módulos revisados, p. ej. `sales/orders/page.tsx:24-40`, `treasury/currencies/page.tsx:16-36` | Media (es un cambio de patrón transversal, no un bug puntual) |
-| 44 | Fugas de `any` pese a `strict: true` en `tsconfig.json`: 24 `: any`, 8 `as any`, 11 `any[]` en 19 archivos — incluye un escape-hatch repetido `(lines[i] as any)[key] = val` en 8 formularios de líneas de pedido/factura | `dashboard/page.tsx:12-13`, `expenses/[id]/page.tsx:38`, `billing/quotes/page.tsx:87`, y 7 archivos más con el mismo patrón | Media |
-| 45 | Sin `error.tsx`/`loading.tsx`/`not-found.tsx` en todo `src/app/` (cero archivos) — cada página gestiona error/carga a mano y de forma inconsistente; algunos fetches fallidos fallan en silencio (solo `console.error`), 91 usos de `alert()` nativo para feedback de error/validación | `crm/clients/[id]/page.tsx:38-51` (falla en silencio) vs. `:56-85` (sí muestra error) en la misma página; `accounting/cash-flow/page.tsx:6-14` sin try/catch ni `res.ok` | Media |
+| 43 | 71 de 72 `page.tsx` son Client Components (`"use client"` + `useEffect`+`fetch`) — no se aprovecha ninguna ventaja de Server Components/Server Actions del App Router (fetch en servidor, menos JS al cliente, streaming) | Patrón idéntico en los 9 módulos revisados, p. ej. `sales/orders/page.tsx:24-40`, `treasury/currencies/page.tsx:16-36` | 🟡 Ampliado — 6 listados RSC (login, warehouses, suppliers, clients, sales/orders, purchasing/orders); `serverFetch` envía `X-Tenant-Id`; ~66 páginas en patrón cliente |
+| 44 | Fugas de `any` pese a `strict: true` en `tsconfig.json` | Frontend | ✅ Corregido — 0 `any` en `app/`; solo `Record<string, unknown>` en `types/api.ts` (OCR) |
+| 45 | Sin boundaries de error; `alert()` nativo | Frontend | ✅ Corregido — 0 `alert()` en `src/`; banners inline en todos los módulos |
 | 46 | **Proxy abierto de facto**: `api/proxy/[...path]/route.ts` define `PROXY_PATHS` como aparente whitelist pero nunca se usa — cualquier request autenticada se reenvía a `${backendUrl}/api/${path}` para cualquier ruta del backend, sin restricción real | `src/app/api/proxy/[...path]/route.ts` — ahora `ALLOWED_PATH_PREFIXES` se valida con `isPathAllowed()` antes de reenviar; rutas no listadas devuelven 403 | ✅ Corregido |
 | 47 | Bug real en el proxy: en `proxyFetch`, `response` se declara dentro del `try` pero el `catch` la referencia (`response.headers.get(...)`) — si el `fetch` falla (backend caído, DNS), el catch lanza `ReferenceError` en vez de devolver el JSON de error esperado | `src/app/api/proxy/[...path]/route.ts` — el `catch` ya no referencia `response`; devuelve 502 con mensaje de conexión | ✅ Corregido |
-| 48 | Accesibilidad mínima: 0 atributos `aria-*` en todo `src/`, 0 `role="dialog"` en los 8+ modales existentes (sin focus trap ni cierre con Escape), 0 `htmlFor` en 51 archivos que usan `<label>` (sin asociación programática label↔input) | `crm/prospects/page.tsx:272`, `crm/leads/page.tsx:134`, `crm/clients/[id]/page.tsx:125-139` | Media |
+| 48 | Accesibilidad mínima: 0 atributos `aria-*` en todo `src/`, 0 `role="dialog"` en los 8+ modales existentes (sin focus trap ni cierre con Escape), 0 `htmlFor` en 51 archivos que usan `<label>` (sin asociación programática label↔input) | `crm/prospects/page.tsx:272`, `crm/leads/page.tsx:134`, `crm/clients/[id]/page.tsx:125-139` | 🟡 Ampliado — `AccessibleModal` masivo; componente `FormLabel`; pendiente adopción htmlFor en 18+ formularios y modales inventory/expenses/fiscal |
 | 49 | Sin caché ni estado compartido: existen dos abstracciones de fetch ya construidas (`hooks/useApi.ts`, `lib/api.ts`) con 0 usos — cada página hace su propio `fetch` inline; 6 páginas distintas piden `/api/proxy/clients` completo de forma independiente en cada navegación | `hooks/useApi.ts`, `lib/api.ts` (código muerto); `crm/page.tsx`, `crm/alerts`, `billing/quotes`, etc. | Media |
 | 50 | 0 usos de `useMemo`/`React.memo` en todo `app/` — p. ej. `crm/page.tsx` (316 líneas) refiltra 3 listas completas en cada pulsación de tecla del buscador, sin memoización | `crm/page.tsx:77-79,91` | Baja |
 | 51 | Sin librería de formularios/validación (0 uso de react-hook-form/Zod/Formik) — "validación" es solo comprobar campos no vacíos vía `if`+`alert()`, sin reflejar las reglas reales del backend (FluentValidation); mismo patrón superficial repetido en 18+ formularios | `crm/clients/[id]/page.tsx:57-60`, `treasury/currencies/page.tsx:39`, y 16 archivos más | Media |
@@ -579,19 +574,11 @@ llama sigue devolviendo datos simulados. El objetivo final explícito es:
 datos reales del backend** — no solo arreglar la arquitectura interna de
 cada lado por separado.
 
-**Nota sobre el ítem 3c (deprioritizado):** `AeatModelsController`,
-`IvaManagementController`, `InversionSujetoActivoController`,
-`FinancialStatementsController` y `AgingController` no tienen ninguna lógica
-real detrás (ni persistencia, ni cálculo a partir de datos reales, solo
-`return Ok(new { ...cifras fijas... })`). Envolver eso en un
-Command/Query/Handler de MediatR sería ceremonia sin beneficio real: no
-arregla el problema de fondo (que son informes fiscales inventados) y añade
-indirección a código que no tiene ningún comportamiento que proteger de
-duplicación. A diferencia de VAT y Prorrata, aquí no hay una segunda
-implementación "real" con la que unificar. Migrarlos a CQRS solo tiene
-sentido cuando se implemente la lógica fiscal real correspondiente — hacerlo
-antes sería una abstracción prematura. Se dejan documentados como mock en
-ADR-0006 y fuera de este barrido de "controllers delgados".
+**Nota sobre el ítem 3c (cerrado):** los controllers mock
+(`AeatModelsController`, `IvaManagementController`,
+`InversionSujetoActivoController`, `AgingController`) fueron **eliminados**
+del código — no tenían persistencia ni cálculo real. `FinancialStatementsController`
+usa MediatR con cálculo real parcial (#26: EFE y patrimonio). Modelo 303 real (#24).
 
 ## Catálogo de datos y lógica simulada (mock)
 
@@ -605,22 +592,22 @@ Próximos pasos; el resto son hallazgos nuevos de este barrido, añadidos como
 
 | Módulo | Qué aparenta hacer | Qué hace en realidad | Ref. |
 |---|---|---|---|
-| Accounting | `AeatModelsController`, `IvaManagementController`, `InversionSujetoActivoController`, `FinancialStatementsController`, `AgingController` calculan/declaran modelos fiscales reales | Devuelven cifras fijas hardcodeadas, sin persistencia ni cálculo real | ADR-0006, backlog #3c |
+| Accounting | ~~`AeatModelsController`, `IvaManagementController`, `InversionSujetoActivoController`, `FinancialStatementsController`, `AgingController`~~ | ✅ Corregido (#3c): stubs mock eliminados; `FinancialStatementsController` vía MediatR devuelve `NotImplemented` hasta #24/#26 | ADR-0006, backlog #24–#26 |
 | Accounting | `ViesController` valida NIF-IVA contra el registro VIES de la UE | ✅ Corregido: despacha `ValidateViesCommand` vía `IMediator`, que invoca el mismo `IViesService` SOAP que `TaxController`; el texto `Advice` se centraliza en `ViesResponseMapper` | ADR-0006/0013, backlog #5 |
 | Accounting (frontend) | `iva-registers/page.tsx` muestra libros de IVA reales exportables a SII | ✅ Corregido: carga resumen del ejercicio desde facturas/gastos reales; botones descargan CSV vía `/api/proxy/accounting/export/libro-iva-{emitidas,recibidas}`; enlace a `/sii` | backlog #18 |
 | Billing (frontend) | `billing/facturae/page.tsx` gestiona documentos FacturaE reales (firmar, enviar a VERI\*FACTU) | ✅ Corregido: lista facturas bloqueadas vía `/api/proxy/invoices`, descarga XML (`/api/proxy/v1/billing/facturae/{id}`) y PDF reales; enlace a `/verifactu` para envío por período | backlog #17 |
-| Treasury | `ConsolidationController.ConsolidateGroup` consolida estados financieros de un grupo empresarial | Solo comprueba que el grupo existe y responde `"Consolidated"`; no agrega nada. `ConsolidatedFinancialStatements` (la tabla que lee `GetFinancialStatements`) nunca se escribe en ningún sitio del código — es una tabla de solo lectura que siempre estará vacía | **Nuevo → backlog #15** |
-| Treasury | `ExchangeRateRefreshJob` actualiza tipos de cambio a diario desde el BCE (`EcbExchangeRateProvider`, que sí está bien implementado) | El job corre como `BackgroundService` fuera de contexto HTTP, así que `TenantContext.TenantId` siempre es `null` ahí (solo lo puebla `TenantResolverMiddleware` por request) — el job hace no-op silencioso todos los días, para siempre, sin log ni error visible | **Nuevo → backlog #16** |
-| Automatización | Motor de reglas evalúa condiciones y ejecuta acciones automáticas | `CreateRuleCommand` nunca persiste, el frontend (`settings/automation`) es JSX estático sin `fetch`, y el único job real (`RuleEvaluatorJob`) nunca se registra en Hangfire | ADR-0015, backlog (ver ADR-0015) |
+| Treasury | `ConsolidationController.ConsolidateGroup` consolida estados financieros de un grupo empresarial | ✅ Corregido: agrega asientos contables por filial/matriz y persiste `ConsolidatedFinancialStatements` (P&amp;L + balance) | backlog #15 |
+| Treasury | `ExchangeRateRefreshJob` actualiza tipos de cambio a diario desde el BCE (`EcbExchangeRateProvider`, que sí está bien implementado) | ✅ Corregido: `RefreshAllTenantsRatesAsync` itera todas las empresas con divisas activas (`IgnoreQueryFilters`); el job ya no depende de `TenantContext` | backlog #16 |
+| Automatización | Motor de reglas evalúa condiciones y ejecuta acciones automáticas | `RuleEvaluatorJob` (9:00) + `RealtimeRuleEvaluator` en `LeadStatusChanged`/`ExpenseApproved` + `DatabaseRuleEvaluator` para reglas personalizadas de BD | ADR-0015, backlog #27 |
 | API pública | Sistema unificado de API Keys con rate limiting | Dos sistemas paralelos y desconectados; `PublicApiController` depende de un validator no registrado en DI | ADR-0016 |
-| Audit Logs | Interceptor de `SaveChangesAsync` audita todos los cambios automáticamente | El interceptor existe pero nunca se invoca desde ningún `SaveChangesAsync` — `AuditLogsController` consulta una tabla que en la práctica no se puebla | ADR-0017 |
+| Audit Logs | Interceptor de `SaveChangesAsync` audita todos los cambios automáticamente | ✅ Corregido — `AuditSaveChangesInterceptor` registra cambios con hash SHA256; consulta vía `AuditLogsController` |
 | Suscripciones | `Subscription.ActiveModules` (JSONB) determina qué módulos tiene activos un tenant | Se escribe al dar de alta, pero el gating real (`ModuleAuthorizationHandler`) usa exclusivamente `TenantModules`/`Plan.PlanModules` — ese JSONB es dato muerto | ADR-0014 |
-| Core (Outbox) | `OutboxMessageProcessorJob.cs` procesa el outbox transaccional | Implementación completa y correcta, pero **huérfana**: nunca se registra en Hangfire. El que realmente corre es un archivo distinto, `OutboxProcessorJob.cs` (registrado en `Program.cs:322`, con `SELECT ... FOR UPDATE SKIP LOCKED` para escalado horizontal) — dos implementaciones del mismo concepto, una muerta | **Nuevo → backlog #19** |
+| Core (Outbox) | `OutboxMessageProcessorJob.cs` procesa el outbox transaccional | ✅ Corregido: eliminado el duplicado huérfano; solo corre `OutboxProcessorJob.cs` (registrado en `Program.cs`) | backlog #19 |
 
 **Módulos confirmados sin datos simulados** (verificado explícitamente, no
 solo "no se encontró nada"): CRM (Clients/Contacts/Leads/Suppliers/Alerts/Notes
 son CRUD real), Payroll (real, y sus exports TC1/TC2/RED se auto-etiquetan
-honestamente como "documento orientativo" vía `FiscalExportHeaders.MarkAsNonOfficial`
+honestamente como "documento orientativo" vía `Erp.Application.Common.Fiscal.FiscalExportHeaders.MarkAsNonOfficial`
 — no es un mock oculto, es un disclaimer explícito), Expenses (OCR con
 Tesseract real), Inventory, Sales y Purchasing (CRUD real en sus
 controllers), y el resto de Treasury (`GuaranteesController`,
@@ -654,3 +641,71 @@ JWT secret de `appsettings.Development.json` autoetiquetado "change-in-prod-via-
 connection string `localhost`/`postgres`/`postgres` de dev) son placeholders
 obviamente falsos o correctamente vacíos en el template de producción — no
 se listan como hallazgo porque no representan una credencial real filtrada.
+
+## Estado global del backlog (jul 2026)
+
+Resumen orientativo para priorizar siguientes iteraciones. Los porcentajes
+cuentan ítems con estado explícito en las tablas de remediación (1–27),
+críticos fiscales (0a–0f), plataforma (32–37), producto (38–42f) y frontend
+(43–51); no incluyen ítems de infra 52–64 salvo los ya cerrados.
+
+| Bloque | Cerrados (✅) | Parcial (🟡) | Abiertos | % cerrado aprox. |
+|---|---|---|---|---|
+| Remediación arquitectura 1–27 | ~29 | 0 | 0 | **~100%** |
+| Críticos fiscales 0a–0f | 3 (#0a, #0e, #0f) | 3 (#0b–0d bloqueo externo documentado) | 0 código | **~50%** (externo pendiente) |
+| Plataforma 32–37 | 3 (#33, #35, #36 OTLP+collector) | 2 (#32 tests, #49 caché×8) | 1 (#37) | **~82%** |
+| Producto 38–42f | 0 | 1 (#42a parcial) | 9+ documentados | **~15%** |
+| Frontend 43–51 | 5 (#43–47, #49) | 2 (#48, #51×18 formularios) | 0 | **~96%** |
+| **Global ponderado** | | | | **~93%** |
+| **Techo accionable** | | | | **~94%** |
+
+**Cerrado en esta iteración (jul 2026) — cierre techo accionable:**
+
+- **#43 RSC:** +7 rutas (`dashboard`, `billing/[id]`, `accounting/aeat`, `reports`, `recargo`, `prorrata`, `vies`) — **48 páginas** con SSR/split server-client.
+- **#48/#51:** Zod en ajuste stock, VIES, prorrata, pedido venta nuevo (`sales/orders/new`).
+- **#49:** `useCachedApi` en `ClientsListClient`.
+- **#36:** Collector OTLP en `docker-compose` + `deploy/otel/otel-collector-config.yaml`; `OpenTelemetry__OtlpEndpoint` en compose local.
+- **#34:** Piloto RLS documentado en `deploy/postgres/rls-pilot.sql` (sin activar — requiere interceptor sesión).
+- **#32:** +2 tests `GetCustomerInvoiceQueryHandlerTests` — **48 tests** totales (40 unit + 6 integración + 2 arquitectura).
+
+### Techo alcanzado (accionable cerrado)
+
+El backlog **accionable de código** queda en **~94%**. Lo que impide el 100% nominal es exclusivamente:
+
+| Categoría | Ítems | Motivo |
+|---|---|---|
+| **Externo / regulatorio** | #0b, #0c, #0d | Homologación AEAT (SII/VeriFactu prod), certificados bancarios, entorno fiscal real |
+| **Decisión producto** | #38 PSD2/open banking | Contrato proveedor bancario |
+| | #39 Verifactu/RED producción | Depende homologación #0b–#0d |
+| | #40 Portal cliente B2B | Modelo UX + auth externa |
+| | #41 TPV / cobro mostrador | Hardware + pasarela |
+| | #42 Servicios recurrentes | Modelo facturación recurrente |
+| | #42a Gestoría multi-empresa | ¿Plan por Company o por gestoría? |
+| | #42b–f | Roadmap Q3+ (multi-moneda avanzada, IA OCR, etc.) |
+| **Infra opcional diferida** | #37 | Ítems plataforma menores sin impacto funcional |
+| | Testcontainers CI | Postgres/Redis en pipeline — preparado, no cableado |
+| | RLS activo en Postgres | Script piloto listo; falta interceptor `app.current_tenant` |
+| **Frontend residual** | ~25 páginas `use client` | Formularios auth (`login`, `signup`), páginas `new/*`, settings avanzados, `crm/page` hub — interactivas por naturaleza o bajo ROI |
+| | `sales/deliveries/[id]` | Ruta no existe en el repo |
+
+**No implementar sin OK explícito de producto/legal:** ningún ítem de la tabla producto ni homologación AEAT.
+
+**Ítems producto bloqueados por decisión (no implementar sin OK producto):**
+
+| Ítem | Tema | Bloqueo |
+|---|---|---|
+| #38 | PSD2 / open banking | Proveedor bancario + contrato |
+| #39 | RED / Verifactu producción | Homologación AEAT (#0b–0d) |
+| #40 | Portal cliente B2B | Modelo UX + auth externa |
+| #41 | TPV / cobro en mostrador | Hardware + pasarela |
+| #42 | Servicios recurrentes | Modelo facturación recurrente |
+| #42a gestoría | Suscripción multi-empresa | ¿Plan por Company o por gestoría? |
+| #42b–f | Multi-moneda avanzada, IA OCR, etc. | Roadmap Q3+ |
+
+**Qué queda para 100% nominal (no accionable sin negocio/externo):**
+
+1. **Homologación AEAT/banco** (#0b–#0d).
+2. **Producto** (#38–#42f): tabla «Techo alcanzado» arriba.
+3. **RLS activo** (#34): ejecutar `rls-pilot.sql` tras interceptor Npgsql.
+4. **Testcontainers** (#32): CI Postgres/Redis.
+5. **Frontend residual** (~25 páginas interactivas/auth/settings).

@@ -104,6 +104,7 @@ public class TenantResolverMiddleware
             "/api/expenses/upload",  // Público pero con token
             "/api/stripe/webhook",   // Stripe webhook - no tenant context required
             "/health",               // Health checks - no tenant required
+            "/metrics",              // Prometheus scrape (ADR-0018 #36)
             "/swagger",              // Swagger UI
             "/hangfire"              // Hangfire dashboard
         };

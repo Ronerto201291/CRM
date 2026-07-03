@@ -37,6 +37,18 @@ public class InvoiceLineEventDto
 }
 
 /// <summary>
+/// Fired when an expense document is uploaded via public QR/token.
+/// → CRM: ActivityLog on ExpenseUpload
+/// </summary>
+public class ExpenseUploadCreatedEvent : IDomainEvent
+{
+    public Guid UploadId { get; set; }
+    public Guid CompanyId { get; set; }
+    public string FileName { get; set; } = string.Empty;
+    public string? Comment { get; set; }
+}
+
+/// <summary>
 /// Fired when an expense document is approved.
 /// → AccountingService generates journal entry (600/472/410/4751)
 /// </summary>
@@ -201,4 +213,37 @@ public class QuoteConvertedToInvoiceEvent : IDomainEvent
     public Guid? ClientId       { get; set; }
     public decimal TotalAmount  { get; set; }
     public DateTime OccurredOn  { get; } = DateTime.UtcNow;
+}
+
+// ── Purchasing / Sales → Inventory ────────────────────────────────────────────
+
+/// <summary>
+/// Fired when goods are received against a purchase order.
+/// → Inventory: increment stock for received products.
+/// </summary>
+public class GoodsReceiptCreatedEvent : IDomainEvent
+{
+    public Guid GoodsReceiptId { get; set; }
+    public Guid CompanyId { get; set; }
+    public string ReceiptNumber { get; set; } = string.Empty;
+    public List<StockLineEventDto> Lines { get; set; } = new();
+}
+
+/// <summary>
+/// Fired when a delivery note is created for a sales order.
+/// → Inventory: decrement stock for shipped products.
+/// </summary>
+public class DeliveryNoteCreatedEvent : IDomainEvent
+{
+    public Guid DeliveryNoteId { get; set; }
+    public Guid CompanyId { get; set; }
+    public string DeliveryNumber { get; set; } = string.Empty;
+    public List<StockLineEventDto> Lines { get; set; } = new();
+}
+
+public class StockLineEventDto
+{
+    public Guid? ProductId { get; set; }
+    public decimal Quantity { get; set; }
+    public decimal UnitCost { get; set; }
 }

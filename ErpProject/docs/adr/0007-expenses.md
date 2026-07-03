@@ -37,8 +37,10 @@ todos bajo `api/expenses`:
   `PublicUploadToken` coincida con el token de la URL y que tenga
   `QrUploadEnabled = true` (consulta con `IgnoreQueryFilters()`, porque en
   este punto todavía no hay tenant en el `ITenantContext`). Sube el fichero a
-  MinIO/S3 vía `IFileStorageService` y crea un `ExpenseUpload` en estado
-  `Pending`, más una entrada en `ActivityLog` del módulo CRM.
+  MinIO/S3 vía `IFileStorageService`, crea un `ExpenseUpload` en estado
+  `Pending` y publica `ExpenseUploadCreatedEvent` (ADR-0018 #19d); un handler
+  en CRM (`ExpenseUploadActivityHandler`) escribe `ActivityLog` — el controller
+  ya no inyecta `ICrmDbContext`.
 - `GET /uploads` — lista de `ExpenseUpload` (autenticado).
 - `POST /` (`CreateManual`) — alta manual de un `ExpenseDocument` en estado
   `Draft`, sin pasar por OCR (`OcrConfidence = null`).
@@ -189,12 +191,14 @@ se protege indirectamente a través de su FK a `ExpenseDocument`.
   `IgnoreQueryFilters()` porque el filtro global de tenant depende de un
   contexto que aún no existe en ese momento del *pipeline*. El resto de
   endpoints del módulo dependen del filtrado estándar por `CompanyId`.
-- **ADR-0004 (CRM)**: dependencia real y bidireccional. `ExpensesController`
-  inyecta `ICrmDbContext` directamente para escribir `ActivityLog` en la
-  subida; `OcrBackgroundService` crea `Supplier` en CRM cuando detecta un CIF
-  nuevo; y `ExpenseApprovedActivityHandler` (en el propio módulo CRM) reacciona
-  a `ExpenseApprovedEvent` para dejar traza en el timeline de actividad, tanto
-  del gasto como del proveedor.
+- **ADR-0004 (CRM)**: dependencia parcialmente desacoplada. ✅ Upload QR
+  publica `ExpenseUploadCreatedEvent` → `ExpenseUploadActivityHandler` escribe
+  `ActivityLog` (ya no hay `ICrmDbContext` en `ExpensesController` ni
+  `ProjectReference` Crm en `Expenses.Api`). ✅ Listado de gastos por proveedor:
+  `GET /api/expenses/by-supplier/{supplierId}`; ficha CRM ya no cruza módulos en
+  el controller (`SuppliersController` sin `GetSupplierExpensesQuery`). `OcrBackgroundService` sigue
+  creando `Supplier` en CRM cuando detecta un CIF nuevo;
+  `ExpenseApprovedActivityHandler` reacciona a `ExpenseApprovedEvent`.
 - **ADR-0006 (Accounting)**: `ExpenseApprovedEventHandler` en `Accounting` es
   el que realmente contabiliza el gasto (asiento en `JournalEntries`),
   desacoplado por evento de dominio — la entidad `AccountingEntry` que vive
@@ -208,6 +212,15 @@ se protege indirectamente a través de su FK a `ExpenseDocument`.
   `backend/Modules/Purchasing`; el alta automática de proveedor descrita en el
   README ocurre contra la entidad `Supplier` del módulo **CRM**
   (`ICrmDbContext`), no contra Purchasing.
+
+## Evaluación de calidad arquitectónica
+> Metodología en `ADR-0018`.
+
+- **Desacoplamiento Expenses↔CRM:** ✅ upload vía `ExpenseUploadCreatedEvent`
+  (#19d); sin `ICrmDbContext` en `ExpensesController`.
+- **OCR:** Tesseract real (no mock).
+- **Pendiente:** sin FluentValidation; endpoint `reject` ausente; entidad
+  `AccountingEntry` sin uso; UI pública de subida QR incompleta.
 
 ## Buenas prácticas aplicables
 - **Validación de contenido real, no solo de cabecera**: el endpoint público

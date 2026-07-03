@@ -8,4 +8,7 @@ public interface IFacturaEService
     /// Returns the UTF-8 XML bytes and suggested filename.
     /// </summary>
     Task<(byte[] XmlBytes, string FileName)> GenerateAsync(Guid invoiceId, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>Genera FacturaE firmado con XAdES-BES si hay certificado Sii:CertPath configurado.</summary>
+    Task<(byte[] XmlBytes, string FileName)> GenerateSignedAsync(Guid invoiceId, Guid tenantId, CancellationToken ct = default);
 }

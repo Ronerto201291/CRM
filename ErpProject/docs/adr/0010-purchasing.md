@@ -22,10 +22,11 @@ suposiciones sobre cómo "debería" funcionar un ERP de compras.
 
 ## Decisión
 ### Backend
-La estructura de carpetas seguida es `Api/Controllers`, `Application`,
-`Domain/Entities`, `Infrastructure/Data`, igual que el resto de módulos
-según el patrón compartido, pero con dos desviaciones físicas relevantes
-(ver "Relación con otros módulos" y "Consecuencias").
+La estructura de carpetas sigue `Api/Application/Domain/Infrastructure` con
+**cuatro `.csproj` separados** (ADR-0018 #12) — frontera real de compilador
+entre capas, alineado con el resto de módulos salvo la migración física que
+vivió temporalmente en la raíz del módulo (#19g corregido: ahora bajo
+`Infrastructure/Migrations/`).
 
 Controllers (`backend/Modules/Purchasing/Api/Controllers/`):
 - `PurchaseOrdersController` — ruta `api/v{version:apiVersion}/purchasing/orders`.
@@ -147,10 +148,8 @@ exactamente esas columnas). `PurchaseOrder` tiene un índice único
 
 ### Flujo end-to-end representativo
 1. El usuario crea un pedido desde `orders/new/page.tsx`, que envía
-   `POST /api/proxy/v1/purchasing/orders` → `PurchaseOrdersController.Create`,
-   el cual construye `PurchaseOrder` + `PurchaseOrderLine` directamente y
-   llama a `_context.SaveChangesAsync`. (El `supplierId` que el formulario
-   recoge no forma parte de `CreatePoDto`, por lo que se descarta.)
+   `POST /api/proxy/v1/purchasing/orders` → `PurchaseOrdersController.Create`
+   → `CreatePurchaseOrderCommand` vía `IMediator` (backlog #11).
 2. Desde `orders/[id]/page.tsx`, el usuario pulsa "Registrar Recepción",
    navega a `receipts/new/page.tsx` y envía
    `POST /api/proxy/v1/purchasing/receipts` con el `purchaseOrderId` y
@@ -166,28 +165,13 @@ exactamente esas columnas). `PurchaseOrder` tiene un índice único
    importe se desvía del importe de la línea de pedido por encima de la
    tolerancia, la operación se aborta con `InvalidOperationException` y no
    se crea la factura.
-4. No existe ningún paso posterior de aprobación, contabilización o
-   actualización de stock: el flujo termina en la persistencia de la
-   factura de proveedor.
+4. La recepción dispara `GoodsReceiptCreatedEvent` → Inventory incrementa
+   stock (ADR-0018 #20). No hay contabilización automática ni obligación de
+   pago en Treasury al crear la factura de proveedor.
 
 ## Relación con otros módulos
-- **ADR-0001 (patrón compartido de módulos)**: Purchasing reutiliza
-  `AuditableEntity`, `ModuleDbContextBase`, MediatR y versionado de API
-  (`Asp.Versioning`) como el resto de módulos, pero con dos desviaciones de
-  carpeta verificadas: (a) un único `.csproj` en la raíz del módulo,
-  `backend/Modules/Purchasing/Erp.Modules.Purchasing.Infrastructure.csproj`,
-  en vez de un `.csproj` por capa dentro de `Api/`, `Application/`,
-  `Domain/` e `Infrastructure/` (compárese con Inventory, que tiene cuatro
-  `.csproj`: `Domain/Erp.Modules.Inventory.Domain.csproj`,
-  `API/Erp.Modules.Inventory.Api.csproj`,
-  `Application/Erp.Modules.Inventory.Application.csproj` e
-  `Infrastructure/Erp.Modules.Inventory.Infrastructure.csproj`); y (b) la
-  carpeta de migraciones vive en `backend/Modules/Purchasing/Migrations/`
-  (raíz del módulo) en vez de `backend/Modules/Purchasing/Infrastructure/Migrations/`
-  (compárese con `backend/Modules/Inventory/Infrastructure/Migrations/`).
-  El namespace de la migración generada sigue siendo
-  `Erp.Modules.Purchasing.Infrastructure.Migrations` pese a residir
-  físicamente fuera de `Infrastructure/`.
+- **ADR-0001 (patrón compartido):** ✅ cuatro proyectos por capa (#12);
+  migraciones bajo `Infrastructure/Migrations/` (#19g).
 - **ADR-0002 (multi-tenant)**: `PurchasingDbContext` sigue el mismo patrón
   de `HasQueryFilter` por `CompanyId` y autorrelleno de `CompanyId` vía
   `ITenantContext` que el resto de módulos.
@@ -206,25 +190,20 @@ exactamente esas columnas). `PurchaseOrder` tiene un índice único
   `Purchasing`, ni ningún evento/notificación MediatR o llamada directa
   desde Purchasing hacia Accounting. La contabilización de la factura de
   proveedor no está implementada.
-- **ADR-0008 (Inventory)**: no se ha encontrado ningún código en
-  `backend/Modules/Inventory/` que referencie `GoodsReceipt` ni
-  `Purchasing`. `CreateGoodsReceiptHandler` no publica ningún evento de
-  dominio ni notificación MediatR (no hay `INotification`, `DomainEvent` ni
-  patrón Outbox en todo `backend/Modules/Purchasing/`). Registrar una
-  recepción de mercancía no actualiza el stock de Inventario.
+- **ADR-0008 (Inventory)**: ✅ Corregido (ADR-0018 #20) — `CreateGoodsReceiptHandler`
+  publica `GoodsReceiptCreatedEvent` vía MediatR; `GoodsReceiptInventoryHandler`
+  (Inventory) incrementa stock en el almacén activo de la empresa, con
+  idempotencia por `ReferenceType=GoodsReceipt`.
 
 ## Evaluación de calidad arquitectónica
-> Metodología completa y hallazgos transversales en `ADR-0018`.
+> Metodología completa en `ADR-0018`.
 
-Purchasing es, junto con Sales, el único módulo con un solo `.csproj`
-(`Erp.Modules.Purchasing.Infrastructure.csproj`) compilando las cuatro
-carpetas lógicas como un mismo assembly — sin la frontera de compilador que
-separa Domain de Infrastructure en los otros 7 módulos (riesgo latente, no
-observado hoy). **Corregido:** `CreateGoodsReceiptHandler.cs` tenía un N+1 —
-`await _context.PurchaseOrderLines.FindAsync(...)` dentro de un `foreach` por
-línea del recibo — sustituido por una carga batch (`Where(...).ToDictionaryAsync(...)`)
-antes del bucle. `PurchaseOrdersController` sigue siendo uno de los
-controllers del backend que no usa `IMediator` (ver ADR-0018).
+- **Estructura:** ✅ cuatro `.csproj` con frontera de compilador (#12).
+- **Controllers delgados:** ✅ `PurchaseOrdersController` vía `IMediator` (#11).
+- **N+1:** ✅ corregido en `CreateGoodsReceiptHandler` (#7).
+- **Pendiente:** `ReceiptsController.Get` e `InvoicesController.Get` siguen
+  siendo stubs `{ id }`; `SupplierId` no persistido; sin contabilización al
+  crear factura de proveedor.
 
 ## Buenas prácticas aplicables
 - El "three-way match" en `ThreeWayMatchValidator` es el patrón de control
@@ -237,22 +216,13 @@ controllers del backend que no usa `IMediator` (ver ADR-0018).
   persistir, lanzando `InvalidOperationException` con mensaje descriptivo;
   seguir ese mismo estilo de validación temprana dentro del handler en
   lugar de delegarla a la base de datos.
-- Al extender `PurchaseOrdersController` (que hoy accede a
-  `IPurchasingDbContext` directamente desde el controller), lo coherente
-  con el resto del módulo (Receipts, Invoices) y con el patrón CQRS del
-  monolito sería migrarlo a comandos/queries MediatR en vez de seguir
-  añadiendo lógica en el controller.
+- Al extender endpoints de pedidos, seguir el patrón CQRS ya usado en
+  `Application/Features/Orders/PurchaseOrderHandlers.cs` (#11).
 - Revisar y homogeneizar `[Authorize]`: solo `ReceiptsController` lo declara
   hoy; `PurchaseOrdersController` e `InvoicesController` no.
 
 ## Consecuencias
-- **Desviación de estructura de carpetas (confirmada)**: un solo `.csproj`
-  de módulo en la raíz (`Erp.Modules.Purchasing.Infrastructure.csproj`) en
-  vez de un ensamblado por capa, y `Migrations/` en la raíz del módulo en
-  vez de bajo `Infrastructure/`. No hay evidencia en el repositorio de que
-  esto sea una decisión documentada; se registra aquí como hecho verificado
-  y como inconsistencia frente al patrón usado por Inventory (y, se asume,
-  por el resto de módulos según ADR-0001).
+- **Estructura:** ✅ alineada con ADR-0001 (#12, #19g).
 - **Endpoints de lectura incompletos**: `ReceiptsController.Get` e
   `InvoicesController.Get` son stubs que devuelven `{ id }`, no la entidad
   real; el frontend de detalle no podría consumirlos tal cual.
@@ -272,11 +242,9 @@ controllers del backend que no usa `IMediator` (ver ADR-0018).
   un pedido, una recepción o una factura; cualquier reporting o
   contabilización futura que necesite esa relación requiere añadir la
   columna y el flujo correspondiente.
-- **Sin integración real con Inventory ni Accounting**: registrar una
-  recepción no mueve stock, y crear una factura de proveedor no genera
-  asiento contable ni obligación de pago en Treasury; el módulo cubre solo
-  el registro documental del pedido, la recepción y la factura, más el
-  control de three-way match en el momento de crear la factura.
+- **Integración parcial con Inventory** ✅: registrar una recepción mueve
+  stock vía `GoodsReceiptCreatedEvent`. Pendiente: crear factura de proveedor
+  no genera asiento contable ni obligación de pago en Treasury.
 - El validador de three-way match no persiste su resultado (no hay estado
   de "conciliado"/"con discrepancias" en `SupplierInvoice`): un fallo
   bloquea la creación por completo, sin posibilidad de guardar la factura

@@ -1,5 +1,4 @@
 using Erp.Application.Common.Interfaces;
-using Erp.Domain.Entities.Accounting;
 using Erp.Domain.Entities.Core;
 using Erp.Infrastructure.Data;
 using Erp.Modules.Treasury.Application.Interfaces;

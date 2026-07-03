@@ -1,5 +1,4 @@
 using Erp.Application.Common.Interfaces;
-using Erp.Domain.Entities.Accounting;
 using Erp.Modules.Accounting.Domain.Entities;
 using Erp.Infrastructure.Data;
 using Erp.Infrastructure.Validators;
@@ -19,7 +18,7 @@ public class AccountingDbContext : ModuleDbContextBase, IAccountingDbContext
     public DbSet<JournalEntry> JournalEntries { get; set; } = null!;
     public DbSet<JournalEntryLine> JournalEntryLines { get; set; } = null!;
     public DbSet<FiscalPeriod> FiscalPeriods { get; set; } = null!;
-    public DbSet<Erp.Domain.Entities.Accounting.FixedAsset> FixedAssets { get; set; } = null!;
+    public DbSet<FixedAsset> FixedAssets { get; set; } = null!;
     public DbSet<DeferredEntry> DeferredEntries { get; set; } = null!;
 
     // Phase 0 - Compliance
@@ -84,7 +83,7 @@ public class AccountingDbContext : ModuleDbContextBase, IAccountingDbContext
         // JournalEntry.SourceId is a soft cross-module FK (Invoice, Expense — no DB constraint)
 
         // ── FixedAsset ────────────────────────────────────────────────────────
-        modelBuilder.Entity<Erp.Domain.Entities.Accounting.FixedAsset>(e =>
+        modelBuilder.Entity<FixedAsset>(e =>
         {
             e.HasQueryFilter(a => a.CompanyId == TenantContext.TenantId);
             e.HasIndex(a => new { a.CompanyId, a.AssetCode }).IsUnique();
