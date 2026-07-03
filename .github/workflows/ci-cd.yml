@@ -29,15 +29,15 @@ jobs:
           dotnet-version: "10.0.x"
 
       - name: Restore dependencies
-        run: dotnet restore ErpProject/backend/Erp.Api/Erp.Api.csproj
+        run: dotnet restore ErpProject/backend/Erp.slnx
 
       - name: Build
-        run: dotnet build ErpProject/backend/Erp.Api/Erp.Api.csproj --no-restore -c Release
+        run: dotnet build ErpProject/backend/Erp.slnx --no-restore -c Release
 
       - name: Run tests
         run: |
           if find ErpProject/backend -name '*.Tests.csproj' | grep -q .; then
-            dotnet test ErpProject/backend --no-build -c Release --logger "trx;LogFileName=results.trx"
+            dotnet test ErpProject/backend/Erp.slnx --no-build -c Release --logger "trx;LogFileName=results.trx"
           else
             echo "No test projects found — skipping."
           fi
