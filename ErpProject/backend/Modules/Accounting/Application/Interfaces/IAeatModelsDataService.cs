@@ -25,6 +25,7 @@ public record AeatModelExportResultDto(
 
 public interface IAeatModelsDataService
 {
+    Task<IReadOnlyList<AeatModelDto>> ListModelsAsync(Guid companyId, CancellationToken ct);
     Task<AeatModelDto> CreateModelo347Async(Guid companyId, int year, CancellationToken ct);
     Task<AeatModelDto?> GetModelo347Async(Guid companyId, int year, CancellationToken ct);
     Task<AeatModelExportResultDto> ExportModelo347TxtAsync(Guid companyId, Guid id, CancellationToken ct);

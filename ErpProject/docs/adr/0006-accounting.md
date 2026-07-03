@@ -126,14 +126,11 @@ y `ReportsController` (`diario`, `mayor`, `balance`, `pyg`) calculan desde
 `JournalEntry`/`JournalEntryLine` y plan de cuentas PGC.
 
 ### Frontend
-`frontend/src/app/accounting/` contiene subrutas para cada área: `aeat`,
-`aeat-models`, `aging`, `budgets`, `cash-flow`, `cierre`, `cost-centers`,
-`depreciation`, `isp`, `iva-registers`, `prorrata`, `provisions`, `recargo`,
-`reports`, `vat-regime`, `vies`, además de `page.tsx` (diario/balance/IVA/
-liquidación con pestañas). Las páginas son client components (`'use client'`)
-que llaman a `fetch('/api/proxy/accounting/...')` — el patrón de proxy Next.js
-descrito en ADR-0001 — y descargan los CSV/XML fiscales generados por
-`AccountingExportController` mediante blobs.
+`frontend/src/app/accounting/` contiene subrutas para cada área. Las páginas fiscales
+(`aeat-models`, `iva-registers`, `aging`, `isp`, `cash-flow`, `vat-regime`, `vies`,
+`recargo`, `prorrata`, `cost-centers`) llaman a `/api/proxy/v1/accounting/...` con
+datos reales del backend (✅ jul 2026). Otras rutas usan el patrón de proxy descrito
+en ADR-0001 y descargan CSV/XML fiscales desde `AccountingExportController`.
 
 ### Modelo de datos
 `JournalEntry` (1) → (N) `JournalEntryLine`, cada línea referencia una

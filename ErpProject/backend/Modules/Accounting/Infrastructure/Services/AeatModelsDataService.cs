@@ -29,6 +29,40 @@ public sealed class AeatModelsDataService : IAeatModelsDataService
         _expenses = expenses;
     }
 
+    public async Task<IReadOnlyList<AeatModelDto>> ListModelsAsync(Guid companyId, CancellationToken ct)
+    {
+        var list = new List<AeatModelDto>();
+
+        var m347 = await _accounting.Modelo347s
+            .AsNoTracking()
+            .Where(m => m.CompanyId == companyId)
+            .ToListAsync(ct);
+        list.AddRange(m347.Select(m => ToDto(m, "347")));
+
+        var m111 = await _accounting.Modelo111And190s
+            .AsNoTracking()
+            .Where(m => m.CompanyId == companyId)
+            .ToListAsync(ct);
+        list.AddRange(m111.Select(m => new AeatModelDto(
+            m.Id, m.FormType, m.Year, m.Month, m.Status, 0, m.NetVat)));
+
+        var m200 = await _accounting.Modelo200s
+            .AsNoTracking()
+            .Where(m => m.CompanyId == companyId)
+            .ToListAsync(ct);
+        list.AddRange(m200.Select(m => new AeatModelDto(
+            m.Id, "200", m.Year, null, m.Status, 0, m.NetVatAnnual)));
+
+        var m202 = await _accounting.Modelo202s
+            .AsNoTracking()
+            .Where(m => m.CompanyId == companyId)
+            .ToListAsync(ct);
+        list.AddRange(m202.Select(m => new AeatModelDto(
+            m.Id, "202", m.Year, null, m.Status, 0, m.AmountToRefund)));
+
+        return list.OrderByDescending(m => m.Year).ThenByDescending(m => m.Month ?? 0).ToList();
+    }
+
     public async Task<AeatModelDto> CreateModelo347Async(Guid companyId, int year, CancellationToken ct)
     {
         var company = await _app.Companies.AsNoTracking()

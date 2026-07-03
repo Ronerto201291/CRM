@@ -1,63 +1,114 @@
 "use client";
-import React, { useState } from "react";
+
+import { useCallback, useEffect, useState } from "react";
+import PageContainer from "@/components/PageContainer";
+
+interface IspRow {
+  id: string;
+  supplierCountryCode: string;
+  vatableBase: number;
+  vatRate: number;
+  vatAmount: number;
+  isReverseCharge: boolean;
+}
+
 export default function ISPPage() {
   const [countryCode, setCountryCode] = useState("DE");
   const [base, setBase] = useState(1000);
   const [vatRate, setVatRate] = useState(21);
-  const [ispList, setIspList] = useState<any[]>([]);
+  const [ispList, setIspList] = useState<IspRow[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const fetchList = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/proxy/v1/accounting/isp");
+      if (!res.ok) throw new Error("Error al cargar operaciones ISP");
+      setIspList(await res.json());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error de conexi√≥n");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchList(); }, [fetchList]);
+
   const create = async () => {
-    const res = await fetch(`/api/v1/accounting/isp`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ supplierCountryCode: countryCode, vatableBase: base, vatRate })
-    });
-    const data = await res.json();
-    alert('ISP created: ' + data.id);
-    fetchList();
+    setError(null);
+    try {
+      const res = await fetch("/api/proxy/v1/accounting/isp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ supplierCountryCode: countryCode, vatableBase: base, vatRate }),
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e.error || "Error al crear ISP");
+      }
+      await fetchList();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error al crear");
+    }
   };
-  const fetchList = async () => {
-    const res = await fetch(`/api/v1/accounting/isp`);
-    const data = await res.json();
-    setIspList(data);
-  };
-  React.useEffect(() => { fetchList(); }, []);
+
   const vatAmount = base * (vatRate / 100);
+  const eur = (n: number) => n.toLocaleString("es-ES", { style: "currency", currency: "EUR" });
+
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-4">3.3 ISP - InversiÛn del Sujeto Pasivo (Reverse Charge)</h1>
-      <div className="mb-4 border p-3">
-        <div><label>Supplier Country:</label>
-          <select value={countryCode} onChange={e => setCountryCode(e.target.value)} className="border p-2 ml-2">
-            <option>DE</option><option>FR</option><option>IT</option><option>BE</option><option>NL</option>
+    <PageContainer>
+      <h1 className="page-title mb-4">Inversi√≥n del sujeto pasivo (ISP)</h1>
+      {error && <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div>}
+
+      <div className="erp-card mb-4">
+        <div className="mb-2">
+          <label className="erp-label">Pa√≠s proveedor</label>
+          <select className="erp-input ml-2" value={countryCode} onChange={(e) => setCountryCode(e.target.value)}>
+            {["DE", "FR", "IT", "BE", "NL", "PT"].map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
-        <div className="mt-2"><label>Vatable Base:</label> <input type="number" value={base} onChange={e => setBase(Number(e.target.value))} className="border p-2 ml-2 w-32" /></div>
-        <div className="mt-2"><label>VAT Rate (%):</label> <input type="number" value={vatRate} onChange={e => setVatRate(Number(e.target.value))} className="border p-2 ml-2 w-24" /></div>
-        <div className="mt-2 p-2 bg-blue-50"><strong>VAT Amount (Reverse Charged):</strong> Ä{vatAmount.toFixed(2)}</div>
-        <button onClick={create} className="mt-3 px-4 py-2 bg-blue-600 text-white rounded">Create ISP</button>
+        <div className="mb-2">
+          <label className="erp-label">Base imponible</label>
+          <input className="erp-input ml-2 w-32" type="number" value={base} onChange={(e) => setBase(Number(e.target.value))} />
+        </div>
+        <div className="mb-2">
+          <label className="erp-label">Tipo IVA (%)</label>
+          <input className="erp-input ml-2 w-24" type="number" value={vatRate} onChange={(e) => setVatRate(Number(e.target.value))} />
+        </div>
+        <p className="mb-3 rounded bg-blue-50 p-2 text-sm">
+          <strong>IVA (autoliquidaci√≥n):</strong> {eur(vatAmount)}
+        </p>
+        <button className="btn-primary" onClick={create}>Registrar ISP</button>
       </div>
-      <table className="w-full border">
-        <thead>
-          <tr className="bg-gray-200">
-            <th className="border p-2">Country</th>
-            <th className="border p-2">Base</th>
-            <th className="border p-2">VAT Rate</th>
-            <th className="border p-2">VAT Amount</th>
-            <th className="border p-2">Reverse Charge</th>
-          </tr>
-        </thead>
-        <tbody>
-          {ispList.map((i: any) => (
-            <tr key={i.id}>
-              <td className="border p-2">{i.supplierCountryCode}</td>
-              <td className="border p-2">Ä{i.vatableBase}</td>
-              <td className="border p-2">{i.vatRate}%</td>
-              <td className="border p-2">Ä{i.vatAmount.toFixed(2)}</td>
-              <td className="border p-2">{i.isReverseCharge ? 'Yes' : 'No'}</td>
+
+      {loading ? (
+        <p className="text-sm text-gray-500">Cargando‚Ä¶</p>
+      ) : (
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-100">
+              <th className="border p-2">Pa√≠s</th>
+              <th className="border p-2">Base</th>
+              <th className="border p-2">IVA %</th>
+              <th className="border p-2">Cuota IVA</th>
+              <th className="border p-2">ISP</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {ispList.map((i) => (
+              <tr key={i.id}>
+                <td className="border p-2">{i.supplierCountryCode}</td>
+                <td className="border p-2">{eur(i.vatableBase)}</td>
+                <td className="border p-2">{i.vatRate}%</td>
+                <td className="border p-2">{eur(i.vatAmount)}</td>
+                <td className="border p-2">{i.isReverseCharge ? "S√≠" : "No"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </PageContainer>
   );
 }

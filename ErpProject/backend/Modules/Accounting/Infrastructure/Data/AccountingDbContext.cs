@@ -46,6 +46,7 @@ public class AccountingDbContext : ModuleDbContextBase, IAccountingDbContext
 
     // Phase 3 - VAT & Fiscality
     public DbSet<VatTransaction> VatTransactions { get; set; } = null!;
+    public DbSet<VatRegime> VatRegimes { get; set; } = null!;
     public DbSet<ProrrataCalculation> ProrrataCalculations { get; set; } = null!;
     public DbSet<InversionDeSujetoActivo> InversionDeSujetoActivos { get; set; } = null!;
     public DbSet<RecargoDEquivalencia> RecargoDEquivalencias { get; set; } = null!;

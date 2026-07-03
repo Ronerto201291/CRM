@@ -1,3 +1,4 @@
+using Erp.Application.Common.Interfaces;
 using MediatR;
 using Erp.Modules.Accounting.Application.Interfaces;
 using Erp.Modules.Accounting.Domain.Entities;
@@ -6,7 +7,6 @@ namespace Erp.Modules.Accounting.Application.Features.Vat;
 
 public class CalculateVatCommand : IRequest<CalculateVatResponse>
 {
-    public Guid CompanyId { get; set; }
     public decimal Amount { get; set; }
     public string VatType { get; set; } = "Standard";
     public bool IsIntraEU { get; set; }
@@ -17,6 +17,7 @@ public class CalculateVatCommand : IRequest<CalculateVatResponse>
 public class CalculateVatHandler : IRequestHandler<CalculateVatCommand, CalculateVatResponse>
 {
     private readonly IAccountingDbContext _context;
+    private readonly ITenantContext _tenant;
 
     private static readonly Dictionary<string, decimal> VatRates = new()
     {
@@ -26,10 +27,15 @@ public class CalculateVatHandler : IRequestHandler<CalculateVatCommand, Calculat
         { "Zero", 0m }
     };
 
-    public CalculateVatHandler(IAccountingDbContext context) => _context = context;
+    public CalculateVatHandler(IAccountingDbContext context, ITenantContext tenant)
+    {
+        _context = context;
+        _tenant = tenant;
+    }
 
     public async Task<CalculateVatResponse> Handle(CalculateVatCommand request, CancellationToken cancellationToken)
     {
+        var companyId = _tenant.TenantId ?? throw new InvalidOperationException("Tenant no resuelto.");
         var response = new CalculateVatResponse
         {
             Amount = request.Amount,
@@ -65,7 +71,7 @@ public class CalculateVatHandler : IRequestHandler<CalculateVatCommand, Calculat
         // Guardar transacción
         var vatTransaction = new VatTransaction
         {
-            CompanyId = request.CompanyId,
+            CompanyId = companyId,
             TransactionDate = DateTime.UtcNow,
             PaymentDate = DateTime.UtcNow.AddDays(30),
             Direction = "Outbound",

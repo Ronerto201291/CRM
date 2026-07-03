@@ -14,6 +14,10 @@ public class AeatModelsController : ControllerBase
 
     public AeatModelsController(IMediator mediator) => _mediator = mediator;
 
+    [HttpGet("models")]
+    public async Task<IActionResult> ListModels(CancellationToken ct)
+        => Ok(await _mediator.Send(new ListAeatModelsQuery(), ct));
+
     [HttpPost("modelo347")]
     public async Task<IActionResult> CreateModelo347([FromBody] CreateModelo347Request dto, CancellationToken ct)
     {

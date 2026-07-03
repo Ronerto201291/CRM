@@ -1,45 +1,109 @@
 "use client";
-import React, { useState } from "react";
+
+import { useState } from "react";
+import PageContainer from "@/components/PageContainer";
+
+interface AgingData {
+  type: string;
+  totalAmount: number;
+  current: number;
+  days31To60: number;
+  days61To90: number;
+  days91Plus: number;
+  dso?: number;
+  dpo?: number;
+}
+
 export default function AgingPage() {
-  const [agingData, setAgingData] = useState<any>(null);
+  const [agingData, setAgingData] = useState<AgingData | null>(null);
   const [dso, setDso] = useState<number | null>(null);
   const [dpo, setDpo] = useState<number | null>(null);
-  const fetchAging = async (type: string) => {
-    const res = await fetch(`/api/v1/accounting/aging/${type}`);
-    const data = await res.json();
-    setAgingData(data);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState<string | null>(null);
+
+  const eur = (n: number) => n.toLocaleString("es-ES", { style: "currency", currency: "EUR" });
+
+  const fetchAging = async (type: "receivables" | "payables") => {
+    setLoading(type);
+    setError(null);
+    try {
+      const res = await fetch(`/api/proxy/v1/accounting/aging/${type}`);
+      if (!res.ok) throw new Error("Error al cargar antigÃ¼edad");
+      setAgingData(await res.json());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error de conexiÃ³n");
+    } finally {
+      setLoading(null);
+    }
   };
+
   const fetchDSO = async () => {
-    const res = await fetch(`/api/v1/accounting/aging/dso`);
-    const data = await res.json();
-    setDso(data.dso);
+    setLoading("dso");
+    setError(null);
+    try {
+      const res = await fetch("/api/proxy/v1/accounting/aging/dso");
+      if (!res.ok) throw new Error("Error al calcular DSO");
+      const data = await res.json();
+      setDso(data.dso);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error de conexiÃ³n");
+    } finally {
+      setLoading(null);
+    }
   };
+
   const fetchDPO = async () => {
-    const res = await fetch(`/api/v1/accounting/aging/dpo`);
-    const data = await res.json();
-    setDpo(data.dpo);
+    setLoading("dpo");
+    setError(null);
+    try {
+      const res = await fetch("/api/proxy/v1/accounting/aging/dpo");
+      if (!res.ok) throw new Error("Error al calcular DPO");
+      const data = await res.json();
+      setDpo(data.dpo);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error de conexiÃ³n");
+    } finally {
+      setLoading(null);
+    }
   };
+
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-4">Aging Analysis (Cobros/Pagos)</h1>
-      <div className="mb-4">
-        <button onClick={() => fetchAging("Receivables")} className="px-4 py-2 bg-blue-600 text-white rounded mr-2">Receivables Aging</button>
-        <button onClick={() => fetchAging("Payables")} className="px-4 py-2 bg-blue-600 text-white rounded mr-2">Payables Aging</button>
-        <button onClick={fetchDSO} className="px-4 py-2 bg-green-600 text-white rounded mr-2">Get DSO</button>
-        <button onClick={fetchDPO} className="px-4 py-2 bg-green-600 text-white rounded">Get DPO</button>
+    <PageContainer>
+      <h1 className="page-title mb-4">AntigÃ¼edad de cobros y pagos</h1>
+      {error && <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div>}
+
+      <div className="mb-4 flex flex-wrap gap-2">
+        <button className="btn-primary" disabled={!!loading} onClick={() => fetchAging("receivables")}>
+          Cobros pendientes
+        </button>
+        <button className="btn-secondary" disabled={!!loading} onClick={() => fetchAging("payables")}>
+          Pagos pendientes
+        </button>
+        <button className="btn-secondary" disabled={!!loading} onClick={fetchDSO}>DSO</button>
+        <button className="btn-secondary" disabled={!!loading} onClick={fetchDPO}>DPO</button>
       </div>
+
       {agingData && (
-        <div className="border p-4">
-          <div className="mb-2"><strong>Type:</strong> {agingData.type}</div>
-          <div className="mb-2"><strong>Total Amount:</strong> ${agingData.totalAmount}</div>
-          <div className="mb-2"><strong>Current (0-30 days):</strong> ${agingData.current}</div>
-          <div className="mb-2"><strong>31-60 days:</strong> ${agingData.days31To60}</div>
-          <div className="mb-2"><strong>61-90 days:</strong> ${agingData.days61To90}</div>
-          <div className="mb-2"><strong>91+ days:</strong> ${agingData.days91Plus}</div>
+        <div className="erp-card">
+          <p className="mb-2"><strong>Tipo:</strong> {agingData.type}</p>
+          <p className="mb-2"><strong>Total:</strong> {eur(agingData.totalAmount)}</p>
+          <p className="mb-2"><strong>0-30 dÃ­as:</strong> {eur(agingData.current)}</p>
+          <p className="mb-2"><strong>31-60 dÃ­as:</strong> {eur(agingData.days31To60)}</p>
+          <p className="mb-2"><strong>61-90 dÃ­as:</strong> {eur(agingData.days61To90)}</p>
+          <p className="mb-2"><strong>91+ dÃ­as:</strong> {eur(agingData.days91Plus)}</p>
         </div>
       )}
-      {dso !== null && <div className="mt-4 p-4 border bg-blue-50"><strong>DSO (Days Sales Outstanding):</strong> {dso.toFixed(2)} days</div>}
-      {dpo !== null && <div className="mt-4 p-4 border bg-green-50"><strong>DPO (Days Payable Outstanding):</strong> {dpo.toFixed(2)} days</div>}
-    </div>
+
+      {dso !== null && (
+        <div className="mt-4 erp-card bg-blue-50">
+          <strong>DSO (dÃ­as de cobro):</strong> {dso.toFixed(2)} dÃ­as
+        </div>
+      )}
+      {dpo !== null && (
+        <div className="mt-4 erp-card bg-green-50">
+          <strong>DPO (dÃ­as de pago):</strong> {dpo.toFixed(2)} dÃ­as
+        </div>
+      )}
+    </PageContainer>
   );
 }

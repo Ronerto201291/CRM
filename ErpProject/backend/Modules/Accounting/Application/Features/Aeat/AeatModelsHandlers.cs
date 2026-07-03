@@ -4,6 +4,7 @@ using MediatR;
 
 namespace Erp.Modules.Accounting.Application.Features.Aeat;
 
+public record ListAeatModelsQuery : IRequest<IReadOnlyList<AeatModelDto>>;
 public record CreateModelo347Command(int Year) : IRequest<AeatModelDto>;
 public record GetModelo347Query(int Year) : IRequest<AeatModelDto?>;
 public record ExportModelo347TxtCommand(Guid Id) : IRequest<AeatModelExportResultDto>;
@@ -11,6 +12,24 @@ public record CreateModelo111Command(int Year, int Month) : IRequest<AeatModelDt
 public record CreateModelo200Command(int Year) : IRequest<AeatModelDto>;
 public record CreateModelo202Command(int Year) : IRequest<AeatModelDto>;
 public record SignAndSubmitAeatModelCommand(Guid Id) : IRequest<AeatModelSubmitResultDto>;
+
+public sealed class ListAeatModelsHandler : IRequestHandler<ListAeatModelsQuery, IReadOnlyList<AeatModelDto>>
+{
+    private readonly IAeatModelsDataService _service;
+    private readonly ITenantContext _tenant;
+
+    public ListAeatModelsHandler(IAeatModelsDataService service, ITenantContext tenant)
+    {
+        _service = service;
+        _tenant = tenant;
+    }
+
+    public Task<IReadOnlyList<AeatModelDto>> Handle(ListAeatModelsQuery request, CancellationToken ct)
+    {
+        var companyId = _tenant.TenantId ?? throw new InvalidOperationException("Tenant no resuelto.");
+        return _service.ListModelsAsync(companyId, ct);
+    }
+}
 
 public sealed class CreateModelo347Handler : IRequestHandler<CreateModelo347Command, AeatModelDto>
 {

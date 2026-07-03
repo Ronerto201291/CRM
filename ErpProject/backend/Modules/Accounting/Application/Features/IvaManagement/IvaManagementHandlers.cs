@@ -4,6 +4,8 @@ using MediatR;
 
 namespace Erp.Modules.Accounting.Application.Features.IvaManagement;
 
+public record GetPurchaseIvaLinesQuery(int Limit = 50) : IRequest<IReadOnlyList<IvaRegisterLineDto>>;
+public record GetSalesIvaLinesQuery(int Limit = 50) : IRequest<IReadOnlyList<IvaRegisterLineDto>>;
 public record GetIvaRegisterSummaryQuery : IRequest<IvaRegisterSummaryDto>;
 public record GetPurchaseIvaRegisterQuery : IRequest<IvaRegisterDetailDto>;
 public record GetSalesIvaRegisterQuery : IRequest<IvaRegisterDetailDto>;
@@ -11,6 +13,42 @@ public record ExportRivaCommand(int? Year, int? Month) : IRequest<RivaExportResu
 public record CreateSiiDeclarationCommand(int Year, int Month) : IRequest<SiiDeclarationDto>;
 public record SubmitSiiDeclarationCommand(Guid Id) : IRequest<SiiDeclarationDto>;
 public record GetIntraEuOperationsQuery : IRequest<IntraEuSummaryDto>;
+
+public sealed class GetPurchaseIvaLinesHandler : IRequestHandler<GetPurchaseIvaLinesQuery, IReadOnlyList<IvaRegisterLineDto>>
+{
+    private readonly IIvaRegisterDataService _service;
+    private readonly ITenantContext _tenant;
+
+    public GetPurchaseIvaLinesHandler(IIvaRegisterDataService service, ITenantContext tenant)
+    {
+        _service = service;
+        _tenant = tenant;
+    }
+
+    public Task<IReadOnlyList<IvaRegisterLineDto>> Handle(GetPurchaseIvaLinesQuery request, CancellationToken ct)
+    {
+        var companyId = _tenant.TenantId ?? throw new InvalidOperationException("Tenant no resuelto.");
+        return _service.GetPurchaseLinesAsync(companyId, request.Limit, ct);
+    }
+}
+
+public sealed class GetSalesIvaLinesHandler : IRequestHandler<GetSalesIvaLinesQuery, IReadOnlyList<IvaRegisterLineDto>>
+{
+    private readonly IIvaRegisterDataService _service;
+    private readonly ITenantContext _tenant;
+
+    public GetSalesIvaLinesHandler(IIvaRegisterDataService service, ITenantContext tenant)
+    {
+        _service = service;
+        _tenant = tenant;
+    }
+
+    public Task<IReadOnlyList<IvaRegisterLineDto>> Handle(GetSalesIvaLinesQuery request, CancellationToken ct)
+    {
+        var companyId = _tenant.TenantId ?? throw new InvalidOperationException("Tenant no resuelto.");
+        return _service.GetSalesLinesAsync(companyId, request.Limit, ct);
+    }
+}
 
 public sealed class GetIvaRegisterSummaryHandler : IRequestHandler<GetIvaRegisterSummaryQuery, IvaRegisterSummaryDto>
 {

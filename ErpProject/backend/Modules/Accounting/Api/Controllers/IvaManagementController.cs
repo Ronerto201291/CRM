@@ -23,7 +23,10 @@ public class IvaManagementController : ControllerBase
             message = "Libros Registro IVA",
             totalRecords = summary.TotalRecords,
             purchaseVat = summary.PurchaseVat,
-            salesVat = summary.SalesVat
+            salesVat = summary.SalesVat,
+            purchaseRecords = summary.PurchaseRecords,
+            salesRecords = summary.SalesRecords,
+            intraEU = summary.IntraEuCount
         });
     }
 
@@ -52,6 +55,14 @@ public class IvaManagementController : ControllerBase
             intraEU = detail.IntraEu
         });
     }
+
+    [HttpGet("registro/purchase/lines")]
+    public async Task<IActionResult> GetPurchaseLines([FromQuery] int limit = 50, CancellationToken ct = default)
+        => Ok(await _mediator.Send(new GetPurchaseIvaLinesQuery(limit), ct));
+
+    [HttpGet("registro/sales/lines")]
+    public async Task<IActionResult> GetSalesLines([FromQuery] int limit = 50, CancellationToken ct = default)
+        => Ok(await _mediator.Send(new GetSalesIvaLinesQuery(limit), ct));
 
     [HttpPost("registro/export-riva")]
     public async Task<IActionResult> ExportRiva([FromBody] ExportRivaRequest? dto, CancellationToken ct)

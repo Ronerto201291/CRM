@@ -39,11 +39,20 @@ public record IntraEuSummaryDto(
     int TriangularOperations,
     bool ReverseChargeApplied);
 
+public record IvaRegisterLineDto(
+    string Name,
+    string TaxId,
+    decimal BaseAmount,
+    decimal VatAmount,
+    bool IsIntraEu);
+
 public interface IIvaRegisterDataService
 {
     Task<IvaRegisterSummaryDto> GetSummaryAsync(Guid companyId, CancellationToken ct);
     Task<IvaRegisterDetailDto> GetPurchaseRegisterAsync(Guid companyId, CancellationToken ct);
     Task<IvaRegisterDetailDto> GetSalesRegisterAsync(Guid companyId, CancellationToken ct);
+    Task<IReadOnlyList<IvaRegisterLineDto>> GetPurchaseLinesAsync(Guid companyId, int limit, CancellationToken ct);
+    Task<IReadOnlyList<IvaRegisterLineDto>> GetSalesLinesAsync(Guid companyId, int limit, CancellationToken ct);
     Task<RivaExportResultDto> ExportRivaAsync(Guid companyId, int? year, int? month, CancellationToken ct);
     Task<SiiDeclarationDto> CreateSiiDeclarationAsync(Guid companyId, int year, int month, CancellationToken ct);
     Task<SiiDeclarationDto> SubmitSiiDeclarationAsync(Guid companyId, Guid id, CancellationToken ct);

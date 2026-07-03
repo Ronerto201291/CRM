@@ -75,6 +75,42 @@ public sealed class IvaRegisterDataService : IIvaRegisterDataService
             invoices.Count(i => IsEuVat(i.ClientNif)));
     }
 
+    public async Task<IReadOnlyList<IvaRegisterLineDto>> GetPurchaseLinesAsync(
+        Guid companyId, int limit, CancellationToken ct)
+    {
+        var docs = await _expenses.ExpenseDocuments
+            .AsNoTracking()
+            .Where(e => e.CompanyId == companyId && e.Status == "Approved")
+            .OrderByDescending(e => e.IssueDate ?? e.CreatedAt)
+            .Take(limit)
+            .ToListAsync(ct);
+
+        return docs.Select(e => new IvaRegisterLineDto(
+            e.SupplierName ?? "—",
+            e.SupplierTaxId ?? "",
+            Math.Round(e.TaxBase ?? e.Total ?? 0m, 2),
+            Math.Round(e.VATAmount ?? 0m, 2),
+            IsEuVat(e.SupplierTaxId))).ToList();
+    }
+
+    public async Task<IReadOnlyList<IvaRegisterLineDto>> GetSalesLinesAsync(
+        Guid companyId, int limit, CancellationToken ct)
+    {
+        var invoices = await _billing.Invoices
+            .AsNoTracking()
+            .Where(i => i.CompanyId == companyId && i.IsLocked)
+            .OrderByDescending(i => i.IssueDate)
+            .Take(limit)
+            .ToListAsync(ct);
+
+        return invoices.Select(i => new IvaRegisterLineDto(
+            i.ClientName ?? "—",
+            i.ClientNif ?? "",
+            Math.Round(i.Subtotal, 2),
+            Math.Round(i.TaxAmount + i.SurchargeAmount, 2),
+            IsEuVat(i.ClientNif))).ToList();
+    }
+
     public async Task<RivaExportResultDto> ExportRivaAsync(
         Guid companyId, int? year, int? month, CancellationToken ct)
     {
