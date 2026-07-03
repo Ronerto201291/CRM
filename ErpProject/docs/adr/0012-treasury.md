@@ -188,7 +188,12 @@ acreedor=empresa; validación IBAN; `SepaXmlStructureValidator` offline (pain.00
   `GrpHdr` + `PmtInf` + `CdtTrfTxInf` como hermanos correctos.
 - ~~Sin validación IBAN~~ **✅ Corregido** — `IbanValidator` (mod-97) en
   `Erp.Application/Common/Validation/IbanValidator.cs`.
-- Pendiente: homologación bancaria; BIC placeholder cuando falta.
+- ~~BIC placeholder inválido `"XXXXESMM"` cuando falta~~ **✅ Corregido,
+  re-verificado** — ya no se fabrica ningún placeholder; `DbtrAgt`/`CdtrAgt`
+  solo se emiten cuando hay un BIC real (`debtorBic is { Length: > 0 }`,
+  `SepaService.cs:135,148`), si no se omite y el XML queda solo con IBAN
+  (válido en SEPA, el BIC es opcional dentro de la UE/SEPA desde 2016).
+- Pendiente: homologación bancaria (sin banco real contra el que probar).
 - Lo que sí está bien: namespace `pain.001.001.03`, formato de importe
   (`F2`, `InvariantCulture`, `Ccy="EUR"`), `EndToEndId`/`RmtInf`.
 
