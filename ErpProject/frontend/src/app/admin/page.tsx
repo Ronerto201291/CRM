@@ -3,6 +3,7 @@
 import { useActionState } from 'react';
 import { loginAction, verifyTotpAction } from '@/app/actions/auth';
 import Logo from '@/components/Logo';
+import FormLabel from '@/components/FormLabel';
 
 const inputStyle = {
     width: '100%', padding: '10px 14px',
@@ -73,14 +74,14 @@ export default function AdminPage() {
 
                         <form style={{ display: 'flex', flexDirection: 'column', gap: '16px' }} action={loginFormAction}>
                             <div>
-                                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.5)', marginBottom: '6px', letterSpacing: '0.04em' }}>EMAIL</label>
-                                <input name="email" type="email" required placeholder="admin@empresa.com" style={inputStyle}
+                                <FormLabel htmlFor="login-email" required>Email</FormLabel>
+                                <input id="login-email" name="email" type="email" required placeholder="admin@empresa.com" style={inputStyle}
                                     onFocus={e => (e.target.style.borderColor = 'rgba(37,99,235,0.6)')}
                                     onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.12)')} />
                             </div>
                             <div>
-                                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.5)', marginBottom: '6px', letterSpacing: '0.04em' }}>CONTRASEÑA</label>
-                                <input name="password" type="password" required placeholder="••••••••" style={inputStyle}
+                                <FormLabel htmlFor="login-password" required>Contraseña</FormLabel>
+                                <input id="login-password" name="password" type="password" required placeholder="••••••••" style={inputStyle}
                                     onFocus={e => (e.target.style.borderColor = 'rgba(37,99,235,0.6)')}
                                     onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.12)')} />
                             </div>
@@ -109,8 +110,8 @@ export default function AdminPage() {
                         <form style={{ display: 'flex', flexDirection: 'column', gap: '16px' }} action={totpFormAction}>
                             <input type="hidden" name="userId" value={pendingUserId ?? ''} />
                             <div>
-                                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.5)', marginBottom: '6px', letterSpacing: '0.04em' }}>CÓDIGO 2FA</label>
-                                <input name="code" type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6} required
+                                <FormLabel htmlFor="totp-code" required>Código 2FA</FormLabel>
+                                <input id="totp-code" name="code" type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6} required
                                     placeholder="000000"
                                     style={{ ...inputStyle, fontSize: '24px', textAlign: 'center', letterSpacing: '0.2em' }}
                                     onFocus={e => (e.target.style.borderColor = 'rgba(37,99,235,0.6)')}

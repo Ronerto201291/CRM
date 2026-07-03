@@ -91,6 +91,8 @@ public class CreateLeadHandler : IRequestHandler<CreateLeadCommand, LeadDto>
             Name   = request.Name   ?? string.Empty,
             Email  = request.Email  ?? string.Empty,
             Phone  = request.Phone  ?? string.Empty,
+            TaxId  = request.TaxId  ?? string.Empty,
+            Address = request.Address ?? string.Empty,
             Status = string.IsNullOrWhiteSpace(request.Status) ? "New" : request.Status,
             Source = request.Source ?? string.Empty,
             Notes  = request.Notes  ?? string.Empty,
@@ -115,6 +117,7 @@ public class CreateLeadHandler : IRequestHandler<CreateLeadCommand, LeadDto>
         return new LeadDto
         {
             Id = lead.Id, Name = lead.Name, Email = lead.Email, Phone = lead.Phone,
+            TaxId = lead.TaxId, Address = lead.Address,
             Status = lead.Status, Source = lead.Source, Notes = lead.Notes, CreatedAt = lead.CreatedAt
         };
     }
@@ -140,6 +143,8 @@ public class UpdateLeadHandler : IRequestHandler<UpdateLeadCommand, bool>
         lead.Name   = request.Name   ?? lead.Name;
         lead.Email  = request.Email  ?? lead.Email;
         lead.Phone  = request.Phone  ?? lead.Phone;
+        lead.TaxId  = request.TaxId  ?? lead.TaxId;
+        lead.Address = request.Address ?? lead.Address;
         lead.Status = request.Status ?? lead.Status;
         lead.Source = request.Source ?? lead.Source;
         lead.Notes  = request.Notes  ?? lead.Notes;
@@ -171,5 +176,68 @@ public class DeleteLeadHandler : IRequestHandler<DeleteLeadCommand, bool>
         _ctx.Leads.Remove(lead);
         await _ctx.SaveChangesAsync(ct);
         return true;
+    }
+}
+
+public class ConvertLeadToClientHandler : IRequestHandler<ConvertLeadToClientCommand, ConvertLeadToClientResult>
+{
+    private readonly ICrmDbContext _ctx;
+    private readonly ITenantContext _tenant;
+
+    public ConvertLeadToClientHandler(ICrmDbContext ctx, ITenantContext tenant)
+    {
+        _ctx = ctx;
+        _tenant = tenant;
+    }
+
+    public async Task<ConvertLeadToClientResult> Handle(ConvertLeadToClientCommand request, CancellationToken ct)
+    {
+        var companyId = _tenant.TenantId ?? throw new UnauthorizedAccessException("No tenant context.");
+
+        var lead = await _ctx.Leads.FirstOrDefaultAsync(l => l.Id == request.LeadId, ct)
+            ?? throw new KeyNotFoundException();
+
+        if (lead.ConvertedToClientId.HasValue)
+            throw new InvalidOperationException("Este posible cliente ya fue convertido en cliente.");
+
+        var client = new Client
+        {
+            Id = Guid.NewGuid(),
+            CompanyId = companyId,
+            Name = lead.Name,
+            TaxId = lead.TaxId,
+            Email = lead.Email,
+            Phone = lead.Phone,
+            Address = lead.Address,
+            CustomFields = "{}",
+        };
+
+        _ctx.Clients.Add(client);
+        lead.Status = "Won";
+        lead.ConvertedToClientId = client.Id;
+
+        _ctx.ActivityLogs.Add(new ActivityLog
+        {
+            Id = Guid.NewGuid(), CompanyId = companyId,
+            EntityType = "Lead", EntityId = lead.Id,
+            Action = "ConvertedToClient",
+            Description = $"Lead '{lead.Name}' convertido en cliente (ClientId: {client.Id})"
+        });
+        _ctx.ActivityLogs.Add(new ActivityLog
+        {
+            Id = Guid.NewGuid(), CompanyId = companyId,
+            EntityType = "Client", EntityId = client.Id,
+            Action = "CreatedFromLead",
+            Description = $"Cliente '{client.Name}' creado desde posible cliente (LeadId: {lead.Id})"
+        });
+
+        await _ctx.SaveChangesAsync(ct);
+
+        return new ConvertLeadToClientResult
+        {
+            Message = "Posible cliente convertido en cliente correctamente.",
+            ClientId = client.Id,
+            Client = new { client.Id, client.Name, client.TaxId, client.Email, client.Phone, client.Address }
+        };
     }
 }

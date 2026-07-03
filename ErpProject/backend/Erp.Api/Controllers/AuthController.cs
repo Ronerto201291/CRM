@@ -1,6 +1,5 @@
 using Erp.Application.Features.Auth.Commands;
 using Erp.Application.Features.Auth.Queries;
-using Erp.Application.Common.Interfaces;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -14,13 +13,8 @@ namespace Erp.Api.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IMediator _mediator;
-    private readonly IApplicationDbContext _ctx;
 
-    public AuthController(IMediator mediator, IApplicationDbContext ctx)
-    {
-        _mediator = mediator;
-        _ctx = ctx;
-    }
+    public AuthController(IMediator mediator) => _mediator = mediator;
 
     [HttpPost("login"), AllowAnonymous]
     public async Task<IActionResult> Login([FromBody] LoginCommand command)

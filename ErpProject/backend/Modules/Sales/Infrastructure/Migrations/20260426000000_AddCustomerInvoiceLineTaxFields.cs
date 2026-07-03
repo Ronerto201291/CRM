@@ -1,10 +1,14 @@
 using System;
+using Erp.Modules.Sales.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace Erp.Modules.Sales.Infrastructure.Migrations
 {
+    [DbContext(typeof(SalesDbContext))]
+    [Migration("20260426000000_AddCustomerInvoiceLineTaxFields")]
     public partial class AddCustomerInvoiceLineTaxFields : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)

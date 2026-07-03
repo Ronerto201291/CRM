@@ -1,4 +1,5 @@
 using Erp.Modules.Accounting.Application.Commands;
+using Erp.Modules.Accounting.Application.Features.Aging;
 using Erp.Modules.Accounting.Application.Queries;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -43,6 +44,11 @@ public class AccountingController : ControllerBase
     [HttpGet("pyg")]
     public async Task<IActionResult> GetPyG([FromQuery] int? year, CancellationToken ct)
         => Ok(await _mediator.Send(new GetPyGQuery { Year = year }, ct));
+
+    /// <summary>GET /api/accounting/aging — antigüedad de cobros/pagos, DSO/DPO.</summary>
+    [HttpGet("aging")]
+    public async Task<IActionResult> GetAging([FromQuery] DateTime? asOf, CancellationToken ct)
+        => Ok(await _mediator.Send(new GetAgingReportQuery(asOf), ct));
 
     [HttpGet("mayor/{accountCode}")]
     public async Task<IActionResult> GetMayor(string accountCode, [FromQuery] int? year, CancellationToken ct)

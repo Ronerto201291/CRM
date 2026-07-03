@@ -18,7 +18,8 @@ public class FiscalHomologationController : ControllerBase
     {
         var siiSend = _configuration.GetValue<bool>("Sii:SendEnabled", false);
         var faceSend = _configuration.GetValue<bool>("Face:SendEnabled", false);
-        var certPath = _configuration["Sii:CertificatePath"];
+        var verifactuSend = _configuration.GetValue<bool>("Verifactu:SendEnabled", false);
+        var certPath = _configuration["Sii:CertPath"];
         var hasCert = !string.IsNullOrWhiteSpace(certPath) && System.IO.File.Exists(certPath);
 
         return Ok(new
@@ -29,14 +30,22 @@ public class FiscalHomologationController : ControllerBase
                 httpSendEnabled = siiSend,
                 certificatePresent = hasCert,
                 homologationStatus = siiSend && hasCert ? "ready_for_test_env" : "blocked_external",
-                blocker = siiSend && hasCert ? null : "Requiere certificado AEAT y Sii:SendEnabled=true en entorno de pruebas"
+                blocker = siiSend && hasCert ? null : "Requiere certificado AEAT (Sii:CertPath) y Sii:SendEnabled=true en entorno de pruebas"
+            },
+            verifactu = new
+            {
+                offlineValidation = true,
+                redSendEnabled = verifactuSend,
+                certificatePresent = hasCert,
+                homologationStatus = verifactuSend && hasCert ? "ready_for_test_env" : "blocked_external",
+                blocker = verifactuSend && hasCert ? null : "Requiere Sii:CertPath + Verifactu:SendEnabled=true y homologación RED/AEAT"
             },
             facturae = new
             {
                 offlineValidation = true,
                 faceSendEnabled = faceSend,
-                homologationStatus = faceSend ? "ready_for_test_env" : "blocked_external",
-                blocker = faceSend ? null : "Requiere Face:SendEnabled=true y homologación FACe en entorno test"
+                homologationStatus = faceSend && hasCert ? "ready_for_test_env" : "blocked_external",
+                blocker = faceSend && hasCert ? null : "Requiere Face:SendEnabled=true, Sii:CertPath y homologación FACe en entorno test"
             },
             sepa = new
             {

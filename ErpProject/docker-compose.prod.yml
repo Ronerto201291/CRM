@@ -1,0 +1,32 @@
+# Override PRODUCCIÓN — usar explícitamente; NO carga docker-compose.override.yml.
+#
+# Comando:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Diferencias vs local (override automático):
+#  - ASPNETCORE_ENVIRONMENT=Production (Stripe sk_live_ obligatorio)
+#  - sin Seed__AdminPassword (primer usuario vía /signup o variable en .env)
+#  - nginx con SSL (puertos 80+443, certificados Let's Encrypt)
+#  - backend/frontend solo accesibles vía nginx (sin puertos 8081/3000)
+#  - certificados SII en /opt/erp/certs (ruta del servidor)
+
+services:
+  backend:
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Postgres__RlsEnabled: ${Postgres__RlsEnabled:-false}
+      Stripe__SecretKey: ${Stripe__SecretKey}
+      Stripe__WebhookSecret: ${Stripe__WebhookSecret}
+      Stripe__PublishableKey: ${Stripe__PublishableKey:-}
+      Stripe__PriceIds__Starter: ${Stripe__PriceIds__Starter:-}
+      Stripe__PriceIds__Professional: ${Stripe__PriceIds__Professional:-}
+      Stripe__PriceIds__Enterprise: ${Stripe__PriceIds__Enterprise:-}
+
+  nginx:
+    ports: !override
+      - "80:80"
+      - "443:443"
+    volumes: !override
+      - ./deploy/nginx/erp.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/nginx/ssl:/etc/letsencrypt:ro
+      - uploads:/app/uploads:ro

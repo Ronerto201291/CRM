@@ -15,3 +15,8 @@ public class GetClientsQuery : IRequest<PaginatedClientsResult>
     public int Page { get; set; } = 1;
     public int PageSize { get; set; } = 50;
 }
+
+public class GetClientByIdQuery : IRequest<ClientDto?>
+{
+    public Guid Id { get; set; }
+}

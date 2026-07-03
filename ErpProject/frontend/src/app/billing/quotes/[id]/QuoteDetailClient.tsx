@@ -1,5 +1,6 @@
 'use client';
 import { useState, useCallback } from 'react';
+import Link from 'next/link';
 import AccessibleModal from '@/components/AccessibleModal';
 
 interface QuoteLineDetail {
@@ -149,7 +150,7 @@ export default function QuoteDetailClient({ id, initialQuote }: QuoteDetailClien
             {/* Header */}
             <div className="page-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <a href="/billing/quotes" style={{ color: 'var(--text-muted)', textDecoration: 'none', fontSize: '13px' }}>← Presupuestos</a>
+                    <Link href="/billing/quotes" style={{ color: 'var(--text-muted)', textDecoration: 'none', fontSize: '13px' }}>← Presupuestos</Link>
                     <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                             <h1 style={{ fontSize: '22px', fontWeight: 800, fontFamily: 'monospace' }}>{quote.number}</h1>
@@ -345,7 +346,7 @@ export default function QuoteDetailClient({ id, initialQuote }: QuoteDetailClien
                                             <span style={{ fontWeight: 700, color: toInfo?.color ?? 'var(--text-primary)' }}>{toInfo?.label ?? h.toStatus}</span>
                                             <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{fmtDateTime(h.changedAt)}</span>
                                         </div>
-                                        {h.reason && <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>"{h.reason}"</div>}
+                                        {h.reason && <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>&ldquo;{h.reason}&rdquo;</div>}
                                     </div>
                                 </div>
                             );

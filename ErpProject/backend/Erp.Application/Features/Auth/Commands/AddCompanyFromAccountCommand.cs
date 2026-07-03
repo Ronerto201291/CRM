@@ -52,7 +52,6 @@ public class AddCompanyFromAccountHandler : IRequestHandler<AddCompanyFromAccoun
             Id = Guid.NewGuid(),
             PlanName = "Free",
             ExpirationDate = DateTime.UtcNow.AddYears(100),
-            ActiveModules = """["Billing","Crm"]""",
             IsActive = true,
             StripeStatus = "active"
         };

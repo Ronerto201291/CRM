@@ -2,6 +2,12 @@
 
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
+import {
+    loginSchema,
+    totpSchema,
+    signupSchema,
+    registerInviteSchema,
+} from '@/lib/schemas/authSchemas';
 
 const cookieOpts = (httpOnly = true) => ({
     httpOnly,
@@ -12,12 +18,16 @@ const cookieOpts = (httpOnly = true) => ({
 });
 
 export async function loginAction(prevState: unknown, formData: FormData) {
-    const email = formData.get('email');
-    const password = formData.get('password');
+    const parsed = loginSchema.safeParse({
+        email: formData.get('email'),
+        password: formData.get('password'),
+    });
 
-    if (!email || !password) {
-        return { error: 'Email y contraseña son obligatorios' };
+    if (!parsed.success) {
+        return { error: parsed.error.errors[0]?.message ?? 'Datos inválidos' };
     }
+
+    const { email, password } = parsed.data;
 
     try {
         const backendUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
@@ -51,12 +61,16 @@ export async function loginAction(prevState: unknown, formData: FormData) {
 }
 
 export async function verifyTotpAction(prevState: unknown, formData: FormData) {
-    const code = formData.get('code');
-    const userId = formData.get('userId');
+    const parsed = totpSchema.safeParse({
+        code: formData.get('code'),
+        userId: formData.get('userId'),
+    });
 
-    if (!code || !userId) {
-        return { error: 'Código requerido' };
+    if (!parsed.success) {
+        return { error: parsed.error.errors[0]?.message ?? 'Código inválido' };
     }
+
+    const { code, userId } = parsed.data;
 
     try {
         const backendUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
@@ -101,24 +115,25 @@ async function setAuthCookies(data: {
 }
 
 export async function registerCompanyAction(prevState: unknown, formData: FormData) {
-    const companyName    = formData.get('companyName');
-    const companyTaxId   = formData.get('companyTaxId');
-    const companyAddress = formData.get('companyAddress');
-    const adminEmail     = formData.get('adminEmail');
-    const adminFirstName = formData.get('adminFirstName');
-    const adminLastName  = formData.get('adminLastName');
-    const adminPassword  = formData.get('adminPassword');
-    const confirmPassword = formData.get('confirmPassword');
+    const parsed = signupSchema.safeParse({
+        companyName: formData.get('companyName'),
+        companyTaxId: formData.get('companyTaxId'),
+        companyAddress: formData.get('companyAddress') || undefined,
+        adminEmail: formData.get('adminEmail'),
+        adminFirstName: formData.get('adminFirstName'),
+        adminLastName: formData.get('adminLastName') || undefined,
+        adminPassword: formData.get('adminPassword'),
+        confirmPassword: formData.get('confirmPassword'),
+    });
 
-    if (!companyName || !companyTaxId || !adminEmail || !adminFirstName || !adminPassword) {
-        return { error: 'Rellena todos los campos obligatorios' };
+    if (!parsed.success) {
+        return { error: parsed.error.errors[0]?.message ?? 'Datos inválidos' };
     }
-    if (adminPassword !== confirmPassword) {
-        return { error: 'Las contraseñas no coinciden' };
-    }
-    if (String(adminPassword).length < 8) {
-        return { error: 'La contraseña debe tener al menos 8 caracteres' };
-    }
+
+    const {
+        companyName, companyTaxId, companyAddress,
+        adminEmail, adminFirstName, adminLastName, adminPassword,
+    } = parsed.data;
 
     try {
         const backendUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
@@ -147,19 +162,20 @@ export async function registerCompanyAction(prevState: unknown, formData: FormDa
 }
 
 export async function acceptInviteAction(prevState: unknown, formData: FormData) {
-    const token          = formData.get('token');
-    const taxId          = formData.get('taxId');
-    const firstName      = formData.get('firstName');
-    const lastName       = formData.get('lastName');
-    const password       = formData.get('password');
-    const confirmPassword = formData.get('confirmPassword');
+    const parsed = registerInviteSchema.safeParse({
+        token: formData.get('token'),
+        taxId: formData.get('taxId'),
+        firstName: formData.get('firstName'),
+        lastName: formData.get('lastName') || undefined,
+        password: formData.get('password'),
+        confirmPassword: formData.get('confirmPassword'),
+    });
 
-    if (!token || !taxId || !firstName || !password) {
-        return { error: 'Todos los campos obligatorios son requeridos' };
+    if (!parsed.success) {
+        return { error: parsed.error.errors[0]?.message ?? 'Datos inválidos' };
     }
-    if (password !== confirmPassword) {
-        return { error: 'Las contraseñas no coinciden' };
-    }
+
+    const { token, taxId, firstName, lastName, password } = parsed.data;
 
     try {
         const backendUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';

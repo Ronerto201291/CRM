@@ -22,22 +22,17 @@ asume alcance normativo más allá de lo que el código cubre.
 ## Decisión
 ### Backend
 **Controladores API (`backend/Erp.Api/Controllers/`):**
-- `SiiController` (`api/sii`, `[Authorize]`) — inyecta `SiiXmlGenerator`,
-  `SiiSigningService`, `SiiSubmissionService`, `VerifactuXmlGenerator` y
-  `VerifactuSubmissionService` (todos de `Erp.Infrastructure.Services.Sii`).
-  Endpoints: `GET emitidas`/`GET recibidas` (XML SII descargable),
-  `GET preview` (Base64 de ambos XML para revisión), `POST submit` (firma
-  XAdES-BES con `SiiSigningService` y envía con `SiiSubmissionService`;
-  requiere `Sii:CertPath`/`Sii:CertPass` configurados — si no, devuelve 400),
-  `GET verifactu` (XML de registro VeriFactu vía
-  `VerifactuXmlGenerator.GenerateRegistroAsync`) y
-  `POST verifactu/submit` (envío al TIKE vía `VerifactuSubmissionService`).
-- `TaxController` (`api/tax`) — validación de NIF-IVA intracomunitario contra
-  el servicio oficial VIES de la UE, vía `IViesService`
-  (`POST`/`GET api/tax/vies/validate`). Comparte la misma fuente SOAP y el
-  texto `Advice` (`ViesResponseMapper`) que `ViesController` del módulo
-  Accounting (`api/v1/accounting/vies/validate`, que además persiste en
-  `IntraEuOperations` vía `ValidateViesCommand`).
+- `SiiController` (`api/sii`, `[Authorize]`) — controller delgado con
+  `IMediator`; handlers en `Erp.Infrastructure.Features.Sii` delegan en
+  `SiiXmlGenerator`, `SiiSigningService`, `SiiSubmissionService`,
+  `IVerifactuXmlGenerator` y `VerifactuSubmissionService`. Endpoints:
+  `GET emitidas`/`GET recibidas`, `GET validate`, `GET preview`,
+  `POST submit`, `GET verifactu`, `POST verifactu/submit`.
+- `TaxController` (`api/tax`) — controller delgado con `IMediator`; despacha
+  `ValidateViesCommand` (Accounting) para VIES (`POST`/`GET
+  `api/tax/vies/validate`). Comparte `IViesService` SOAP y `ViesResponseMapper`
+  con `ViesController` del módulo Accounting (que además persiste en
+  `IntraEuOperations`).
 - `FiscalCalendarController` (`api/fiscal/calendar`) — calendario de
   obligaciones tributarias españolas por empresa: `GET` (lista/año),
   `GET {id}`, `POST generate/{year}` (genera automáticamente eventos vía

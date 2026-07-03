@@ -1,3 +1,5 @@
+using Erp.Modules.Sales.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -7,6 +9,8 @@ namespace Erp.Modules.Sales.Infrastructure.Migrations;
 /// <summary>
 /// FK sales.SalesOrders.ClientId → crm.Clients.Id (ítem ADR-0018 #23).
 /// </summary>
+[DbContext(typeof(SalesDbContext))]
+[Migration("20260703160000_AddSalesOrderClientFk")]
 public partial class AddSalesOrderClientFk : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)

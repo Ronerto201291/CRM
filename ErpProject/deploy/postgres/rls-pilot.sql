@@ -1,18 +1,22 @@
--- ADR-0018 #34 — Piloto Row-Level Security (NO ejecutar en producción sin middleware de sesión)
--- Requiere: SET app.current_tenant = '<company-uuid>' en cada conexión Npgsql antes de queries.
--- Ver: Erp.Infrastructure/Tenancy/ (futuro PostgresTenantSessionInitializer).
+-- ADR-0018 #34 — Piloto Row-Level Security (referencia manual)
+-- NOTA: no ejecutar en docker-entrypoint-initdb.d — las tablas EF aún no existen.
+-- La aplicación aplica estas políticas tras MigrateAsync vía PostgresRlsBootstrap
+-- cuando Postgres:RlsEnabled=true (docker-compose.override.yml lo activa en local).
 --
--- Ejemplo piloto sobre core."Companies" (schema public por defecto en EF migrations):
+-- Tablas cubiertas por PostgresRlsBootstrap:
+--   Companies     → USING ("Id" = app.current_tenant)
+--   Users, Roles, TenantModules, TenantInvitations, FiscalEvents,
+--   Subscriptions, ApiKeys, AuditLogs, Rules
+--     → USING ("CompanyId" = app.current_tenant)
+--   billing."Invoices", crm."Clients", crm."Suppliers"
+--     → USING ("CompanyId" = app.current_tenant)
 --
+-- Ejemplo manual (Companies):
 -- ALTER TABLE "Companies" ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE "Companies" FORCE ROW LEVEL SECURITY;
---
 -- CREATE POLICY companies_tenant_isolation ON "Companies"
 --   USING ("Id" = NULLIF(current_setting('app.current_tenant', true), '')::uuid);
 --
--- Política de bypass para rol migraciones (solo despliegue):
--- CREATE POLICY companies_migration_bypass ON "Companies"
---   TO erp_migration
---   USING (true);
---
--- Estado jul 2026: script documentado; activación diferida hasta interceptor Npgsql en ErpDbContext.
+-- Ejemplo manual (tablas con CompanyId):
+-- ALTER TABLE "Users" ENABLE ROW LEVEL SECURITY;
+-- CREATE POLICY users_tenant_isolation ON "Users"
+--   USING ("CompanyId" = NULLIF(current_setting('app.current_tenant', true), '')::uuid);

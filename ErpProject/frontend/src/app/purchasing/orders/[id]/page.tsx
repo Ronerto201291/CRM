@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import PageContainer from "@/components/PageContainer";
 
@@ -84,7 +85,7 @@ export default function PurchaseOrderDetailPage() {
                     <h1 className="page-title">Pedido {order.number}</h1>
                     <p className="page-subtitle">{order.supplierName}</p>
                 </div>
-                <a href="/purchasing/orders" className="btn btn-secondary">← Volver</a>
+                <Link href="/purchasing/orders" className="btn btn-secondary">← Volver</Link>
             </div>
 
             {(actionError || successMsg) && (

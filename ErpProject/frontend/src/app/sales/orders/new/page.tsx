@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useState, useCallback, useEffect } from "react";
-import PageContainer from "@/components/PageContainer";
+import PageListLayout from "@/components/PageListLayout";
+import FormErrorBanner from "@/components/FormErrorBanner";
+import Link from "next/link";
 import { parseListResponse } from "@/lib/parseListResponse";
 import { updateLineAt } from "@/lib/lineForm";
 import { salesOrderCreateSchema } from '@/lib/schemas/salesOrderCreateSchema';
@@ -97,20 +99,12 @@ export default function NewSalesOrderPage() {
     };
 
     return (
-        <PageContainer>
-            <div className="page-header">
-                <div>
-                    <h1 className="page-title">Nuevo Pedido de Venta</h1>
-                    <p className="page-subtitle">Registrar pedido de cliente</p>
-                </div>
-                <a href="/sales/orders" className="btn btn-secondary">← Volver</a>
-            </div>
-
-            {formError && (
-                <div className="erp-card" style={{ padding: '12px 16px', marginBottom: 16, color: 'var(--danger)', background: 'var(--danger-bg)' }}>
-                    {formError}
-                </div>
-            )}
+        <PageListLayout
+            title="Nuevo Pedido de Venta"
+            subtitle="Registrar pedido de cliente"
+            actions={<Link href="/sales/orders" className="btn btn-secondary">← Volver</Link>}
+        >
+            <FormErrorBanner message={formError} />
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
                 <div className="form-group">
@@ -219,11 +213,11 @@ export default function NewSalesOrderPage() {
             </div>
 
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                <a href="/sales/orders" className="btn btn-secondary">Cancelar</a>
+                <Link href="/sales/orders" className="btn btn-secondary">Cancelar</Link>
                 <button className="btn btn-primary" onClick={submit} disabled={saving}>
                     {saving ? 'Creando...' : '✓ Crear Pedido'}
                 </button>
             </div>
-        </PageContainer>
+        </PageListLayout>
     );
 }

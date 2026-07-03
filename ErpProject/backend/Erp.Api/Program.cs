@@ -148,9 +148,12 @@ if (string.IsNullOrEmpty(connectionString))
         "Database connection string missing. Set ConnectionStrings__DefaultConnection in environment or appsettings.");
 }
 
+builder.Services.AddScoped<Erp.Infrastructure.Tenancy.PostgresTenantSessionInterceptor>();
 builder.Services.AddDbContext<ErpDbContext>((sp, options) =>
     options.UseNpgsql(connectionString)
-           .AddInterceptors(sp.GetRequiredService<Erp.Infrastructure.Interceptors.AuditSaveChangesInterceptor>())
+           .AddInterceptors(
+               sp.GetRequiredService<Erp.Infrastructure.Interceptors.AuditSaveChangesInterceptor>(),
+               sp.GetRequiredService<Erp.Infrastructure.Tenancy.PostgresTenantSessionInterceptor>())
            .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
 
 // 4. Configure Multi-tenancy and Infrastructure
@@ -267,6 +270,9 @@ application.UseCors();  // ? AGREGAR CORS MIDDLEWARE
 application.UseStaticFiles();
 application.UseHttpsRedirection();
 
+// API pública v1: validación de X-Api-Key + rate limit (antes de tenant JWT)
+application.UseMiddleware<Erp.Infrastructure.Security.ApiKeyRateLimitMiddleware>();
+
 // Multi-tenant Middleware
 application.UseMiddleware<TenantResolverMiddleware>();
 
@@ -333,9 +339,6 @@ if (!isIntegrationTest)
     });
 }
 
-// ApiKey Rate Limiting Middleware
-application.UseMiddleware<Erp.Infrastructure.Security.ApiKeyRateLimitMiddleware>();
-
 // Hangfire recurring jobs — retry on transient DNS/socket errors at startup
 if (!isIntegrationTest)
 {
@@ -399,15 +402,27 @@ using (var scope = application.Services.CreateScope())
         await scope.ServiceProvider.GetRequiredService<Erp.Modules.Purchasing.Infrastructure.Data.PurchasingDbContext>().Database.MigrateAsync();
         await scope.ServiceProvider.GetRequiredService<Erp.Modules.Sales.Infrastructure.Data.SalesDbContext>().Database.MigrateAsync();
         Log.Information("All module migrations applied (Purchasing, Sales, Inventory + others).");
-        
-        // Seed only in Development — check users (not companies) to handle partial seed recovery
-        if (!dbContext.Users.Any() && env.IsDevelopment())
-        {
-            var seedPassword = builder.Configuration["Seed:AdminPassword"]
-                ?? throw new InvalidOperationException(
-                    "Seed:AdminPassword not configured. Set it in appsettings.Development.json.");
 
-            // Reuse existing company if already seeded (partial seed recovery)
+        await Erp.Infrastructure.Tenancy.PostgresRlsBootstrap.ApplyPilotPoliciesAsync(
+            dbContext,
+            builder.Configuration,
+            scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("PostgresRls"),
+            CancellationToken.None);
+        
+        // Seed on first boot when the database has no users (any environment).
+        // IgnoreQueryFilters: at startup there is no tenant context, so filtered Any() is always false.
+        // Set Seed__AdminPassword in env / docker-compose to enable bootstrap admin.
+        if (!dbContext.Users.IgnoreQueryFilters().Any())
+        {
+            var seedPassword = builder.Configuration["Seed:AdminPassword"];
+            if (string.IsNullOrWhiteSpace(seedPassword))
+            {
+                Log.Warning(
+                    "Database has no users but Seed:AdminPassword is not configured — skipping seed. " +
+                    "Register via /signup or set Seed__AdminPassword (e.g. docker-compose.override.yml).");
+            }
+            else
+            {
             var company = dbContext.Companies.IgnoreQueryFilters().FirstOrDefault()
                 ?? new Erp.Domain.Entities.Core.Company
                 {
@@ -434,18 +449,29 @@ using (var scope = application.Services.CreateScope())
                 dbContext.Roles.AddRange(adminRole, managerRole, contableRole);
             dbContext.SaveChanges();
 
-            var adminUser = new Erp.Domain.Entities.Core.User
+            if (!dbContext.Users.IgnoreQueryFilters().Any(u => u.Email == "admin@devcorp.com"))
             {
-                Id = Guid.NewGuid(),
-                CompanyId = company.Id,
-                Email = "admin@devcorp.com",
-                FirstName = "Admin",
-                LastName = "System",
-                IsActive = true,
-                RoleId = adminRole.Id,
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword(seedPassword, workFactor: 12)
-            };
-            dbContext.Users.Add(adminUser);
+                var adminUser = new Erp.Domain.Entities.Core.User
+                {
+                    Id = Guid.NewGuid(),
+                    CompanyId = company.Id,
+                    Email = "admin@devcorp.com",
+                    FirstName = "Admin",
+                    LastName = "System",
+                    IsActive = true,
+                    RoleId = adminRole.Id,
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(seedPassword, workFactor: 12)
+                };
+                dbContext.Users.Add(adminUser);
+                dbContext.UserCompanies.Add(new Erp.Domain.Entities.Core.UserCompany
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = adminUser.Id,
+                    CompanyId = company.Id,
+                    RoleId = adminRole.Id,
+                    IsDefault = true
+                });
+            }
 
             // Seed Plan General Contable español (cuentas mínimas PGC 2007)
             var pgcAccounts = new[]
@@ -508,8 +534,15 @@ using (var scope = application.Services.CreateScope())
                 ("760", "Ingresos de participaciones en instrumentos de patrimonio", "Ingreso"),
                 ("770", "Beneficios procedentes del inmovilizado material", "Ingreso"),
             };
+            var existingAccountCodes = accountingDb.Accounts
+                .IgnoreQueryFilters()
+                .Where(a => a.CompanyId == company.Id)
+                .Select(a => a.Code)
+                .ToHashSet();
             foreach (var (code, name, type) in pgcAccounts)
             {
+                if (existingAccountCodes.Contains(code))
+                    continue;
                 accountingDb.Accounts.Add(new Erp.Modules.Accounting.Domain.Entities.Account
                 {
                     Id = Guid.NewGuid(),
@@ -523,8 +556,15 @@ using (var scope = application.Services.CreateScope())
 
             // Seed TenantModules — todos desactivados por defecto excepto Core
             var moduleNames = new[] { "Inventory", "OCR", "PublicApi", "Expenses", "Accounting", "CRM", "Billing" };
+            var existingModules = dbContext.TenantModules
+                .IgnoreQueryFilters()
+                .Where(tm => tm.CompanyId == company.Id)
+                .Select(tm => tm.ModuleName)
+                .ToHashSet();
             foreach (var moduleName in moduleNames)
             {
+                if (existingModules.Contains(moduleName))
+                    continue;
                 dbContext.TenantModules.Add(new Erp.Domain.Entities.Core.TenantModule
                 {
                     Id = Guid.NewGuid(),
@@ -536,11 +576,13 @@ using (var scope = application.Services.CreateScope())
 
             dbContext.SaveChanges();
             Log.Information("Seed completado: Company, 3 Roles, Admin user, PGC ({Count} cuentas), TenantModules.", pgcAccounts.Length);
+            }
         }
     }
     catch (Exception ex)
     {
-        Log.Error(ex, "An error occurred while migrating or seeding the database.");
+        Log.Fatal(ex, "Database migration or seed failed — aborting startup.");
+        throw;
     }
 }
 }

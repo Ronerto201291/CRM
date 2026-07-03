@@ -34,6 +34,20 @@ PermissionsController,CompanyController}.cs`,
   sin re-login (Fase 1, ADR-0018 #42a).
 - `POST /api/auth/add-company` — alta de empresa adicional desde cuenta
   existente (`AddCompanyFromAccountCommand`).
+
+### Multi-empresa gestoría — fases (#42a, ADR-0018)
+
+| Fase | Alcance | Estado |
+|---|---|---|
+| **1** | `UserCompany`, `switch-company`, `add-company`, `TenantMembershipMiddleware`, `CompanySwitcher` en frontend | ✅ Implementado |
+| **2** | UI gestoría: dashboard multi-empresa (KPIs agregados, alertas por cliente) | 🟡 Diseño — requiere OK UX |
+| **3** | Roles por membresía (`UserCompany.RoleId`) refinados para operador gestoría vs admin cliente | 🟡 Parcial — modelo existe, UX pendiente |
+| **4** | **Suscripción gestoría:** plan que cubre N `Company` bajo una cuenta (Stripe metadata + límites) | ❌ Bloqueado producto — ¿plan por Company o por gestoría? |
+| **5** | Facturación consolidada SaaS (una factura Stripe por gestoría con desglose por empresa cliente) | ❌ Bloqueado — depende Fase 4 |
+
+No implementar Fases 4–5 sin decisión de negocio sobre modelo de suscripción.
+Fase 1 es suficiente para operar varias empresas con el mismo login.
+
 - `LoginCommand` → `LoginCommandHandler`: busca usuario por email con
   `IgnoreQueryFilters()`, verifica BCrypt, soporta 2FA, resuelve empresa
   activa (membresía por defecto o `User.CompanyId` legacy) y emite JWT.
@@ -227,7 +241,7 @@ este pipeline compartido.
 > Metodología en `ADR-0018`.
 
 - **Multi-empresa Fase 1:** ✅ `UserCompany`, switch-company, middleware (#42a).
-- **Pendiente producto:** suscripción gestoría, fases 4–5 de #42a.
+- **Fases 2–5:** documentadas en Decisión; Fase 4–5 bloqueadas por modelo suscripción gestoría.
 - **Seguridad:** validación JWT↔tenant reforzada vía `TenantMembershipMiddleware`;
   API pública sigue requiriendo revisión (ADR-0016).
 
@@ -251,11 +265,10 @@ este pipeline compartido.
 ## Consecuencias
 - El aislamiento multi-tenant depende de `X-Tenant-Id` correcto y de
   `TenantMembershipMiddleware` (#42a) que cruza JWT con tenant resuelto.
-- **Multi-empresa (Fase 1 ✅, fases 2–5 🟡):** un usuario puede acceder a
+- **Multi-empresa (Fase 1 ✅, fases 2–5 documentadas):** un usuario puede acceder a
   varias `Company` vía `UserCompany`, cambiar empresa activa en sesión y
-  dar de alta empresas adicionales. **Pendiente:** modelo de suscripción
-  gestoría (¿plan por Company o por cuenta?), email único global en algunos
-  flujos legacy, y fases 4–5 del ítem 42a en ADR-0018.
+  dar de alta empresas adicionales. **Fases 4–5** (suscripción gestoría N empresas,
+  facturación consolidada) requieren OK de producto — ver tabla de fases en Decisión.
 - La resolución por subdominio existe pero el frontend usa `X-Tenant-Id`.
 - Tests de aislamiento multi-tenant: parcialmente cubiertos (#32); conviene
   smoke manual con dos tenants antes de desplegar cambios en auth.

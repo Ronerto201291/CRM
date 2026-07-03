@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import PageContainer from '@/components/PageContainer';
 import AccessibleModal from '@/components/AccessibleModal';
 import { parseListResponse } from '@/lib/parseListResponse';
@@ -60,6 +60,13 @@ export default function TreasuryPage() {
     const fmt = (n: number) => `€ ${(n || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}`;
     const fmtDate = (d?: string) => d ? new Date(d).toLocaleDateString('es-ES') : '—';
     const now = new Date();
+
+    const totalBalance = useMemo(
+        () => accounts.filter(a => a.isActive).reduce((sum, a) => sum + (a.currentBalance || 0), 0),
+        [accounts],
+    );
+    const activeAccount = useMemo(() => accounts.find(a => a.id === selectedAccount) ?? null, [accounts, selectedAccount]);
+    const unreconciledCount = useMemo(() => movements.filter(m => !m.isReconciled).length, [movements]);
 
     const loadAccounts = async () => {
         const r = await fetch('/api/proxy/treasury/bank-accounts');
@@ -157,8 +164,6 @@ export default function TreasuryPage() {
         { key: 'orders', label: 'Órdenes de Pago' },
         { key: 'forecast', label: 'Previsión de Caja' },
     ];
-
-    const totalBalance = accounts.filter(a => a.isActive).reduce((s, a) => s + a.currentBalance, 0);
 
     return (
         <PageContainer>

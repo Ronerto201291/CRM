@@ -37,25 +37,35 @@ public class CreateInvoiceHandler : IRequestHandler<CreateInvoiceCommand, Invoic
     private readonly IApplicationDbContext _appCtx;
     private readonly IClientInfoService _clientInfo;
     private readonly IViesService _vies;
+    private readonly IPlanLimitService _planLimits;
 
     public CreateInvoiceHandler(
         IBillingDbContext ctx,
         ITenantContext tenant,
         IApplicationDbContext appCtx,
         IClientInfoService clientInfo,
-        IViesService vies)
+        IViesService vies,
+        IPlanLimitService planLimits)
     {
         _ctx        = ctx;
         _tenant     = tenant;
         _appCtx     = appCtx;
         _clientInfo = clientInfo;
         _vies       = vies;
+        _planLimits = planLimits;
     }
 
     public async Task<InvoiceDto> Handle(CreateInvoiceCommand req, CancellationToken ct)
     {
         var companyId = _tenant.TenantId
             ?? throw new InvalidOperationException("No tenant context resolved.");
+
+        var monthStart = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+        var monthCount = await _ctx.Invoices.CountAsync(i => i.IssueDate >= monthStart, ct);
+        var limitCheck = await _planLimits.CheckInvoiceLimitAsync(companyId, monthCount, ct);
+        if (!limitCheck.Allowed)
+            throw new PlanLimitExceededException(limitCheck);
+
         var fiscalYear = DateTime.UtcNow.Year;
 
         await using var tx = await _ctx.Database.BeginTransactionAsync(ct);
@@ -320,6 +330,41 @@ public class GetInvoicesHandler : IRequestHandler<GetInvoicesQuery, PaginatedInv
 
         return new PaginatedInvoicesResult(items, totalCount, page, pageSize);
     }
+}
+
+public class GetInvoiceByIdHandler : IRequestHandler<GetInvoiceByIdQuery, InvoiceDto?>
+{
+    private readonly IBillingDbContext _ctx;
+
+    public GetInvoiceByIdHandler(IBillingDbContext ctx) => _ctx = ctx;
+
+    public async Task<InvoiceDto?> Handle(GetInvoiceByIdQuery req, CancellationToken ct)
+        => await _ctx.Invoices
+            .Where(i => i.Id == req.Id)
+            .Select(i => new InvoiceDto
+            {
+                Id = i.Id, Number = i.Number, Series = i.Series,
+                FiscalYear = i.FiscalYear, InvoiceType = i.InvoiceType,
+                ClientId = i.ClientId, ClientType = i.ClientType,
+                ClientNif = i.ClientNif, ClientName = i.ClientName, ClientEmail = i.ClientEmail, ClientAddress = i.ClientAddress,
+                CompanyNif = i.CompanyNif, CompanyName = i.CompanyName, CompanyAddress = i.CompanyAddress,
+                IssueDate = i.IssueDate, DueDate = i.DueDate, OperationDate = i.OperationDate,
+                Subtotal = i.Subtotal, TaxAmount = i.TaxAmount,
+                IrpfRate = i.IrpfRate, IrpfAmount = i.IrpfAmount,
+                SurchargeAmount = i.SurchargeAmount, Total = i.Total,
+                Status = i.Status, IsLocked = i.IsLocked, LockedAt = i.LockedAt,
+                Hash = i.Hash, VerifactuHuella = i.VerifactuHuella, VerifactuQrUrl = i.VerifactuQrUrl,
+                JournalEntryId = i.JournalEntryId,
+                RectificationReasonCode = i.RectificationReasonCode,
+                RectificationReasonText = i.RectificationReasonText,
+                RectificationPeriodFrom = i.RectificationPeriodFrom,
+                RectificationPeriodTo = i.RectificationPeriodTo,
+                ClientViesValid = i.ClientViesValid,
+                ClientViesConsultedAtUtc = i.ClientViesConsultedAtUtc,
+                ClientViesCountryCode = i.ClientViesCountryCode,
+                ClientViesName = i.ClientViesName,
+            })
+            .FirstOrDefaultAsync(ct);
 }
 
 public class LockInvoiceHandler : IRequestHandler<LockInvoiceCommand, bool>

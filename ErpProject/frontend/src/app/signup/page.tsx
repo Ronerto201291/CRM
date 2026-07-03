@@ -2,6 +2,7 @@
 import { useActionState } from 'react';
 import { registerCompanyAction } from '../actions/auth';
 import Link from 'next/link';
+import FormLabel from '@/components/FormLabel';
 
 const PLANS = [
     { name: 'Free',         price: '0€/mes',   features: ['Facturación + CRM', '20 facturas/mes', '1 usuario'] },
@@ -55,17 +56,17 @@ export default function SignupPage() {
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                                 <div>
-                                    <label className="erp-label">NOMBRE DE LA EMPRESA *</label>
-                                    <input className="erp-input" name="companyName" placeholder="Empresa S.L." required />
+                                    <FormLabel htmlFor="signup-companyName" required>Nombre de la empresa</FormLabel>
+                                    <input id="signup-companyName" className="erp-input" name="companyName" placeholder="Empresa S.L." required />
                                 </div>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                                     <div>
-                                        <label className="erp-label">CIF / NIF *</label>
-                                        <input className="erp-input" name="companyTaxId" placeholder="B12345678" required />
+                                        <FormLabel htmlFor="signup-companyTaxId" required>CIF / NIF</FormLabel>
+                                        <input id="signup-companyTaxId" className="erp-input" name="companyTaxId" placeholder="B12345678" required />
                                     </div>
                                     <div>
-                                        <label className="erp-label">DIRECCIÓN</label>
-                                        <input className="erp-input" name="companyAddress" placeholder="Calle, ciudad" />
+                                        <FormLabel htmlFor="signup-companyAddress">Dirección</FormLabel>
+                                        <input id="signup-companyAddress" className="erp-input" name="companyAddress" placeholder="Calle, ciudad" />
                                     </div>
                                 </div>
                             </div>
@@ -77,27 +78,27 @@ export default function SignupPage() {
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                                 <div>
-                                    <label className="erp-label">EMAIL *</label>
-                                    <input className="erp-input" name="adminEmail" type="email" placeholder="admin@empresa.com" required />
+                                    <FormLabel htmlFor="signup-adminEmail" required>Email</FormLabel>
+                                    <input id="signup-adminEmail" className="erp-input" name="adminEmail" type="email" placeholder="admin@empresa.com" required />
                                 </div>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                                     <div>
-                                        <label className="erp-label">NOMBRE *</label>
-                                        <input className="erp-input" name="adminFirstName" placeholder="María" required />
+                                        <FormLabel htmlFor="signup-adminFirstName" required>Nombre</FormLabel>
+                                        <input id="signup-adminFirstName" className="erp-input" name="adminFirstName" placeholder="María" required />
                                     </div>
                                     <div>
-                                        <label className="erp-label">APELLIDOS</label>
-                                        <input className="erp-input" name="adminLastName" placeholder="García López" />
+                                        <FormLabel htmlFor="signup-adminLastName">Apellidos</FormLabel>
+                                        <input id="signup-adminLastName" className="erp-input" name="adminLastName" placeholder="García López" />
                                     </div>
                                 </div>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                                     <div>
-                                        <label className="erp-label">CONTRASEÑA * (mín. 8 caracteres)</label>
-                                        <input className="erp-input" name="adminPassword" type="password" placeholder="••••••••" required minLength={8} />
+                                        <FormLabel htmlFor="signup-adminPassword" required>Contraseña (mín. 8 caracteres)</FormLabel>
+                                        <input id="signup-adminPassword" className="erp-input" name="adminPassword" type="password" placeholder="••••••••" required minLength={8} />
                                     </div>
                                     <div>
-                                        <label className="erp-label">CONFIRMAR CONTRASEÑA *</label>
-                                        <input className="erp-input" name="confirmPassword" type="password" placeholder="••••••••" required />
+                                        <FormLabel htmlFor="signup-confirmPassword" required>Confirmar contraseña</FormLabel>
+                                        <input id="signup-confirmPassword" className="erp-input" name="confirmPassword" type="password" placeholder="••••••••" required />
                                     </div>
                                 </div>
                             </div>

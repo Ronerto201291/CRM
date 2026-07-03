@@ -1,59 +1,32 @@
 using System;
+using Erp.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace Erp.Infrastructure.Migrations;
 
+[DbContext(typeof(ErpDbContext))]
+[Migration("20260703120000_AddUserCompanies")]
 public partial class AddUserCompanies : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.CreateTable(
-            name: "UserCompanies",
-            columns: table => new
-            {
-                Id = table.Column<Guid>(type: "uuid", nullable: false),
-                UserId = table.Column<Guid>(type: "uuid", nullable: false),
-                CompanyId = table.Column<Guid>(type: "uuid", nullable: false),
-                RoleId = table.Column<Guid>(type: "uuid", nullable: true),
-                IsDefault = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false)
-            },
-            constraints: table =>
-            {
-                table.PrimaryKey("PK_UserCompanies", x => x.Id);
-                table.ForeignKey(
-                    name: "FK_UserCompanies_Companies_CompanyId",
-                    column: x => x.CompanyId,
-                    principalTable: "Companies",
-                    principalColumn: "Id",
-                    onDelete: ReferentialAction.Cascade);
-                table.ForeignKey(
-                    name: "FK_UserCompanies_Roles_RoleId",
-                    column: x => x.RoleId,
-                    principalTable: "Roles",
-                    principalColumn: "Id",
-                    onDelete: ReferentialAction.SetNull);
-                table.ForeignKey(
-                    name: "FK_UserCompanies_Users_UserId",
-                    column: x => x.UserId,
-                    principalTable: "Users",
-                    principalColumn: "Id",
-                    onDelete: ReferentialAction.Cascade);
-            });
-
-        migrationBuilder.CreateIndex(
-            name: "IX_UserCompanies_CompanyId",
-            table: "UserCompanies",
-            column: "CompanyId");
-
-        migrationBuilder.CreateIndex(
-            name: "IX_UserCompanies_UserId_CompanyId",
-            table: "UserCompanies",
-            columns: new[] { "UserId", "CompanyId" },
-            unique: true);
-
         migrationBuilder.Sql("""
+            CREATE TABLE IF NOT EXISTS "UserCompanies" (
+                "Id" uuid NOT NULL,
+                "UserId" uuid NOT NULL,
+                "CompanyId" uuid NOT NULL,
+                "RoleId" uuid NULL,
+                "IsDefault" boolean NOT NULL DEFAULT false,
+                CONSTRAINT "PK_UserCompanies" PRIMARY KEY ("Id"),
+                CONSTRAINT "FK_UserCompanies_Companies_CompanyId" FOREIGN KEY ("CompanyId") REFERENCES "Companies" ("Id") ON DELETE CASCADE,
+                CONSTRAINT "FK_UserCompanies_Roles_RoleId" FOREIGN KEY ("RoleId") REFERENCES "Roles" ("Id") ON DELETE SET NULL,
+                CONSTRAINT "FK_UserCompanies_Users_UserId" FOREIGN KEY ("UserId") REFERENCES "Users" ("Id") ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS "IX_UserCompanies_CompanyId" ON "UserCompanies" ("CompanyId");
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_UserCompanies_UserId_CompanyId" ON "UserCompanies" ("UserId", "CompanyId");
             INSERT INTO "UserCompanies" ("Id", "UserId", "CompanyId", "RoleId", "IsDefault")
             SELECT gen_random_uuid(), "Id", "CompanyId", "RoleId", true
             FROM "Users"

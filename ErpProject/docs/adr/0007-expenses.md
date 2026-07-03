@@ -217,7 +217,7 @@ se protege indirectamente a través de su FK a `ExpenseDocument`.
 > Metodología en `ADR-0018`.
 
 - **Desacoplamiento Expenses↔CRM:** ✅ upload vía `ExpenseUploadCreatedEvent`
-  (#19d); sin `ICrmDbContext` en `ExpensesController`.
+  (#19d); `UploadExpenseByTokenCommand` en Application (sin `I*DbContext` en Api).
 - **OCR:** Tesseract real (no mock).
 - **Pendiente:** sin FluentValidation; endpoint `reject` ausente; entidad
   `AccountingEntry` sin uso; UI pública de subida QR incompleta.

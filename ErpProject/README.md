@@ -23,18 +23,27 @@
 - **📸 Smart Expense Capture** — QR único por empresa · Upload público · OCR local (Tesseract) · Auto-crear proveedor
 - **📦 Inventario** — Productos · Stock · Movimientos entrada/salida
 
-## 🚀 Inicio Rápido
+## 🚀 Inicio Rápido (local con Docker)
 
 ```bash
-# 1. Clonar y levantar
+# 1. Clonar y preparar entorno
 git clone <repo> && cd ErpProject
-docker compose up -d
+cp .env.example .env   # rellena POSTGRES_PASSWORD y JWT_SECRET (openssl rand -base64)
 
-# 2. Acceder
-# Frontend: http://localhost:3000
-# Backend API: http://localhost:5000/swagger
-# Login: admin@devcorp.com / Roberto21$$
+# 2. Levantar stack de desarrollo (docker-compose.override.yml se carga solo)
+docker compose up -d --build
+
+# 3. Acceder
+# Frontend (nginx):  http://localhost
+# Frontend (directo): http://localhost:3000
+# Backend/Swagger:    http://localhost:8081/swagger
+# Login demo:         admin@devcorp.com / DevChangeMe2026!!
 ```
+
+> **Producción** (VPS/servidor, sin overrides de desarrollo):
+> `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build`
+
+Las migraciones EF Core (core + módulos) se aplican **automáticamente** al arrancar el backend; no hace falta ejecutarlas a mano.
 
 ## 🏢 Multi-Tenant
 
@@ -87,6 +96,8 @@ ErpProject/
 │   └── src/app/          # Next.js App Router pages
 ├── deploy/               # Nginx, scripts de deploy/backup
 ├── docker-compose.yml
+├── docker-compose.override.yml   # local (carga automática)
+├── docker-compose.prod.yml       # producción (explícito con -f)
 └── README.md
 ```
 
@@ -95,7 +106,7 @@ ErpProject/
 | Campo | Valor |
 |-------|-------|
 | Email | `admin@devcorp.com` |
-| Password | `Roberto21$$` |
+| Password | `DevChangeMe2026!!` |
 | Empresa | DevCorp S.A. |
 
 ---

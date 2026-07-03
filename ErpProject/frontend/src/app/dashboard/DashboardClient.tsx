@@ -1,11 +1,12 @@
 'use client';
 import { useState } from 'react';
+import Link from 'next/link';
 import PageContainer from '@/components/PageContainer';
 import type { DashboardStats } from '@/lib/buildDashboardStats';
 
 export default function DashboardClient({ initialData }: { initialData: DashboardStats }) {
-  const [data, setData] = useState<DashboardStats>(initialData);
-  const [loading, setLoading] = useState(false);
+  const [data] = useState<DashboardStats>(initialData);
+  const d = data;
   const fmt = (n: number) => `€ ${n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const ivaBalance = d.ivaRepercutido - d.ivaSoportado;
 
@@ -62,7 +63,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
         <div className="erp-card" style={{ overflow: 'hidden' }}>
           <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontWeight: 700, fontSize: '14px' }}>Últimas Facturas</span>
-            <a href="/billing" style={{ fontSize: '12px', color: 'var(--brand-primary)', textDecoration: 'none', fontWeight: 500 }}>Ver todo →</a>
+            <Link href="/billing" style={{ fontSize: '12px', color: 'var(--brand-primary)', textDecoration: 'none', fontWeight: 500 }}>Ver todo →</Link>
           </div>
           {d.recentInvoices.length === 0 ? (
             <div className="empty-state">
@@ -185,7 +186,7 @@ interface QuickActionProps {
 
 function QuickAction({ href, icon, label, color, badge }: QuickActionProps) {
   return (
-    <a href={href} style={{
+    <Link href={href} style={{
       display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px',
       borderRadius: '8px', border: '1px solid var(--border)', textDecoration: 'none',
       background: 'var(--surface)', transition: 'all 0.15s',
@@ -197,7 +198,7 @@ function QuickAction({ href, icon, label, color, badge }: QuickActionProps) {
       <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', flex: 1 }}>{label}</span>
       {badge && <span style={{ background: color, color: 'white', borderRadius: '99px', padding: '1px 8px', fontSize: '11px', fontWeight: 700 }}>{badge}</span>}
       <span style={{ color: 'var(--text-muted)', fontSize: '16px' }}>›</span>
-    </a>
+    </Link>
   );
 }
 

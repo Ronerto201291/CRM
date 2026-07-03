@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import PageContainer from '@/components/PageContainer';
 import { parseListResponse } from '@/lib/parseListResponse';
 
@@ -53,7 +54,7 @@ export default function SalesOrdersClient({ initialOrders }: SalesOrdersClientPr
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
                     <button className="btn btn-secondary" onClick={refresh} disabled={loading}>Actualizar</button>
-                    <a href="/sales/orders/new" className="btn btn-primary">+ Nuevo Pedido</a>
+                    <Link href="/sales/orders/new" className="btn btn-primary">+ Nuevo Pedido</Link>
                 </div>
             </div>
 

@@ -1,4 +1,6 @@
 using System;
+using Erp.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -6,17 +8,16 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Erp.Infrastructure.Migrations;
 
 /// <inheritdoc />
+[DbContext(typeof(ErpDbContext))]
+[Migration("20260417000000_AddVerifactuSubmittedAt")]
 public partial class AddVerifactuSubmittedAt : Migration
 {
     /// <inheritdoc />
     protected override void Up(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.AddColumn<DateTime>(
-            name: "VerifactuSubmittedAt",
-            table: "Invoices",
-            type: "timestamp with time zone",
-            nullable: true,
-            comment: "Timestamp del último envío exitoso a AEAT (Verifactu). Null = pendiente de enviar.");
+        migrationBuilder.Sql("""
+            ALTER TABLE "Invoices" ADD COLUMN IF NOT EXISTS "VerifactuSubmittedAt" timestamp with time zone;
+            """);
     }
 
     /// <inheritdoc />

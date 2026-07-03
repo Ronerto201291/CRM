@@ -34,8 +34,9 @@ snapshot de cliente (`ClientType`: Registered/Lead/Manual +
 `ClientName/TaxId/Email/...` copiados en el momento).
 
 **Facturas (`Invoice`)**, con `InvoicesController`
-(`Api/Controllers/InvoicesController.cs`) y `CreateInvoiceHandler`/
-`LockInvoiceHandler` (`BillingHandlers.cs`) como piezas centrales:
+(`Api/Controllers/InvoicesController.cs`) — solo `IMediator` — y `CreateInvoiceHandler`/
+`LockInvoiceHandler` (`BillingHandlers.cs`) como piezas centrales. El límite de plan
+(`IPlanLimitService`) se comprueba en `CreateInvoiceHandler` (`PlanLimitExceededException` → HTTP 402).
 
 **Corregido (paginación, backlog #8):** `GET /api/invoices` y
 `GET /api/quotes` devuelven `Paginated*Result` (`{ items, totalCount, page,

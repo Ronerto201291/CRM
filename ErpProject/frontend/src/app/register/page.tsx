@@ -3,6 +3,7 @@ import { useActionState, Suspense } from 'react';
 import { acceptInviteAction } from '../actions/auth';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import FormLabel from '@/components/FormLabel';
 
 const INIT = { error: undefined as string | undefined };
 
@@ -38,8 +39,8 @@ function RegisterForm() {
                 </p>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px', marginBottom: '12px' }}>
                     <div className="form-group">
-                        <label className="erp-label">CIF / NIF DEFINITIVO *</label>
-                        <input className="erp-input" name="taxId" placeholder="B12345678" required />
+                        <FormLabel htmlFor="register-taxId" required>CIF / NIF definitivo</FormLabel>
+                        <input id="register-taxId" className="erp-input" name="taxId" placeholder="B12345678" required />
                         <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Obligatorio para emitir facturas legales (Verifactu).</p>
                     </div>
                 </div>
@@ -51,20 +52,20 @@ function RegisterForm() {
                 </p>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                     <div className="form-group">
-                        <label className="erp-label">NOMBRE *</label>
-                        <input className="erp-input" name="firstName" placeholder="Nombre" required />
+                        <FormLabel htmlFor="register-firstName" required>Nombre</FormLabel>
+                        <input id="register-firstName" className="erp-input" name="firstName" placeholder="Nombre" required />
                     </div>
                     <div className="form-group">
-                        <label className="erp-label">APELLIDOS</label>
-                        <input className="erp-input" name="lastName" placeholder="Apellidos" />
+                        <FormLabel htmlFor="register-lastName">Apellidos</FormLabel>
+                        <input id="register-lastName" className="erp-input" name="lastName" placeholder="Apellidos" />
                     </div>
                     <div className="form-group">
-                        <label className="erp-label">CONTRASEÑA *</label>
-                        <input className="erp-input" type="password" name="password" placeholder="Mínimo 8 caracteres" required minLength={8} />
+                        <FormLabel htmlFor="register-password" required>Contraseña</FormLabel>
+                        <input id="register-password" className="erp-input" type="password" name="password" placeholder="Mínimo 8 caracteres" required minLength={8} />
                     </div>
                     <div className="form-group">
-                        <label className="erp-label">CONFIRMAR CONTRASEÑA *</label>
-                        <input className="erp-input" type="password" name="confirmPassword" placeholder="Repite la contraseña" required minLength={8} />
+                        <FormLabel htmlFor="register-confirmPassword" required>Confirmar contraseña</FormLabel>
+                        <input id="register-confirmPassword" className="erp-input" type="password" name="confirmPassword" placeholder="Repite la contraseña" required minLength={8} />
                     </div>
                 </div>
 

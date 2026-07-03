@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useCallback } from "react";
+import Link from "next/link";
 import PageContainer from "@/components/PageContainer";
 
 interface OrderLine {
@@ -83,7 +84,7 @@ export default function OrderDetailClient({ id, initialOrder }: OrderDetailClien
                     <h1 className="page-title">Pedido {order.number}</h1>
                     <p className="page-subtitle">{order.customerName}</p>
                 </div>
-                <a href="/sales/orders" className="btn btn-secondary">← Volver</a>
+                <Link href="/sales/orders" className="btn btn-secondary">← Volver</Link>
             </div>
 
             {(actionError || successMsg) && (

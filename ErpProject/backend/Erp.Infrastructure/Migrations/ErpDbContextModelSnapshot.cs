@@ -239,6 +239,9 @@ namespace Erp.Infrastructure.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<decimal>("MatchingToleranceAmount")
+                        .HasColumnType("numeric(18,4)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
@@ -520,7 +523,39 @@ namespace Erp.Infrastructure.Migrations
 
                     b.HasIndex("RoleId");
 
+                    b.HasIndex("Email", "CompanyId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Users_Email_CompanyId");
+
                     b.ToTable("Users");
+                });
+
+            modelBuilder.Entity("Erp.Domain.Entities.Core.UserCompany", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("RoleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("UserId", "CompanyId")
+                        .IsUnique();
+
+                    b.ToTable("UserCompanies");
                 });
 
             modelBuilder.Entity("Erp.Domain.Entities.Core.UserPermission", b =>
@@ -651,6 +686,25 @@ namespace Erp.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Subscriptions");
+                });
+
+            modelBuilder.Entity("Erp.Domain.Entities.Licensing.StripeWebhookEvent", b =>
+                {
+                    b.Property<string>("EventId")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("EventId");
+
+                    b.ToTable("StripeWebhookEvents");
                 });
 
             modelBuilder.Entity("Erp.Domain.Entities.Outbox.OutboxMessage", b =>
@@ -843,6 +897,31 @@ namespace Erp.Infrastructure.Migrations
                     b.Navigation("Company");
 
                     b.Navigation("Role");
+                });
+
+            modelBuilder.Entity("Erp.Domain.Entities.Core.UserCompany", b =>
+                {
+                    b.HasOne("Erp.Domain.Entities.Core.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Erp.Domain.Entities.Core.Role", "Role")
+                        .WithMany()
+                        .HasForeignKey("RoleId");
+
+                    b.HasOne("Erp.Domain.Entities.Core.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+
+                    b.Navigation("Role");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Erp.Domain.Entities.Core.UserPermission", b =>

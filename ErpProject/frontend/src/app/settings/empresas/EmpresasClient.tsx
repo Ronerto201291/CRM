@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import PageContainer from '@/components/PageContainer';
 import AccessibleModal from '@/components/AccessibleModal';
+import { daysUntil } from '@/lib/time';
 
 interface Company {
     id: string;
@@ -267,7 +268,7 @@ export default function EmpresasClient({
                         </thead>
                         <tbody>
                             {pendingInvitations.map(inv => {
-                                const expiresIn = Math.ceil((new Date(inv.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                                const expiresIn = daysUntil(inv.expiresAt);
                                 return (
                                     <tr key={inv.id}>
                                         <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>

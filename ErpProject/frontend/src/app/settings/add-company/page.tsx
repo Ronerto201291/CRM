@@ -8,6 +8,7 @@ import PageContainer from '@/components/PageContainer';
 import FormLabel from '@/components/FormLabel';
 import { addCompanySchema, type AddCompanyFormValues } from '@/lib/schemas/addCompanySchema';
 import { useTenant } from '@/context/TenantContext';
+import { setSessionCookies } from '@/lib/sessionCookies';
 
 export default function AddCompanyPage() {
     const router = useRouter();
@@ -30,9 +31,7 @@ export default function AddCompanyPage() {
             setError(body.error || 'No se pudo crear la empresa');
             return;
         }
-        document.cookie = `erp_token=${body.token}; path=/; max-age=${60 * 60 * 8}; SameSite=Lax`;
-        document.cookie = `tenantId=${body.companyId}; path=/; max-age=${60 * 60 * 8}; SameSite=Lax`;
-        document.cookie = `tenantName=${encodeURIComponent(body.companyName)}; path=/; max-age=${60 * 60 * 8}; SameSite=Lax`;
+        setSessionCookies(body.token, body.companyId, body.companyName);
         setTenant(body.companyId, body.companyName);
         router.push('/dashboard');
         router.refresh();

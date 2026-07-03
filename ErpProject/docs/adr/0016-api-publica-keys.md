@@ -160,22 +160,23 @@ verificables desde el código): producción
   equivalentes bajo `/api/v1/public/...`.
 
 ## Consecuencias
-- El documento `PUBLIC_API_DOCUMENTATION.md` original describía una API
-  más completa y más protegida de lo que el código implementa hoy
-  (paginación inexistente en facturas públicas, PATCH de factura
-  inexistente, y protección por API Key que en la práctica solo cubre
-  `/api/v1/public/**`, no `/api/v1/**` en general). Esta ADR sustituye a
-  ese documento como referencia; se recomienda no seguir manteniendo
-  `PUBLIC_API_DOCUMENTATION.md` como fuente separada para evitar que
-  vuelva a divergir del código.
-- `IApiKeyValidator`/`ApiKeyValidator` (basado solo en caché Redis, sin
-  persistencia en base de datos) y `ApiKeyValidationMiddleware` son código
-  muerto/no conectado: no están registrados en DI ni en el pipeline. Si
-  se decide mantenerlos, hay que registrar ambos explícitamente; si no,
-  deberían retirarse para no confundir con el flujo real
-  (`ApiKeyRateLimitMiddleware` + `ApiKeysController`).
-- Un integrador que siga la documentación original y llame a
-  `GET /api/v1/invoices` con `X-API-Key` puede observar un comportamiento
-  distinto al de `/api/v1/public/invoices`: no hay validación de API Key
-  en el pipeline para esa ruta tal como está el código, lo que conviene
-  revisar antes de exponer `PublicApiController` a clientes reales.
+- **Unificado jul 2026:** `ApiKeyRateLimitMiddleware` protege todo `/api/v1/**`
+  excepto `health` y el portal de presupuestos por token (`/api/v1/public/quotes/**`).
+  Valida contra `ErpDbContext.ApiKeys`, aplica rate limit Redis, fija
+  `ITenantContext` desde `ApiKey.CompanyId` y registra `ApiUsageLog`.
+  El middleware se ejecuta **antes** de `MapControllers` (bug corregido: antes
+  estaba después y no interceptaba rutas).
+- Eliminados `IApiKeyValidator`, `ApiKeyValidator` (Redis huérfano) y
+  `ApiKeyValidationMiddleware` (no registrados). `PublicApiController` ya no
+  depende de `IApiKeyValidator`; `GET /auth/verify` confirma la clave ya
+  validada por el middleware.
+- `PublicInvoicesController` (`/api/v1/public/invoices`) sigue siendo la
+  superficie recomendada para integraciones de solo lectura; las rutas de
+  `PublicApiController` (`/api/v1/invoices`, `/api/v1/clients`, reportes)
+  comparten el mismo gate de API Key. Los endpoints de reportes enlazan
+  directamente `GetDiarioQuery` / `GetMayorQuery` / etc. desde query string;
+  get-by-id usa `GetInvoiceByIdQuery` y `GetClientByIdQuery` (sin filtrar
+  listas en el controller).
+- El documento `PUBLIC_API_DOCUMENTATION.md` original puede seguir
+  divergiendo en detalles (paginación, PATCH factura); esta ADR es la
+  referencia verificada contra código.

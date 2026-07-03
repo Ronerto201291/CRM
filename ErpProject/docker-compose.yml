@@ -56,6 +56,7 @@ services:
       Jwt__Audience: ${JWT_AUDIENCE}
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT}
       ASPNETCORE_URLS: ${ASPNETCORE_URLS}
+      Seed__AdminPassword: ${Seed__AdminPassword:-}
       Sii__CertPath: ${SII_CERT_PATH}
       Sii__CertPass: ${SII_CERT_PASS}
       OpenTelemetry__OtlpEndpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}

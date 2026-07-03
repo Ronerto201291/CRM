@@ -4,6 +4,7 @@
     <ProjectReference Include="..\Erp.Application\Erp.Application.csproj" />
     <ProjectReference Include="..\Modules\Accounting\Domain\Erp.Modules.Accounting.Domain.csproj" />
     <ProjectReference Include="..\Modules\Billing\Domain\Erp.Modules.Billing.Domain.csproj" />
+    <ProjectReference Include="..\Modules\Billing\Application\Erp.Modules.Billing.Application.csproj" />
     <ProjectReference Include="..\Modules\Crm\Domain\Erp.Modules.Crm.Domain.csproj" />
     <ProjectReference Include="..\Modules\Expenses\Domain\Erp.Modules.Expenses.Domain.csproj" />
     <ProjectReference Include="..\Modules\Inventory\Domain\Erp.Modules.Inventory.Domain.csproj" />

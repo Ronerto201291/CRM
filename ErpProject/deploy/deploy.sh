@@ -13,9 +13,9 @@ git pull origin main
 
 # Build and restart containers
 echo "🔨 Building Docker images..."
-docker compose down
-docker compose build --no-cache
-docker compose up -d
+docker compose -f docker-compose.yml -f docker-compose.prod.yml down
+docker compose -f docker-compose.yml -f docker-compose.prod.yml build --no-cache
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 # Wait for services (backend runs migrations on startup — allow extra time on first deploy)
 echo "⏳ Waiting for services to start..."

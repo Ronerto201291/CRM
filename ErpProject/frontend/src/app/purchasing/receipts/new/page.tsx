@@ -1,8 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
-import PageContainer from "@/components/PageContainer";
+import PageListLayout from "@/components/PageListLayout";
+import FormErrorBanner from "@/components/FormErrorBanner";
 import { updateLineAt } from "@/lib/lineForm";
+import { goodsReceiptCreateSchema } from "@/lib/schemas/purchasingSalesCreateSchemas";
 import { PurchaseOrder } from "@/types/api";
 
 interface ReceiptLine {
@@ -48,7 +50,11 @@ export default function NewReceiptPage() {
 
     const submit = async () => {
         setFormError(null);
-        if (!form.number) { setFormError('Introduce el número de recepción'); return; }
+        const parsed = goodsReceiptCreateSchema.safeParse(form);
+        if (!parsed.success) {
+            setFormError(parsed.error.issues[0]?.message ?? 'Revisa el formulario');
+            return;
+        }
         setSaving(true);
         try {
             const res = await fetch('/api/proxy/v1/purchasing/receipts', {
@@ -68,20 +74,13 @@ export default function NewReceiptPage() {
     };
 
     return (
-        <PageContainer>
-            <div className="page-header">
-                <div>
-                    <h1 className="page-title">Nueva Recepción de Compra</h1>
-                    <p className="page-subtitle">Registrar recepción de mercancía</p>
-                </div>
-                <a href="/purchasing/receipts" className="btn btn-secondary">← Volver</a>
-            </div>
+        <PageListLayout
+            title="Nueva Recepción de Compra"
+            subtitle="Registrar recepción de mercancía"
+            actions={<a href="/purchasing/receipts" className="btn btn-secondary">← Volver</a>}
+        >
 
-            {formError && (
-                <div className="erp-card" style={{ padding: '12px 16px', marginBottom: 16, color: 'var(--danger)', background: 'var(--danger-bg)' }}>
-                    {formError}
-                </div>
-            )}
+            <FormErrorBanner message={formError} />
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '20px' }}>
                 <div className="form-group">
@@ -151,6 +150,6 @@ export default function NewReceiptPage() {
                     {saving ? 'Creando...' : '✓ Crear Recepción'}
                 </button>
             </div>
-        </PageContainer>
+        </PageListLayout>
     );
 }

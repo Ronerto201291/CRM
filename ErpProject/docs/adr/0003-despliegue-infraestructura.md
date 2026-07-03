@@ -16,12 +16,18 @@ entre las distintas piezas.
 > **Actualización de contexto**: el VPS sobre el que se diseñó originalmente
 > este despliegue ya no existe. Hasta nuevo aviso, el objetivo real es
 > **Docker Compose en local con base de datos también en local**
-> (`docker-compose.yml` + `docker-compose.local.yml`, sin `deploy/setup-vps.sh`
-> ni el nginx de producción); el despliegue en servidor se retoma más
+> (`docker-compose.yml` + `docker-compose.override.yml` cargado automáticamente,
+> sin `deploy/setup-vps.sh` ni el nginx de producción); el despliegue en servidor se retoma más
 > adelante. Todo lo que sigue en esta ADR describe el diseño "as-built" tal
 > como está en el repo (incluye la parte de VPS, que se mantiene documentada
 > para cuando se retome), pero el trabajo activo debe centrarse en que el
 > camino local funcione de punta a punta (ver ADR-0018, ítem 65).
+
+> **Guía operativa local/prod:** para comandos de onboarding, URLs, migraciones
+> automáticas, seed de admin, variables `.env` y troubleshooting de Compose,
+> ver **[ADR-0020 — Docker Compose local vs producción](0020-docker-local-produccion.md)**.
+> Este ADR-0003 sigue siendo la referencia de Dockerfiles, scripts `deploy/`,
+> Kubernetes, CI/CD y decisiones de infraestructura global.
 
 ## Decisión
 
@@ -67,12 +73,23 @@ el puerto 3000.
   ficheros subidos directamente si aplica). Depende de `backend` y
   `frontend`.
 
-`docker-compose.local.yml` es un *override* para desarrollo local (uso:
-`docker-compose -f docker-compose.yml -f docker-compose.local.yml up -d`):
+`docker-compose.override.yml` es el *override* de desarrollo local (carga
+automática con `docker compose up -d`, sin flags `-f`):
 expone el backend directamente en `8081:8080` (Swagger sin pasar por
-Nginx), fuerza `ASPNETCORE_ENVIRONMENT=Development` (lo que activa el seed
-de datos de `Program.cs`), y sustituye la config de Nginx por
+Nginx), fuerza `ASPNETCORE_ENVIRONMENT=Development`, inyecta
+`Seed__AdminPassword=DevChangeMe2026!!` (admin semilla `admin@devcorp.com`
+si la BD no tiene usuarios) y sustituye la config de Nginx por
 `deploy/nginx/erp.local.conf` (sin SSL, sin el volumen de certificados).
+
+`docker-compose.prod.yml` es el override explícito de producción (uso:
+`docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d`):
+fuerza `ASPNETCORE_ENVIRONMENT=Production`, inyecta claves Stripe live
+desde `.env`, mantiene Nginx con SSL (`erp.conf` + `deploy/nginx/ssl`) y
+no expone puertos directos de backend/frontend. **No** carga
+`docker-compose.override.yml`.
+
+`docker-compose.local.yml` queda como alias deprecado que incluye
+`docker-compose.override.yml` por compatibilidad con scripts antiguos.
 
 ### Scripts de operación (`deploy/`)
 - `deploy/setup-vps.sh`: aprovisionamiento inicial de un VPS Ubuntu 22.04
@@ -84,8 +101,12 @@ de datos de `Program.cs`), y sustituye la config de Nginx por
   (`docker compose up -d`), espera 20s y comprueba salud vía
   `/health/live` y `/health/ready` del backend y la home del frontend.
   Las migraciones EF Core se aplican automáticamente al arrancar el
-  backend (`MigrateAsync()` en `Program.cs`), no como paso separado del
-  script.
+  backend (`MigrateAsync()` en `Program.cs` para el core y cada módulo),
+  en **todos los entornos excepto `IntegrationTests`**. Si alguna falla, el
+  proceso aborta el arranque (no continúa con esquema a medias). Las
+  migraciones manuales deben llevar `[DbContext]` + `[Migration("…")]` como
+  las de Sales; sin ello EF no las descubre y quedan pendientes para
+  siempre. No es un paso separado del script de deploy.
 - `deploy/backup.sh`: pensado para cron (`0 3 * * *`); lee credenciales de
   `.env`, ejecuta `pg_dump` dentro del contenedor `postgres` vía
   `docker compose exec`, comprime con `gzip` y purga backups más antiguos
@@ -243,3 +264,11 @@ descarga (ítem 59). `git log` confirma que ningún commit ha tocado
   hay backup automatizado del volumen `uploads` (documentos OCR, adjuntos)
   ni de los certificados SII, que quedan fuera del `pg_dump` y merecerían
   una estrategia de respaldo propia si aún no la tienen.
+- **Seed de bootstrap**: si la BD no tiene usuarios (`Users.Any()` con
+  `IgnoreQueryFilters` — sin tenant en arranque el filtro global daría
+  falso positivo), `Program.cs` crea `admin@devcorp.com` solo cuando
+  `Seed:AdminPassword` está definido (env `Seed__AdminPassword` o
+  `appsettings.Development.json`). Inserciones de PGC, `TenantModules` y
+  admin son idempotentes por si un arranque anterior quedó a medias. En
+  producción sin seed hay que usar `/signup` o definir la variable antes
+  del primer arranque.

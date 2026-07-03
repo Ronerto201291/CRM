@@ -1,9 +1,13 @@
 "use client";
 
 import React, { useState } from "react";
-import PageContainer from "@/components/PageContainer";
+import Link from "next/link";
+import PageListLayout from "@/components/PageListLayout";
+import FormErrorBanner from "@/components/FormErrorBanner";
+import FormLabel from "@/components/FormLabel";
 import { updateLineAt } from "@/lib/lineForm";
 import { parseListResponse } from "@/lib/parseListResponse";
+import { supplierInvoiceCreateSchema } from "@/lib/schemas/purchasingSalesCreateSchemas";
 import { Supplier } from "@/types/api";
 
 interface InvoiceLine {
@@ -49,8 +53,16 @@ export default function NewSupplierInvoicePage() {
 
     const submit = async () => {
         setFormError(null);
-        if (!form.supplierId) { setFormError('Selecciona un proveedor'); return; }
-        if (!form.number) { setFormError('Introduce el número de factura'); return; }
+        const parsed = supplierInvoiceCreateSchema.safeParse({
+            supplierId: form.supplierId,
+            number: form.number,
+            invoiceDate: form.invoiceDate,
+            lines: form.lines,
+        });
+        if (!parsed.success) {
+            setFormError(parsed.error.issues[0]?.message ?? 'Revisa el formulario');
+            return;
+        }
         setSaving(true);
         try {
             const body = {
@@ -76,41 +88,33 @@ export default function NewSupplierInvoicePage() {
     };
 
     return (
-        <PageContainer>
-            <div className="page-header">
-                <div>
-                    <h1 className="page-title">Nueva Factura de Proveedor</h1>
-                    <p className="page-subtitle">Registrar factura de compra</p>
-                </div>
-                <a href="/purchasing/invoices" className="btn btn-secondary">← Volver</a>
-            </div>
-
-            {formError && (
-                <div className="erp-card" style={{ padding: '12px 16px', marginBottom: 16, color: 'var(--danger)', background: 'var(--danger-bg)' }}>
-                    {formError}
-                </div>
-            )}
+        <PageListLayout
+            title="Nueva Factura de Proveedor"
+            subtitle="Registrar factura de compra"
+            actions={<Link href="/purchasing/invoices" className="btn btn-secondary">← Volver</Link>}
+        >
+            <FormErrorBanner message={formError} />
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
                 <div className="form-group">
-                    <label className="erp-label">PROVEEDOR *</label>
-                    <select className="erp-input" value={form.supplierId}
+                    <FormLabel htmlFor="pi-supplier" required>Proveedor</FormLabel>
+                    <select id="pi-supplier" className="erp-input" value={form.supplierId}
                         onChange={e => setForm({ ...form, supplierId: e.target.value })}>
                         <option value="">Seleccionar proveedor...</option>
                         {suppliers.map(s => <option key={s.id} value={s.id}>{s.name} {s.taxId ? `(${s.taxId})` : ''}</option>)}
                     </select>
                 </div>
                 <div className="form-group">
-                    <label className="erp-label">NÚMERO DE FACTURA *</label>
-                    <input className="erp-input" value={form.number}
+                    <FormLabel htmlFor="pi-number" required>Número de factura</FormLabel>
+                    <input id="pi-number" className="erp-input" value={form.number}
                         onChange={e => setForm({ ...form, number: e.target.value })}
                         placeholder="FV-2026-0001" />
                 </div>
             </div>
 
             <div style={{ marginBottom: '16px' }}>
-                <label className="erp-label">FECHA</label>
-                <input type="date" className="erp-input" value={form.invoiceDate}
+                <FormLabel htmlFor="pi-date">Fecha</FormLabel>
+                <input id="pi-date" type="date" className="erp-input" value={form.invoiceDate}
                     onChange={e => setForm({ ...form, invoiceDate: e.target.value })}
                     style={{ maxWidth: '200px' }} />
             </div>
@@ -190,11 +194,11 @@ export default function NewSupplierInvoicePage() {
             </div>
 
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                <a href="/purchasing/invoices" className="btn btn-secondary">Cancelar</a>
+                <Link href="/purchasing/invoices" className="btn btn-secondary">Cancelar</Link>
                 <button className="btn btn-primary" onClick={submit} disabled={saving}>
                     {saving ? 'Creando...' : '✓ Crear Factura'}
                 </button>
             </div>
-        </PageContainer>
+        </PageListLayout>
     );
 }

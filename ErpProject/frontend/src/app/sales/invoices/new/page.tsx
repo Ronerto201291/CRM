@@ -1,6 +1,11 @@
 "use client";
 import React, { useState } from "react";
+import Link from "next/link";
+import PageListLayout from "@/components/PageListLayout";
+import FormErrorBanner from "@/components/FormErrorBanner";
+import FormLabel from "@/components/FormLabel";
 import { updateLineAt } from "@/lib/lineForm";
+import { customerSalesInvoiceCreateSchema } from "@/lib/schemas/purchasingSalesCreateSchemas";
 
 interface CreateResult {
   id: string;
@@ -8,16 +13,18 @@ interface CreateResult {
   billingInvoiceNumber: string;
 }
 
+type InvoiceLine = { salesOrderLineId: string; productId: string; billedQuantity: number; unitPrice: number };
+
 export default function NewCustomerInvoicePage() {
   const [soId, setSoId] = useState("");
   const [number, setNumber] = useState("");
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
-  const [lines, setLines] = useState([{ salesOrderLineId: "", productId: "", billedQuantity: 0, unitPrice: 0 }]);
+  const [lines, setLines] = useState<InvoiceLine[]>([
+    { salesOrderLineId: "", productId: "", billedQuantity: 0, unitPrice: 0 },
+  ]);
   const [result, setResult] = useState<CreateResult | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-
-  type InvoiceLine = { salesOrderLineId: string; productId: string; billedQuantity: number; unitPrice: number };
 
   const addLine = () => setLines([...lines, { salesOrderLineId: "", productId: "", billedQuantity: 0, unitPrice: 0 }]);
   const updateLine = <K extends keyof InvoiceLine>(idx: number, key: K, value: InvoiceLine[K]) => {
@@ -28,11 +35,28 @@ export default function NewCustomerInvoicePage() {
     setSaving(true);
     setResult(null);
     setFormError(null);
-    const body = { salesOrderId: soId, number, invoiceDate, lines };
+
+    const parsed = customerSalesInvoiceCreateSchema.safeParse({
+      salesOrderId: soId,
+      number,
+      invoiceDate,
+      lines,
+    });
+    if (!parsed.success) {
+      setFormError(parsed.error.issues[0]?.message ?? 'Revisa el formulario');
+      setSaving(false);
+      return;
+    }
+
     const res = await fetch('/api/proxy/v1/sales/invoices', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        salesOrderId: soId,
+        number,
+        invoiceDate,
+        lines,
+      }),
     });
     setSaving(false);
     if (!res.ok) {
@@ -44,28 +68,25 @@ export default function NewCustomerInvoicePage() {
   };
 
   return (
-    <div style={{ padding: '28px 32px', fontFamily: 'Inter, sans-serif' }}>
-      <h1 className="page-title">Nueva factura de cliente</h1>
-      <p className="page-subtitle">Crea la factura comercial y enlaza la factura fiscal en Billing.</p>
-
-      {formError && (
-        <div className="erp-card" style={{ padding: '12px 16px', marginBottom: 16, maxWidth: 640, color: 'var(--danger)', background: 'var(--danger-bg)' }}>
-          {formError}
-        </div>
-      )}
+    <PageListLayout
+      title="Nueva factura de cliente"
+      subtitle="Crea la factura comercial y enlaza la factura fiscal en Billing"
+      actions={<Link href="/sales/invoices" className="btn btn-secondary">← Volver</Link>}
+    >
+      <FormErrorBanner message={formError} />
 
       <div className="erp-card" style={{ padding: '20px', maxWidth: '640px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
         <div>
-          <label className="erp-label">Pedido de venta (ID)</label>
-          <input className="erp-input" value={soId} onChange={e => setSoId(e.target.value)} />
+          <FormLabel htmlFor="si-sales-order" required>Pedido de venta (ID)</FormLabel>
+          <input id="si-sales-order" className="erp-input" value={soId} onChange={e => setSoId(e.target.value)} />
         </div>
         <div>
-          <label className="erp-label">Número interno</label>
-          <input className="erp-input" value={number} onChange={e => setNumber(e.target.value)} />
+          <FormLabel htmlFor="si-number" required>Número interno</FormLabel>
+          <input id="si-number" className="erp-input" value={number} onChange={e => setNumber(e.target.value)} />
         </div>
         <div>
-          <label className="erp-label">Fecha factura</label>
-          <input type="date" className="erp-input" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} />
+          <FormLabel htmlFor="si-date" required>Fecha factura</FormLabel>
+          <input id="si-date" type="date" className="erp-input" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} />
         </div>
 
         <div>
@@ -82,10 +103,10 @@ export default function NewCustomerInvoicePage() {
                 onChange={e => updateLine(i, 'unitPrice', Number(e.target.value))} style={{ width: '100px' }} />
             </div>
           ))}
-          <button className="btn btn-secondary btn-sm" onClick={addLine}>Añadir línea</button>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={addLine}>Añadir línea</button>
         </div>
 
-        <button className="btn btn-primary" onClick={submit} disabled={saving}>
+        <button type="button" className="btn btn-primary" onClick={submit} disabled={saving}>
           {saving ? 'Creando...' : 'Crear factura'}
         </button>
       </div>
@@ -97,11 +118,11 @@ export default function NewCustomerInvoicePage() {
           <p style={{ fontSize: '13px', margin: '4px 0' }}>
             Factura fiscal: <strong>{result.billingInvoiceNumber}</strong>
           </p>
-          <a href={`/billing/invoices/${result.billingInvoiceId}`} className="btn btn-secondary btn-sm" style={{ marginTop: '10px', display: 'inline-block' }}>
+          <Link href={`/billing/invoices/${result.billingInvoiceId}`} className="btn btn-secondary btn-sm" style={{ marginTop: '10px', display: 'inline-block' }}>
             Ver en Billing →
-          </a>
+          </Link>
         </div>
       )}
-    </div>
+    </PageListLayout>
   );
 }

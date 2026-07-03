@@ -1,10 +1,12 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { parseListResponse, parseTotalCount } from '@/lib/parseListResponse';
 import Link from 'next/link';
 import PageContainer from '@/components/PageContainer';
 import NotesPanel from '@/components/NotesPanel';
 import AccessibleModal from '@/components/AccessibleModal';
+import FormLabel from '@/components/FormLabel';
+import { useCachedApi } from '@/hooks/useCachedApi';
 
 type Tab = 'clients' | 'suppliers' | 'contacts';
 
@@ -30,22 +32,22 @@ export default function CrmPage() {
     const [search, setSearch] = useState('');
     const [form, setForm] = useState<CrmForm>({});
     const [formError, setFormError] = useState<string | null>(null);
+    const { fetchCached, invalidateCached } = useCachedApi();
 
     const load = useCallback(async () => {
-        const [r1, r2, r3, r4] = await Promise.all([
-            fetch('/api/proxy/clients?pageSize=500'),
-            fetch('/api/proxy/suppliers?pageSize=500'),
-            fetch('/api/proxy/contacts?pageSize=500'),
-            fetch('/api/proxy/leads?pageSize=500'),
+        const [d1, d2, d3, d4] = await Promise.all([
+            fetchCached<unknown>('/api/proxy/clients?pageSize=500'),
+            fetchCached<unknown>('/api/proxy/suppliers?pageSize=500'),
+            fetchCached<unknown>('/api/proxy/contacts?pageSize=500'),
+            fetchCached<unknown>('/api/proxy/leads?pageSize=500'),
         ]);
-        if (r1.ok) setClients(parseListResponse<Client>(await r1.json()));
-        if (r2.ok) setSuppliers(parseListResponse<Supplier>(await r2.json()));
-        if (r3.ok) setContacts(parseListResponse<Contact>(await r3.json()));
-        if (r4.ok) {
-            const data = await r4.json();
-            setProspectsCount(parseTotalCount(data, parseListResponse(data).length));
+        if (d1) setClients(parseListResponse<Client>(d1));
+        if (d2) setSuppliers(parseListResponse<Supplier>(d2));
+        if (d3) setContacts(parseListResponse<Contact>(d3));
+        if (d4) {
+            setProspectsCount(parseTotalCount(d4, parseListResponse(d4).length));
         }
-    }, []);
+    }, [fetchCached]);
 
     useEffect(() => { load(); }, [load]);
 
@@ -60,6 +62,10 @@ export default function CrmPage() {
 
     const handleSave = async () => {
         setFormError(null);
+        if (!form.name?.trim()) {
+            setFormError('El nombre es obligatorio');
+            return;
+        }
         let url = '';
         const method = editing ? 'PUT' : 'POST';
         if (tab === 'clients') url = editing ? `/api/proxy/clients/${editing.id}` : '/api/proxy/clients';
@@ -71,7 +77,13 @@ export default function CrmPage() {
             : form;
 
         const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-        if (res.ok) { setShowModal(false); load(); }
+        if (res.ok) {
+            setShowModal(false);
+            invalidateCached('/api/proxy/clients');
+            invalidateCached('/api/proxy/suppliers');
+            invalidateCached('/api/proxy/contacts');
+            load();
+        }
         else {
             const e = await res.json().catch(() => ({}));
             setFormError(e.error || 'Error al guardar');
@@ -80,16 +92,16 @@ export default function CrmPage() {
 
     const handleDelete = async (id: string) => {
         if (!confirm('¿Eliminar este registro?')) return;
-        let url = tab === 'clients' ? `/api/proxy/clients/${id}` : `/api/proxy/contacts/${id}`;
+        const url = tab === 'clients' ? `/api/proxy/clients/${id}` : `/api/proxy/contacts/${id}`;
         await fetch(url, { method: 'DELETE' });
         load();
     };
 
     const tabLabel: Record<Tab, string> = { clients: 'Cliente', suppliers: 'Proveedor', contacts: 'Contacto' };
 
-    const filteredClients  = clients.filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.taxId?.includes(search));
-    const filteredSuppliers = suppliers.filter(s => !search || s.name.toLowerCase().includes(search.toLowerCase()) || s.taxId?.includes(search));
-    const filteredContacts  = contacts.filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.email?.toLowerCase().includes(search.toLowerCase()));
+    const filteredClients  = useMemo(() => clients.filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.taxId?.includes(search)), [clients, search]);
+    const filteredSuppliers = useMemo(() => suppliers.filter(s => !search || s.name.toLowerCase().includes(search.toLowerCase()) || s.taxId?.includes(search)), [suppliers, search]);
+    const filteredContacts  = useMemo(() => contacts.filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.email?.toLowerCase().includes(search.toLowerCase())), [contacts, search]);
 
     return (
         <PageContainer>
@@ -290,7 +302,10 @@ export default function CrmPage() {
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
                             {/* CLIENTS FORM */}
                             {tab === 'clients' && <>
-                                <div className="form-group" style={{ gridColumn: 'span 2' }}><label className="erp-label">NOMBRE *</label><input className="erp-input" value={form.name || ''} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Empresa S.L." /></div>
+                                <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                                    <FormLabel htmlFor="crm-client-name" required>NOMBRE</FormLabel>
+                                    <input id="crm-client-name" className="erp-input" value={form.name || ''} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Empresa S.L." />
+                                </div>
                                 <div className="form-group"><label className="erp-label">CIF/NIF</label><input className="erp-input" value={form.taxId || ''} onChange={e => setForm({ ...form, taxId: e.target.value })} placeholder="B12345678" /></div>
                                 <div className="form-group"><label className="erp-label">EMAIL</label><input className="erp-input" type="email" value={form.email || ''} onChange={e => setForm({ ...form, email: e.target.value })} /></div>
                                 <div className="form-group"><label className="erp-label">TELÉFONO</label><input className="erp-input" value={form.phone || ''} onChange={e => setForm({ ...form, phone: e.target.value })} /></div>

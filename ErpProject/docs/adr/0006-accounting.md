@@ -105,16 +105,21 @@ sigue siendo un stub. Validación VIES real disponible en dos rutas equivalentes
 `FinancialStatementsController` (`cash-flow`, `equity`, `income-statement`, `balance-sheet`)
 y `ReportsController` (`diario`, `mayor`, `balance`, `pyg`) calculan desde
 `JournalEntry`/`JournalEntryLine` y plan de cuentas PGC.
+**Aging (antigüedad de saldos):** `GET /api/accounting/aging` en
+`AccountingController` despacha `GetAgingReportQuery` vía `IMediator`;
+`AgingReportReader` agrega cobros desde `IBillingDbContext.Invoices` no pagadas
+(DSO ponderado por días desde emisión) y pagos desde `IExpensesDbContext.ExpenseDocuments`
+aprobados (DPO). La entidad `AgingReport` en BBDD queda para snapshots futuros;
+el informe en vivo no persiste en cada consulta.
 
 ### Frontend
 `frontend/src/app/accounting/` contiene subrutas para cada área: `aeat`,
 `aeat-models`, `aging`, `budgets`, `cash-flow`, `cierre`, `cost-centers`,
 `depreciation`, `isp`, `iva-registers`, `prorrata`, `provisions`, `recargo`,
 `reports`, `vat-regime`, `vies`, además de `page.tsx` (diario/balance/IVA/
-liquidación con pestañas). Las páginas son client components (`'use client'`)
-que llaman a `fetch('/api/proxy/accounting/...')` — el patrón de proxy Next.js
-descrito en ADR-0001 — y descargan los CSV/XML fiscales generados por
-`AccountingExportController` mediante blobs.
+liquidación con pestañas). La mayoría son client components que llaman a
+`fetch('/api/proxy/accounting/...')`; `aging/page.tsx` es Server Component
+(`serverFetch('accounting/aging')` + `AgingClient` como isla cliente).
 
 ### Modelo de datos
 `JournalEntry` (1) → (N) `JournalEntryLine`, cada línea referencia una
@@ -181,7 +186,9 @@ dominio, sin intervención manual):
 
 **Controllers delgados:** los 16/16 controllers usan `IMediator` (ADR-0018 #3c,
 #4, #5). Los stubs mock fueron eliminados; `FinancialStatementsController`
-delega en handlers con cálculo real parcial (#26).
+delega en handlers con cálculo real parcial (#26). **Aging:** `GET /api/accounting/aging`
+en `AccountingController` → `GetAgingReportQuery` + `IAgingReportReader`
+(Billing/Expenses); frontend `aging/page.tsx` conectado vía `serverFetch`.
 
 **Pendiente (sin cerrar en backlog):** `IAccountingDbContext` expone 29 DbSets
 (ISP — `GetFiscalPeriodsHandler` solo usa `FiscalPeriods`). `RecargoController.Create`
@@ -241,9 +248,9 @@ usado por `TaxController`). El frontend
 
 ## Consecuencias
 - La madurez del módulo es heterogénea: cierre, presupuestos, activos fijos,
-  provisiones, exportación fiscal y modelos 303/347 están sobre datos reales;
-  quedan huecos puntuales (`RecargoController.Create`, `DeclareModelo330`,
-  ISP/aging sin controller dedicado tras eliminar los stubs).
+  provisiones, exportación fiscal, modelos 303/347 y **aging DSO/DPO** están
+  sobre datos reales; quedan huecos puntuales (`RecargoController.Create`,
+  `DeclareModelo330`, ISP sin controller dedicado).
 - **Corregido (ADR-0018 #14):** las entidades núcleo (`Account`,
   `JournalEntry`, `FiscalPeriod`, etc.) viven en
   `Modules/Accounting/Domain/Entities/`, no en `Erp.Domain`.

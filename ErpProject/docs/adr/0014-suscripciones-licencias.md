@@ -50,12 +50,12 @@ más abajo).
 **Controllers** (`backend/Erp.Api/Controllers/Subscriptions/`):
 
 - `SubscriptionController` (`api/subscription`, `[Authorize]`):
-  `GET` (plan/estado actual), `GET /plans` (catálogo de planes activos
-  con sus módulos), `POST /checkout` (crea sesión de Stripe Checkout),
-  `POST /portal` (crea sesión del Customer Portal de Stripe para
-  autogestión), `GET /invoices` (últimas 12 facturas de Stripe del
-  tenant, leídas directamente de la API de Stripe, no de la base de
-  datos local).
+  controller delgado con `IMediator`; queries/commands en
+  `Erp.Application.Features.Subscriptions` (`GetCurrentSubscriptionQuery`,
+  `CreateCheckoutSessionCommand`, etc.); facturación Stripe delegada en
+  `ISubscriptionBillingService` (implementado por `StripeService`).
+  Endpoints: `GET` (plan/estado actual), `GET /plans`, `POST /checkout`,
+  `POST /portal`, `GET /invoices` (últimas 12 vía Stripe API).
 - `StripeWebhookController` (`api/stripe/webhook`, `[AllowAnonymous]`,
   excluido de autenticación y de resolución de tenant — ver
   `TenantResolverMiddleware.IsProtectedRoute`): recibe eventos de
@@ -182,12 +182,8 @@ webhook está bien hecha**: usa `EventUtility.ConstructEvent` sobre el body
 crudo (no reserializado) antes de confiar en el payload
 (`StripeService.cs:141`), y devuelve 400 si falta la firma. Hallazgos reales
 más allá de eso:
-- **Sin idempotencia por `stripeEvent.Id`** (riesgo alto): ~~no hay tabla de
-  eventos procesados~~ **✅ Corregido (ADR-0018 #0e)** — `StripeWebhookEvents` +
-  skip si `event.Id` ya procesado. Pendiente: distinción test/live de clave API.
-- **Sin distinción test/live de la clave API**: a diferencia del guard
-  PRE/PROD de `VerifactuOptions`, no hay ninguna comprobación de que
-  `Stripe:SecretKey` sea `sk_live_`/`sk_test_` acorde al entorno.
+- **Sin idempotencia por `stripeEvent.Id`** (riesgo alto): **✅ Corregido (ADR-0018 #0e)** — `StripeWebhookEvents` + skip si `event.Id` ya procesado.
+- **Distinción test/live de la clave API**: **✅ Corregido (ADR-0018 #0e)** — `StripeOptionsValidator` en `ValidateOnStart`.
 - **Fechas de expiración inconsistentes**: `HandleCheckoutCompleted` fija
   `AddYears(1)` mientras que las renovaciones vía webhook usan `AddMonths(1)`
   — no reflejan el periodo real devuelto por Stripe.
@@ -200,13 +196,10 @@ más allá de eso:
   versión de API configurada en la cuenta real antes de ir a producción.
 
 ## Consecuencias
-- El campo `Subscription.ActiveModules` (JSONB) se escribe con una lista
-  fija de módulos al dar de alta una `Company` (`RegisterCompanyCommand`,
-  `InviteCompanyCommand`), pero no se ha encontrado código que lo lea
-  después — la fuente de verdad real de "qué módulos tiene un tenant" en
-  tiempo de ejecución es la tabla `TenantModule`, consultada por
-  `ModuleAuthorizationHandler`. `ActiveModules` queda como dato inerte
-  tras el alta; es candidato a limpieza o a documentar como obsoleto.
+- `Subscription.ActiveModules` (JSONB) está marcado `[Obsolete]`; las altas
+  ya no escriben módulos en ese campo (queda `[]` por defecto). La fuente
+  de verdad de módulos activos es `TenantModule` + `PlanModules`, resuelta
+  por `ModuleAuthorizationHandler` y sincronizada por `StripeService.SyncTenantModulesAsync`.
 - `HandleCheckoutCompleted` fija `ExpirationDate = UtcNow.AddYears(1)`
   de forma fija en el alta, independientemente de si el plan elegido es
   mensual o anual (`CheckoutRequest` solo lleva `PlanName`, no el ciclo

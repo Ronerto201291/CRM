@@ -15,3 +15,8 @@ public class GetInvoicesQuery : IRequest<PaginatedInvoicesResult>
     public int Page { get; set; } = 1;
     public int PageSize { get; set; } = 50;
 }
+
+public class GetInvoiceByIdQuery : IRequest<InvoiceDto?>
+{
+    public Guid Id { get; set; }
+}

@@ -14,7 +14,7 @@ namespace Erp.Infrastructure.Services;
 /// Handles checkout sessions, portal sessions, and webhook events.
 /// Keys and Price IDs are read from StripeOptions (never hardcoded).
 /// </summary>
-public class StripeService
+public class StripeService : ISubscriptionBillingService
 {
     private readonly IApplicationDbContext _ctx;
     private readonly ILicensingDbContext _licensing;
@@ -361,5 +361,33 @@ public class StripeService
                 $"Stripe Price ID for plan '{planName}' is not configured. " +
                 $"Set Stripe__PriceIds__{planName} in environment variables.");
         return priceId;
+    }
+
+    public async Task<IReadOnlyList<SubscriptionInvoiceDto>> ListInvoicesAsync(
+        Guid companyId, CancellationToken ct = default)
+    {
+        var company = await _ctx.Companies
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(c => c.Id == companyId, ct);
+
+        if (string.IsNullOrEmpty(company?.StripeCustomerId))
+            return Array.Empty<SubscriptionInvoiceDto>();
+
+        var svc = new InvoiceService();
+        var list = await svc.ListAsync(new InvoiceListOptions
+        {
+            Customer = company.StripeCustomerId,
+            Limit = 12
+        }, cancellationToken: ct);
+
+        return list.Select(i => new SubscriptionInvoiceDto(
+            i.Id,
+            i.Created,
+            i.Total / 100m,
+            i.Currency?.ToUpperInvariant(),
+            i.Status,
+            i.InvoicePdf,
+            i.Description ?? i.Lines.FirstOrDefault()?.Description
+        )).ToList();
     }
 }

@@ -27,6 +27,7 @@ public static class DependencyInjection
             .BindConfiguration(StripeOptions.SectionName)
             .ValidateDataAnnotations()
             .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<StripeOptions>, StripeOptionsValidator>();
 
         // Email: SMTP transactional email.
         // Production env vars: Email__Host, Email__Port, Email__Username, Email__Password,
@@ -52,6 +53,7 @@ public static class DependencyInjection
         services.AddScoped<OutboxProcessorJob>();
         services.AddScoped<ITotpService, TotpService>();
         services.AddScoped<StripeService>();
+        services.AddScoped<ISubscriptionBillingService>(sp => sp.GetRequiredService<StripeService>());
 
         // ABAC: Permission service (Redis-cached, role+user resolution)
         services.AddScoped<IPermissionService, PermissionService>();

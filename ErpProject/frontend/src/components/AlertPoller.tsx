@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
+import { addMinutesIso, isScheduledOverdue } from '@/lib/time';
 
 interface Alert {
     id: string;
@@ -55,7 +56,7 @@ export default function AlertPoller() {
 
     const snooze = async (minutes: number) => {
         if (!current) return;
-        const snoozedUntil = new Date(Date.now() + minutes * 60_000).toISOString();
+        const snoozedUntil = addMinutesIso(minutes);
         await fetch(`/api/proxy/crm/alerts/${current.id}/snooze`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -68,7 +69,7 @@ export default function AlertPoller() {
     if (!current) return null;
 
     const scheduledTime = new Date(current.scheduledAt).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
-    const isOverdue = new Date(current.scheduledAt) < new Date(Date.now() - 5 * 60_000); // >5min late
+    const isOverdue = isScheduledOverdue(current.scheduledAt);
 
     return (
         <div style={{

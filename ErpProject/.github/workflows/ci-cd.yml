@@ -25,6 +25,14 @@ jobs:
         run: dotnet build backend/Erp.slnx --no-restore -c Release
         working-directory: ./ErpProject
 
+      - name: Vulnerable package scan
+        run: |
+          dotnet list backend/Erp.slnx package --vulnerable --include-transitive 2>&1 | tee vulnerable.txt
+          if grep -q "has the following vulnerable packages" vulnerable.txt; then
+            echo "::warning::Se encontraron paquetes vulnerables — revisar vulnerable.txt"
+          fi
+        working-directory: ./ErpProject
+
       - name: Test
         run: dotnet test backend/Erp.slnx --no-build -c Release
         working-directory: ./ErpProject
@@ -50,6 +58,10 @@ jobs:
         run: npm ci
         working-directory: ./ErpProject/frontend
 
+      - name: Audit dependencies
+        run: npm audit --audit-level=high || true
+        working-directory: ./ErpProject/frontend
+
       - name: Build
         run: npm run build
         working-directory: ./ErpProject/frontend
@@ -57,33 +69,4 @@ jobs:
       - name: Build Docker Image
         if: github.ref == 'refs/heads/main'
         run: docker build -t erp-frontend:${{ github.sha }} -f frontend/Dockerfile .
-        working-directory: ./ErpProject
-
-  deploy:
-    needs: [backend-build, frontend-build]
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    environment: production
-    steps:
-      - name: Deploy to Hetzner via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.HETZNER_HOST }}
-          username: ${{ secrets.HETZNER_USER }}
-          key: ${{ secrets.HETZNER_SSH_KEY }}
-          port: ${{ secrets.HETZNER_SSH_PORT || '22' }}
-          script: |
-            set -e
-            cd /opt/erp
-
-            # Pull latest code
-            git pull origin main
-
-            # Pull updated images and recreate changed containers
-            docker compose pull
-            docker compose up -d --remove-orphans
-
-            # Remove dangling images to save disk space
-            docker image prune -f
-
-            echo "Deploy completed at $(date -u)"
+        working-directory: ./ErpProject/frontend

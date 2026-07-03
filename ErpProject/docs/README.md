@@ -18,6 +18,7 @@ antes de tocar código en ese módulo.
 - `0018` — auditoría transversal de calidad arquitectónica (SOLID, Clean
   Architecture, CQRS, duplicación, escalabilidad): la metodología que la
   sección "Evaluación de calidad arquitectónica" de cada ADR aplica.
+- `0019`-`0020` — roadmap producto y Docker Compose local vs producción.
 
 Cada ADR sigue la misma estructura: Estado, Contexto, Decisión (Backend /
 Frontend / Modelo de datos / Flujo end-to-end), Relación con otros módulos,
@@ -47,7 +48,9 @@ varios módulos tienen hallazgos así (ver tabla).
 | [0015](adr/0015-automatizacion.md) | Automatización | Motor de reglas no funcional: no persiste, ni frontend ni job están conectados |
 | [0016](adr/0016-api-publica-keys.md) | API Pública y API Keys | Dos sistemas de API Key en paralelo y desconectados |
 | [0017](adr/0017-audit-logs.md) | Audit Logs | El interceptor que debería auditar cambios nunca se invoca |
-| [0018](adr/0018-calidad-arquitectura.md) | Calidad arquitectónica (transversal) | Backlog de 64 ítems (código, funcional, frontend, infraestructura); 5 ya corregidos; catálogo de datos mock; credenciales hardcodeadas aparte (última prioridad) |
+| [0018](adr/0018-calidad-arquitectura.md) | Calidad arquitectónica (transversal) | Backlog 64 ítems; techo accionable ~100%; ver sección Cierre backlog |
+| [0019](adr/0019-producto-roadmap.md) | Roadmap producto (#38–#42f) | Diseño + metadatos API; requiere OK producto para implementar |
+| [0020](adr/0020-docker-local-produccion.md) | Docker Compose local vs producción | Comandos, URLs, migraciones, seed, `.env`, troubleshooting — complementa ADR-0003 |
 
 ## Cómo usar esta carpeta
 

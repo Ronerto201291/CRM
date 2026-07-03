@@ -1,3 +1,4 @@
+using Erp.Application.Common.Interfaces;
 using Erp.Infrastructure.Data;
 using Erp.Infrastructure.Resilience;
 using Microsoft.AspNetCore.Http;
@@ -12,9 +13,8 @@ using System.Text.Json;
 namespace Erp.Infrastructure.Security;
 
 /// <summary>
-/// Middleware that enforces per-ApiKey rate limits for the public API.
-/// Reads X-Api-Key header, validates it, and counts requests using Redis.
-/// Limits are stored per ApiKey entity (ApiKey.RateLimit = requests/minute).
+/// Valida X-Api-Key contra la tabla ApiKeys, aplica rate limit Redis y fija el tenant activo.
+/// Cubre todo /api/v1/** salvo health y portal de presupuestos por token (ADR-0016 / ADR-0018).
 /// </summary>
 public class ApiKeyRateLimitMiddleware
 {
@@ -29,34 +29,28 @@ public class ApiKeyRateLimitMiddleware
 
     public async Task InvokeAsync(HttpContext context, IServiceProvider services)
     {
-        // Only enforce on /api/v1/public/** routes
-        var path = context.Request.Path.Value ?? string.Empty;
-        if (!path.StartsWith("/api/v1/public", StringComparison.OrdinalIgnoreCase))
+        if (!PublicApiPaths.RequiresApiKey(context.Request.Path))
         {
             await _next(context);
             return;
         }
 
-        var apiKeyHeader = context.Request.Headers["X-Api-Key"].FirstOrDefault();
+        var apiKeyHeader = context.Request.Headers["X-Api-Key"].FirstOrDefault()
+            ?? context.Request.Headers["X-API-Key"].FirstOrDefault();
+
         if (string.IsNullOrEmpty(apiKeyHeader))
         {
-            context.Response.StatusCode = 401;
-            context.Response.ContentType = "application/json";
-            await context.Response.WriteAsync(JsonSerializer.Serialize(new
-            {
-                error = "X-Api-Key header required for public API access."
-            }));
+            await WriteJsonError(context, 401, "X-Api-Key header required for public API access.");
             return;
         }
 
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ErpDbContext>();
         var cache = scope.ServiceProvider.GetRequiredService<IDistributedCache>();
+        var tenantContext = scope.ServiceProvider.GetRequiredService<ITenantContext>();
 
-        // Hash the incoming key before comparing — never compare plaintext against DB.
         var incomingKeyHash = ComputeKeyHash(apiKeyHeader);
 
-        // Validate API key (bypass tenant filter — keys are global)
         var apiKey = await db.ApiKeys
             .IgnoreQueryFilters()
             .AsNoTracking()
@@ -64,16 +58,10 @@ public class ApiKeyRateLimitMiddleware
 
         if (apiKey == null)
         {
-            context.Response.StatusCode = 401;
-            context.Response.ContentType = "application/json";
-            await context.Response.WriteAsync(JsonSerializer.Serialize(new
-            {
-                error = "Invalid or inactive API key."
-            }));
+            await WriteJsonError(context, 401, "Invalid or inactive API key.");
             return;
         }
 
-        // Rate limit check using Redis sliding window (per minute)
         var cacheKey = $"ratelimit:apikey:{apiKey.Id}:{DateTime.UtcNow:yyyyMMddHHmm}";
         var countBytes = await RedisResilienceHelper.GetAsync(cache, cacheKey, _logger);
         var currentCount = countBytes != null ? BitConverter.ToInt32(countBytes) : 0;
@@ -96,19 +84,17 @@ public class ApiKeyRateLimitMiddleware
             return;
         }
 
-        // Increment counter with 70-second expiry (covers full minute window)
         var newCount = currentCount + 1;
         await RedisResilienceHelper.SetAsync(cache, cacheKey,
             BitConverter.GetBytes(newCount),
             new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(70) },
             _logger);
 
-        // Log API usage
         db.ApiUsageLogs.Add(new Erp.Domain.Entities.Api.ApiUsageLog
         {
             Id = Guid.NewGuid(),
             ApiKeyId = apiKey.Id,
-            Endpoint = $"{context.Request.Method} {path}",
+            Endpoint = $"{context.Request.Method} {context.Request.Path}",
             Timestamp = DateTime.UtcNow
         });
         await db.SaveChangesAsync();
@@ -116,7 +102,18 @@ public class ApiKeyRateLimitMiddleware
         context.Response.Headers["X-RateLimit-Limit"] = apiKey.RateLimit.ToString();
         context.Response.Headers["X-RateLimit-Remaining"] = (apiKey.RateLimit - newCount).ToString();
 
+        context.Items[PublicApiPaths.ItemApiKeyId] = apiKey.Id;
+        context.Items[PublicApiPaths.ItemApiKeyCompanyId] = apiKey.CompanyId;
+        tenantContext.SetTenant(apiKey.CompanyId, "ApiKey");
+
         await _next(context);
+    }
+
+    private static async Task WriteJsonError(HttpContext context, int status, string message)
+    {
+        context.Response.StatusCode = status;
+        context.Response.ContentType = "application/json";
+        await context.Response.WriteAsync(JsonSerializer.Serialize(new { error = message }));
     }
 
     private static string ComputeKeyHash(string key)

@@ -98,14 +98,17 @@ npm run lint
 # Stack completo (local, con BBDD en Docker — sin servidor)
 cd ErpProject
 cp .env.example .env                  # rellena POSTGRES_PASSWORD y JWT_SECRET
-docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
-# frontend :3000 (vía nginx :80), backend+swagger :8081, postgres :5432
+docker compose up -d --build        # local: override.yml se carga automáticamente
+# frontend http://localhost (nginx :80) o http://localhost:3000 (directo); backend+swagger :8081, postgres :5432
+# producción: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
 ## Huecos conocidos
 
-- No hay tests automatizados en todo el repo (ni `*.Tests.csproj` en
-  backend, ni runner JS configurado en frontend).
+- Cobertura de tests **muy parcial**: backend tiene 3 proyectos en
+  `backend/tests/` (`Erp.Tests`, `Erp.IntegrationTests`,
+  `Erp.ArchitectureTests`, ~61 casos, CI con `dotnet test`); frontend sin
+  runner (`npm test` no existe). Ver ADR-0018 ítem #32.
 - `ErpProject/backend/Erp.slnx` no registra explícitamente todos los
   módulos que sí están cableados en `Program.cs` (ver ADR-0001).
 - Varios módulos tienen partes construidas pero no conectadas end-to-end

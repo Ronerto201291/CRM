@@ -62,7 +62,6 @@ public class RegisterCompanyHandler : IRequestHandler<RegisterCompanyCommand, Re
             Id = Guid.NewGuid(),
             PlanName = "Free",
             ExpirationDate = DateTime.UtcNow.AddYears(100),
-            ActiveModules = """["Billing","Crm"]""",
             IsActive = true,
             StripeStatus = "active"
         };

@@ -1,0 +1,26 @@
+# Desarrollo local — Compose lo carga automáticamente junto a docker-compose.yml.
+# Producción: usar solo docker-compose.yml + docker-compose.prod.yml (sin este archivo).
+
+services:
+  backend:
+    ports:
+      - "8081:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Seed__AdminPassword: DevChangeMe2026!!
+      Postgres__RlsEnabled: "true"
+      OpenTelemetry__OtlpEndpoint: http://otel-collector:4317
+    volumes:
+      - uploads:/app/uploads
+      - ./deploy/certs:/app/certs:ro
+
+  frontend:
+    ports:
+      - "3000:3000"
+
+  nginx:
+    ports: !override
+      - "80:80"
+    volumes: !override
+      - ./deploy/nginx/erp.local.conf:/etc/nginx/conf.d/default.conf:ro
+      - uploads:/app/uploads:ro

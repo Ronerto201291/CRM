@@ -1,4 +1,5 @@
 using Erp.Application.Common.Interfaces;
+using Erp.Infrastructure.Security;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Erp.Infrastructure.Data;
@@ -19,6 +20,20 @@ public class TenantResolverMiddleware
 
     public async Task InvokeAsync(HttpContext context, ITenantContext tenantContext, ErpDbContext dbContext)
     {
+        // API pública v1: tenant ya fijado por ApiKeyRateLimitMiddleware
+        if (PublicApiPaths.RequiresApiKey(context.Request.Path))
+        {
+            if (!tenantContext.TenantId.HasValue)
+            {
+                context.Response.StatusCode = 401;
+                await context.Response.WriteAsJsonAsync(new { error = "API Key requerida" });
+                return;
+            }
+
+            await _next(context);
+            return;
+        }
+
         Guid? resolvedTenantId = null;
         string? resolvedTenantName = null;
 
@@ -103,6 +118,8 @@ public class TenantResolverMiddleware
             "/api/auth/refresh",
             "/api/expenses/upload",  // Público pero con token
             "/api/stripe/webhook",   // Stripe webhook - no tenant context required
+            "/api/v1/health",        // API pública health check
+            "/api/v1/public/quotes", // Portal presupuestos por token
             "/health",               // Health checks - no tenant required
             "/metrics",              // Prometheus scrape (ADR-0018 #36)
             "/swagger",              // Swagger UI

@@ -113,8 +113,9 @@ npm run lint
 # Stack completo (local, con BBDD en Docker — sin servidor)
 cd ErpProject
 cp .env.example .env                  # rellena POSTGRES_PASSWORD y JWT_SECRET
-docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+docker compose up -d --build
 # frontend :3000 (vía nginx :80), backend+swagger :8081, postgres :5432
+# producción: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
 ## Huecos conocidos

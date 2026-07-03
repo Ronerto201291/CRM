@@ -2,6 +2,7 @@ using Erp.Application.Common.Fiscal;
 using Erp.Application.Common.Interfaces;
 using Erp.Modules.Billing.Application.Interfaces;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using System.Text;
 
 namespace Erp.Modules.Billing.Application.Features.Billing.Queries;
@@ -83,6 +84,33 @@ public record ValidateFacturaEResult(
     string FileName);
 
 public record ValidateFacturaEQuery(Guid InvoiceId) : IRequest<ValidateFacturaEResult>;
+
+public record VerifactuSubmissionLogDto(
+    string SubmissionType,
+    string? EstadoEnvio,
+    bool Success,
+    bool IsProduction,
+    DateTime SubmittedAt);
+
+public record GetVerifactuSubmissionsQuery(Guid InvoiceId) : IRequest<IReadOnlyList<VerifactuSubmissionLogDto>>;
+
+public class GetVerifactuSubmissionsHandler : IRequestHandler<GetVerifactuSubmissionsQuery, IReadOnlyList<VerifactuSubmissionLogDto>>
+{
+    private readonly IBillingDbContext _ctx;
+
+    public GetVerifactuSubmissionsHandler(IBillingDbContext ctx) => _ctx = ctx;
+
+    public async Task<IReadOnlyList<VerifactuSubmissionLogDto>> Handle(GetVerifactuSubmissionsQuery request, CancellationToken ct)
+    {
+        return await _ctx.VerifactuSubmissionLogs
+            .AsNoTracking()
+            .Where(l => l.InvoiceId == request.InvoiceId)
+            .OrderByDescending(l => l.SubmittedAt)
+            .Select(l => new VerifactuSubmissionLogDto(
+                l.SubmissionType, l.EstadoEnvio, l.Success, l.IsProduction, l.SubmittedAt))
+            .ToListAsync(ct);
+    }
+}
 
 public class ValidateFacturaEHandler : IRequestHandler<ValidateFacturaEQuery, ValidateFacturaEResult>
 {

@@ -129,7 +129,6 @@ export default function InventoryClient({
                 movementType: parsed.data.movementType,
                 reason: parsed.data.reason
             })
-            })
         });
         if (r.ok) {
             setShowAdjModal(false);

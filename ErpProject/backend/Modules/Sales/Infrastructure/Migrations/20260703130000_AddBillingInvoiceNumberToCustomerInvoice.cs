@@ -1,9 +1,13 @@
+using Erp.Modules.Sales.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace Erp.Modules.Sales.Infrastructure.Migrations;
 
+[DbContext(typeof(SalesDbContext))]
+[Migration("20260703130000_AddBillingInvoiceNumberToCustomerInvoice")]
 public partial class AddBillingInvoiceNumberToCustomerInvoice : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)

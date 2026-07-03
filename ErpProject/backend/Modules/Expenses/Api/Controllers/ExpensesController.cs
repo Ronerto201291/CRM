@@ -1,15 +1,10 @@
 using Erp.Application.Common.Interfaces;
-using Erp.Modules.Expenses.Domain.Entities;
 using Erp.Modules.Expenses.Application.Features.Expenses.Commands;
 using Erp.Modules.Expenses.Application.Features.Expenses.Queries;
-using Erp.Modules.Expenses.Application.Interfaces;
-using Erp.Application.Common.Events;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 
 namespace Erp.Modules.Expenses.Api.Controllers;
 
@@ -17,29 +12,9 @@ namespace Erp.Modules.Expenses.Api.Controllers;
 public class ExpensesController : ControllerBase
 {
     private readonly IMediator _mediator;
-    private readonly IExpensesDbContext _expenses;
-    private readonly IApplicationDbContext _app;
-    private readonly IPublisher _publisher;
-    private readonly IFileStorageService _storage;
-    private readonly string _bucket;
 
-    public ExpensesController(
-        IMediator mediator,
-        IExpensesDbContext expenses,
-        IApplicationDbContext app,
-        IPublisher publisher,
-        IFileStorageService storage,
-        IConfiguration config)
-    {
-        _mediator = mediator;
-        _expenses = expenses;
-        _app = app;
-        _publisher = publisher;
-        _storage = storage;
-        _bucket = config["Storage:BucketName"] ?? "erp-expenses";
-    }
+    public ExpensesController(IMediator mediator) => _mediator = mediator;
 
-    // Upload — almacena en MinIO (RL-4: cifrado en reposo, sin disco local)
     [HttpPost("upload/{token}"), AllowAnonymous, RequestSizeLimit(10_000_000)]
     public async Task<IActionResult> Upload(string token, IFormFile file, [FromForm] string? comment, CancellationToken ct)
     {
@@ -50,35 +25,25 @@ public class ExpensesController : ControllerBase
         if (!IsValidFileSignature(file))
             return BadRequest(new { error = "El archivo no tiene un formato valido o esta corrupto." });
 
-        var company = await _app.Companies.IgnoreQueryFilters()
-            .FirstOrDefaultAsync(c => c.PublicUploadToken == token && c.QrUploadEnabled, ct);
-        if (company == null) return NotFound(new { error = "Token invalido o desactivado." });
+        await using var ms = new MemoryStream();
+        await file.CopyToAsync(ms, ct);
 
-        // Clave de objeto: {companyId}/{guid}{extension}
-        var objectKey = $"{company.Id}/{Guid.NewGuid()}{Path.GetExtension(file.FileName)}";
-        await using var stream = file.OpenReadStream();
-        await _storage.UploadAsync(_bucket, objectKey, stream, file.ContentType, ct);
-
-        var upload = new ExpenseUpload
+        try
         {
-            Id = Guid.NewGuid(), CompanyId = company.Id,
-            PublicTokenUsed = token, FileName = file.FileName,
-            FilePath = objectKey, // ahora es object key de MinIO, no ruta local
-            ContentType = file.ContentType,
-            Comment = comment, Status = "Pending"
-        };
-        _expenses.ExpenseUploads.Add(upload);
-        await _expenses.SaveChangesAsync(ct);
-
-        await _publisher.Publish(new ExpenseUploadCreatedEvent
+            var result = await _mediator.Send(new UploadExpenseByTokenCommand
+            {
+                Token = token,
+                FileName = file.FileName,
+                ContentType = file.ContentType,
+                FileContent = ms.ToArray(),
+                Comment = comment
+            }, ct);
+            return Ok(new { message = result.Message, uploadId = result.UploadId });
+        }
+        catch (KeyNotFoundException ex)
         {
-            UploadId = upload.Id,
-            CompanyId = company.Id,
-            FileName = file.FileName,
-            Comment = comment
-        }, ct);
-
-        return Ok(new { message = "Documento recibido. Sera procesado automaticamente.", uploadId = upload.Id });
+            return NotFound(new { error = ex.Message });
+        }
     }
 
     [HttpGet("uploads"), Authorize]

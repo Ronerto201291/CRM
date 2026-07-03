@@ -35,6 +35,7 @@ public static class DependencyInjection
         services.AddScoped<ILibroIvaRecibidasExporter, LibroIvaRecibidasExporter>();
         services.AddScoped<IModelo347Exporter, Modelo347Exporter>();
         services.AddScoped<IModelo347Reader, Modelo347Reader>();
+        services.AddScoped<IAgingReportReader, AgingReportReader>();
         services.AddScoped<IModelo303Exporter, Modelo303Exporter>();
         services.AddScoped<IModelo111Reader, Modelo111Reader>();
         services.AddScoped<IModelo190Reader, Modelo190Reader>();

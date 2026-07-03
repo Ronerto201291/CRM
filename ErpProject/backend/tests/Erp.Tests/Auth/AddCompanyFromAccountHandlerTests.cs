@@ -34,7 +34,6 @@ public class AddCompanyFromAccountHandlerTests
             PlanName = "Free",
             IsActive = true,
             StripeStatus = "active",
-            ActiveModules = """["Billing"]""",
             ExpirationDate = DateTime.UtcNow.AddYears(1),
         };
         var company = new Company

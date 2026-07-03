@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useCallback } from "react";
+import Link from "next/link";
 import PageContainer from "@/components/PageContainer";
 
 interface ExpenseLine {
@@ -94,7 +95,7 @@ export default function ExpenseDetailClient({ id, initialDoc }: ExpenseDetailCli
                     <h1 className="page-title">Gasto {doc.invoiceNumber || doc.id.slice(0, 8)}</h1>
                     <p className="page-subtitle">{doc.supplierName || 'Sin proveedor'}</p>
                 </div>
-                <a href="/expenses" className="btn btn-secondary">← Volver</a>
+                <Link href="/expenses" className="btn btn-secondary">← Volver</Link>
             </div>
 
             {(actionError || successMsg) && (
