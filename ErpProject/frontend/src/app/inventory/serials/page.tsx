@@ -6,7 +6,7 @@ export default function SerialsPage() {
   const fetchSerials = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/v1/inventory/serials`);
+      const res = await fetch(`/api/proxy/v1/inventory/serials`);
       const data = await res.json();
       setSerials(data || []);
     } finally {

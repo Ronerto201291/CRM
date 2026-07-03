@@ -15,12 +15,18 @@ namespace Erp.Modules.Treasury.Application.Features.Treasury.Handlers;
 public class CreateBankAccountHandler : IRequestHandler<CreateBankAccountCommand, BankAccountDto>
 {
     private readonly ITreasuryDbContext _ctx;
+    private readonly ITenantContext _tenant;
 
-    public CreateBankAccountHandler(ITreasuryDbContext ctx) => _ctx = ctx;
+    public CreateBankAccountHandler(ITreasuryDbContext ctx, ITenantContext tenant)
+    {
+        _ctx = ctx;
+        _tenant = tenant;
+    }
 
     public async Task<BankAccountDto> Handle(CreateBankAccountCommand req, CancellationToken ct)
     {
-        var tenantId = GetTenantId();
+        var tenantId = _tenant.TenantId
+            ?? throw new InvalidOperationException("Tenant not resolved");
         var entity = new BankAccount
         {
             Id = Guid.NewGuid(),
@@ -41,38 +47,63 @@ public class CreateBankAccountHandler : IRequestHandler<CreateBankAccountCommand
         return ToDto(entity);
     }
 
-    private Guid GetTenantId() => _ctx.BankAccounts
-        .IgnoreQueryFilters()
-        .Where(b => b.CompanyId != Guid.Empty)
-        .Select(b => b.CompanyId)
-        .FirstOrDefault();
-
     private static BankAccountDto ToDto(BankAccount b) => new(
         b.Id, b.Name, b.Iban, b.BIC, b.BankName,
         b.CurrentBalance, b.CurrencyCode, b.IsActive, b.Notes);
 }
 
+public class GetBankAccountHandler : IRequestHandler<GetBankAccountQuery, BankAccountDto?>
+{
+    private readonly ITreasuryDbContext _ctx;
+    private readonly ITenantContext _tenant;
+
+    public GetBankAccountHandler(ITreasuryDbContext ctx, ITenantContext tenant)
+    {
+        _ctx = ctx;
+        _tenant = tenant;
+    }
+
+    public async Task<BankAccountDto?> Handle(GetBankAccountQuery req, CancellationToken ct)
+    {
+        var tenantId = _tenant.TenantId
+            ?? throw new InvalidOperationException("Tenant not resolved");
+        var account = await _ctx.BankAccounts
+            .Where(b => b.Id == req.Id && b.CompanyId == tenantId)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(ct);
+        return account == null ? null : new BankAccountDto(
+            account.Id, account.Name, account.Iban, account.BIC, account.BankName,
+            account.CurrentBalance, account.CurrencyCode, account.IsActive, account.Notes);
+    }
+}
+
+public record GetBankAccountQuery(Guid Id) : IRequest<BankAccountDto?>;
+
 public class GetBankAccountsHandler : IRequestHandler<GetBankAccountsQuery, List<BankAccountDto>>
 {
     private readonly ITreasuryDbContext _ctx;
+    private readonly ITenantContext _tenant;
 
-    public GetBankAccountsHandler(ITreasuryDbContext ctx) => _ctx = ctx;
+    public GetBankAccountsHandler(ITreasuryDbContext ctx, ITenantContext tenant)
+    {
+        _ctx = ctx;
+        _tenant = tenant;
+    }
 
     public async Task<List<BankAccountDto>> Handle(GetBankAccountsQuery req, CancellationToken ct)
     {
-        var q = _ctx.BankAccounts.AsQueryable();
+        var tenantId = _tenant.TenantId
+            ?? throw new InvalidOperationException("Tenant not resolved");
+        var q = _ctx.BankAccounts.Where(b => b.CompanyId == tenantId);
         if (req.OnlyActive) q = q.Where(b => b.IsActive);
 
         var accounts = await q.AsNoTracking().ToListAsync(ct);
 
-        // Recalcular saldo desde movimientos
         foreach (var account in accounts)
         {
-            var movements = await _ctx.BankMovements
+            account.CurrentBalance = await _ctx.BankMovements
                 .Where(m => m.BankAccountId == account.Id)
-                .AsNoTracking()
-                .ToListAsync(ct);
-            account.CurrentBalance = movements.Sum(m => m.Amount);
+                .SumAsync(m => m.Amount, ct);
         }
 
         return accounts.Select(a => new BankAccountDto(
@@ -192,32 +223,45 @@ public class CreateBankMovementHandler : IRequestHandler<CreateBankMovementComma
     }
 }
 
-public class GetBankMovementsHandler : IRequestHandler<GetBankMovementsQuery, List<BankMovementDto>>
+public record PaginatedBankMovementsResult(
+    IReadOnlyList<BankMovementDto> Items,
+    int TotalCount,
+    int Page,
+    int PageSize);
+
+public class GetBankMovementsHandler : IRequestHandler<GetBankMovementsQuery, PaginatedBankMovementsResult>
 {
     private readonly ITreasuryDbContext _ctx;
 
     public GetBankMovementsHandler(ITreasuryDbContext ctx) => _ctx = ctx;
 
-    public async Task<List<BankMovementDto>> Handle(GetBankMovementsQuery req, CancellationToken ct)
+    public async Task<PaginatedBankMovementsResult> Handle(GetBankMovementsQuery req, CancellationToken ct)
     {
+        var page = Math.Max(1, req.Page);
+        var pageSize = Math.Clamp(req.PageSize, 1, 500);
+
         var q = _ctx.BankMovements
             .Where(m => m.BankAccountId == req.BankAccountId)
             .AsQueryable();
 
         if (req.OnlyUnreconciled)
             q = q.Where(m => !m.IsReconciled);
-
         if (req.From.HasValue)
             q = q.Where(m => m.Date >= req.From.Value);
         if (req.To.HasValue)
             q = q.Where(m => m.Date <= req.To.Value);
 
+        var totalCount = await q.CountAsync(ct);
         var movements = await q.OrderByDescending(m => m.Date)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .AsNoTracking().ToListAsync(ct);
 
-        return movements.Select(m => new BankMovementDto(
+        var items = movements.Select(m => new BankMovementDto(
             m.Id, m.BankAccountId, m.Date, m.Reference,
             m.Description, m.Amount, m.Type, m.IsReconciled, m.Origin)).ToList();
+
+        return new PaginatedBankMovementsResult(items, totalCount, page, pageSize);
     }
 }
 
@@ -225,7 +269,9 @@ public record GetBankMovementsQuery(
     Guid BankAccountId,
     bool OnlyUnreconciled = false,
     DateTime? From = null,
-    DateTime? To = null) : IRequest<List<BankMovementDto>>;
+    DateTime? To = null,
+    int Page = 1,
+    int PageSize = 50) : IRequest<PaginatedBankMovementsResult>;
 
 // ─── Reconciliation Handler ────────────────────────────────────────────────────
 
@@ -400,25 +446,42 @@ public class CreateCashEffectHandler : IRequestHandler<CreateCashEffectCommand, 
         e.Amount, e.IssueDate, e.DueDate, e.Status, e.BankAccountId, null);
 }
 
-public class GetCashEffectsHandler : IRequestHandler<GetCashEffectsQuery, List<CashEffectDto>>
+public record PaginatedCashEffectsResult(
+    IReadOnlyList<CashEffectDto> Items,
+    int TotalCount,
+    int Page,
+    int PageSize);
+
+public class GetCashEffectsHandler : IRequestHandler<GetCashEffectsQuery, PaginatedCashEffectsResult>
 {
     private readonly ITreasuryDbContext _ctx;
 
     public GetCashEffectsHandler(ITreasuryDbContext ctx) => _ctx = ctx;
 
-    public async Task<List<CashEffectDto>> Handle(GetCashEffectsQuery req, CancellationToken ct)
+    public async Task<PaginatedCashEffectsResult> Handle(GetCashEffectsQuery req, CancellationToken ct)
     {
+        var page = Math.Max(1, req.Page);
+        var pageSize = Math.Clamp(req.PageSize, 1, 500);
+
         var q = _ctx.CashEffects.AsQueryable();
         if (req.Status != null) q = q.Where(e => e.Status == req.Status);
 
-        var effects = await q.OrderBy(e => e.DueDate).AsNoTracking().ToListAsync(ct);
-        return effects.Select(e => new CashEffectDto(
+        var totalCount = await q.CountAsync(ct);
+        var effects = await q.OrderBy(e => e.DueDate)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .AsNoTracking().ToListAsync(ct);
+
+        var items = effects.Select(e => new CashEffectDto(
             e.Id, e.EffectNumber, e.ClientName, e.ClientTaxId,
             e.Amount, e.IssueDate, e.DueDate, e.Status, e.BankAccountId, null)).ToList();
+
+        return new PaginatedCashEffectsResult(items, totalCount, page, pageSize);
     }
 }
 
-public record GetCashEffectsQuery(string? Status = null) : IRequest<List<CashEffectDto>>;
+public record GetCashEffectsQuery(string? Status = null, int Page = 1, int PageSize = 50)
+    : IRequest<PaginatedCashEffectsResult>;
 
 public class UpdateCashEffectStatusHandler : IRequestHandler<UpdateCashEffectStatusCommand, CashEffectDto>
 {
@@ -488,25 +551,42 @@ public class CreatePaymentOrderHandler : IRequestHandler<CreatePaymentOrderComma
         p.Amount, p.Status, p.ScheduledDate, p.ExecutedAt, p.BankAccountId, p.Notes);
 }
 
-public class GetPaymentOrdersHandler : IRequestHandler<GetPaymentOrdersQuery, List<PaymentOrderDto>>
+public record PaginatedPaymentOrdersResult(
+    IReadOnlyList<PaymentOrderDto> Items,
+    int TotalCount,
+    int Page,
+    int PageSize);
+
+public class GetPaymentOrdersHandler : IRequestHandler<GetPaymentOrdersQuery, PaginatedPaymentOrdersResult>
 {
     private readonly ITreasuryDbContext _ctx;
 
     public GetPaymentOrdersHandler(ITreasuryDbContext ctx) => _ctx = ctx;
 
-    public async Task<List<PaymentOrderDto>> Handle(GetPaymentOrdersQuery req, CancellationToken ct)
+    public async Task<PaginatedPaymentOrdersResult> Handle(GetPaymentOrdersQuery req, CancellationToken ct)
     {
+        var page = Math.Max(1, req.Page);
+        var pageSize = Math.Clamp(req.PageSize, 1, 500);
+
         var q = _ctx.PaymentOrders.AsQueryable();
         if (req.Status != null) q = q.Where(p => p.Status == req.Status);
 
-        var orders = await q.OrderBy(p => p.ScheduledDate).AsNoTracking().ToListAsync(ct);
-        return orders.Select(p => new PaymentOrderDto(
+        var totalCount = await q.CountAsync(ct);
+        var orders = await q.OrderBy(p => p.ScheduledDate)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .AsNoTracking().ToListAsync(ct);
+
+        var items = orders.Select(p => new PaymentOrderDto(
             p.Id, p.PaymentType, p.BeneficiaryName, p.BeneficiaryIban,
             p.Amount, p.Status, p.ScheduledDate, p.ExecutedAt, p.BankAccountId, p.Notes)).ToList();
+
+        return new PaginatedPaymentOrdersResult(items, totalCount, page, pageSize);
     }
 }
 
-public record GetPaymentOrdersQuery(string? Status = null) : IRequest<List<PaymentOrderDto>>;
+public record GetPaymentOrdersQuery(string? Status = null, int Page = 1, int PageSize = 50)
+    : IRequest<PaginatedPaymentOrdersResult>;
 
 public class ExecutePaymentOrderHandler : IRequestHandler<ExecutePaymentOrderCommand, PaymentOrderDto>
 {

@@ -5,7 +5,7 @@ export default function VatRegimePage() {
   const [regimes, setRegimes] = useState<any[]>([]);
   const [effectiveDate, setEffectiveDate] = useState(new Date().toISOString().slice(0, 10));
   const setRegimeClick = async () => {
-    await fetch(`/api/v1/accounting/vat/regime`, {
+    await fetch(`/api/proxy/v1/accounting/vat/regime`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: regime, effectiveDate })

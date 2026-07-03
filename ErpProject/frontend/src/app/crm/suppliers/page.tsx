@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { parseListResponse } from '@/lib/parseListResponse';
 
 interface Supplier {
     id: string; name: string; taxId: string; email: string; phone: string;
@@ -26,8 +27,8 @@ export default function SuppliersPage() {
     const [search, setSearch] = useState('');
 
     const load = async () => {
-        const r = await fetch('/api/proxy/suppliers');
-        if (r.ok) setSuppliers(await r.json());
+        const r = await fetch('/api/proxy/suppliers?pageSize=500');
+        if (r.ok) setSuppliers(parseListResponse<Supplier>(await r.json()));
         setLoading(false);
     };
     useEffect(() => { load(); }, []);

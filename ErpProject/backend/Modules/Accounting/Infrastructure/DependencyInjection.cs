@@ -1,6 +1,7 @@
 using Erp.Modules.Accounting.Application.Interfaces;
 using Erp.Modules.Accounting.Infrastructure.Data;
 using Erp.Modules.Accounting.Infrastructure.Jobs;
+using Erp.Modules.Accounting.Infrastructure.Services;
 using Hangfire;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -22,6 +23,19 @@ public static class DependencyInjection
                .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
 
         services.AddScoped<IAccountingDbContext>(p => p.GetRequiredService<AccountingDbContext>());
+        services.AddScoped<IRecargoInvoiceReader, RecargoInvoiceReader>();
+        services.AddScoped<ILibroIvaEmitidasExporter, LibroIvaEmitidasExporter>();
+        services.AddScoped<ILibroIvaRecibidasExporter, LibroIvaRecibidasExporter>();
+        services.AddScoped<IModelo347Exporter, Modelo347Exporter>();
+        services.AddScoped<IModelo303Exporter, Modelo303Exporter>();
+        services.AddScoped<IModelo111Reader, Modelo111Reader>();
+        services.AddScoped<IModelo190Reader, Modelo190Reader>();
+        services.AddScoped<IModelo390Exporter, Modelo390Exporter>();
+        services.AddScoped<IModelo349Exporter, Modelo349Exporter>();
+        services.AddScoped<IModelo303Reader, Modelo303Reader>();
+        services.AddScoped<IModelo303XmlExporter, Modelo303XmlExporter>();
+        services.AddScoped<IFiscalSkeletonXmlExporter, FiscalSkeletonXmlExporter>();
+        services.AddScoped<IModelo390XmlExporter, Modelo390XmlExporter>();
 
         // Hangfire jobs (transient — Hangfire resolves per execution)
         services.AddTransient<AmortizationMonthlyJob>();

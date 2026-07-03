@@ -9,6 +9,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\Erp.Application\Erp.Application.csproj" />
+    <ProjectReference Include="..\..\Accounting\Application\Erp.Modules.Accounting.Application.csproj" />
     <ProjectReference Include="..\Domain\Erp.Modules.Payroll.Domain.csproj" />
   </ItemGroup>
 </Project>

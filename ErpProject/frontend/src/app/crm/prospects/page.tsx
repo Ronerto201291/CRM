@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import PageContainer from '@/components/PageContainer';
 import NotesPanel from '@/components/NotesPanel';
+import { parseListResponse } from '@/lib/parseListResponse';
 
 interface Prospect {
     id: string;
@@ -62,8 +63,9 @@ export default function ProspectsPage() {
             const params = new URLSearchParams();
             if (search) params.set('search', search);
             if (filterStatus) params.set('status', filterStatus);
+            params.set('pageSize', '500');
             const res = await fetch(`/api/proxy/leads?${params}`);
-            if (res.ok) setProspects(await res.json());
+            if (res.ok) setProspects(parseListResponse<Prospect>(await res.json()));
         } finally {
             setLoading(false);
         }

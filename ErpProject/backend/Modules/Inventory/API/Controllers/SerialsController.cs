@@ -1,7 +1,7 @@
-using Erp.Modules.Inventory.Application.Interfaces;
-using Erp.Modules.Inventory.Domain.Entities;
+using Erp.Modules.Inventory.Application.Features.Inventory.Commands;
+using Erp.Modules.Inventory.Application.Features.Inventory.Queries;
+using MediatR;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Asp.Versioning;
 
 namespace Erp.Modules.Inventory.API.Controllers
@@ -11,75 +11,45 @@ namespace Erp.Modules.Inventory.API.Controllers
     [ApiVersion("1.0")]
     public class SerialsController : ControllerBase
     {
-        private readonly IInventoryDbContext _context;
+        private readonly IMediator _mediator;
 
-        public SerialsController(IInventoryDbContext context) => _context = context;
+        public SerialsController(IMediator mediator) => _mediator = mediator;
 
         [HttpGet]
         public async Task<IActionResult> GetAll(CancellationToken ct)
-        {
-            var serials = await _context.SerialNumbers.AsNoTracking().ToListAsync(ct);
-            return Ok(serials);
-        }
+            => Ok(await _mediator.Send(new GetSerialsQuery(), ct));
 
         [HttpGet("{id}")]
         public async Task<IActionResult> Get(Guid id, CancellationToken ct)
         {
-            var serial = await _context.SerialNumbers.FirstOrDefaultAsync(s => s.Id == id, ct);
-            if (serial == null) return NotFound();
-            return Ok(serial);
-        }
-
-        public class CreateSerialDto
-        {
-            public Guid ProductId { get; set; }
-            public Guid? LotId { get; set; }
-            public string Serial { get; set; } = string.Empty;
+            var serial = await _mediator.Send(new GetSerialByIdQuery { Id = id }, ct);
+            return serial == null ? NotFound() : Ok(serial);
         }
 
         [HttpPost]
-        public async Task<IActionResult> Create([FromBody] CreateSerialDto dto, CancellationToken ct)
+        public async Task<IActionResult> Create([FromBody] CreateSerialCommand cmd, CancellationToken ct)
         {
-            var serial = new SerialNumber
-            {
-                ProductId = dto.ProductId,
-                LotId = dto.LotId,
-                Serial = dto.Serial,
-                Status = "Available"
-            };
-
-            _context.SerialNumbers.Add(serial);
-            await _context.SaveChangesAsync(ct);
+            var serial = await _mediator.Send(cmd, ct);
             return CreatedAtAction(nameof(Get), new { id = serial.Id }, serial);
         }
 
-        public class UpdateSerialStatusDto
-        {
-            public string Status { get; set; } = string.Empty;
-        }
-
         [HttpPut("{id}/status")]
-        public async Task<IActionResult> UpdateStatus(Guid id, [FromBody] UpdateSerialStatusDto dto, CancellationToken ct)
+        public async Task<IActionResult> UpdateStatus(Guid id, [FromBody] UpdateSerialStatusBody body, CancellationToken ct)
         {
-            var serial = await _context.SerialNumbers.FindAsync(new object[] { id }, ct);
-            if (serial == null) return NotFound();
-
-            serial.Status = dto.Status;
-            if (dto.Status == "Sold") serial.SoldDate = DateTime.UtcNow;
-
-            await _context.SaveChangesAsync(ct);
-            return Ok(serial);
+            var serial = await _mediator.Send(new UpdateSerialStatusCommand { Id = id, Status = body.Status }, ct);
+            return serial == null ? NotFound() : Ok(serial);
         }
 
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
         {
-            var serial = await _context.SerialNumbers.FindAsync(new object[] { id }, ct);
-            if (serial == null) return NotFound();
-
-            _context.SerialNumbers.Remove(serial);
-            await _context.SaveChangesAsync(ct);
-            return NoContent();
+            var ok = await _mediator.Send(new DeleteSerialCommand { Id = id }, ct);
+            return ok ? NoContent() : NotFound();
         }
+    }
+
+    public class UpdateSerialStatusBody
+    {
+        public string Status { get; set; } = string.Empty;
     }
 }

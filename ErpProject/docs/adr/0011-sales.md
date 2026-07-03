@@ -73,7 +73,8 @@ Entidades (`Domain/Entities`, todas `AuditableEntity` con `CompanyId`):
 Controllers versionados (`api/v{version:apiVersion}/sales/...`, a diferencia
 del resto de módulos que usan `api/[controller]` sin versión):
 - `SalesOrdersController` (`/api/v1/sales/orders`) — `GET`/`GET {id}`/`POST`
-  con acceso directo a `ISalesDbContext` (sin MediatR).
+  vía `IMediator` (`Application/Features/Orders/SalesOrderHandlers.cs`;
+  backlog #11). Filtra por tenant en queries.
 - `DeliveriesController` (`/api/v1/sales/deliveries`) — CQRS vía MediatR
   (`CreateDeliveryNoteCommand`/`GetAllDeliveryNotesQuery`).
 - `CustomerInvoicesController` (`/api/v1/sales/invoices`) — CQRS vía

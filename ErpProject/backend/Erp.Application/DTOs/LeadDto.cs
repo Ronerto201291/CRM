@@ -6,8 +6,11 @@ public class LeadDto
     public string Name { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public string Phone { get; set; } = string.Empty;
+    public string TaxId { get; set; } = string.Empty;
+    public string Address { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public string Source { get; set; } = string.Empty;
     public string Notes { get; set; } = string.Empty;
+    public Guid? ConvertedToClientId { get; set; }
     public DateTime CreatedAt { get; set; }
 }

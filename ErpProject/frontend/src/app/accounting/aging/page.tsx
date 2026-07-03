@@ -5,17 +5,17 @@ export default function AgingPage() {
   const [dso, setDso] = useState<number | null>(null);
   const [dpo, setDpo] = useState<number | null>(null);
   const fetchAging = async (type: string) => {
-    const res = await fetch(`/api/v1/accounting/aging/${type}`);
+    const res = await fetch(`/api/proxy/v1/accounting/aging/${type}`);
     const data = await res.json();
     setAgingData(data);
   };
   const fetchDSO = async () => {
-    const res = await fetch(`/api/v1/accounting/aging/dso`);
+    const res = await fetch(`/api/proxy/v1/accounting/aging/dso`);
     const data = await res.json();
     setDso(data.dso);
   };
   const fetchDPO = async () => {
-    const res = await fetch(`/api/v1/accounting/aging/dpo`);
+    const res = await fetch(`/api/proxy/v1/accounting/aging/dpo`);
     const data = await res.json();
     setDpo(data.dpo);
   };

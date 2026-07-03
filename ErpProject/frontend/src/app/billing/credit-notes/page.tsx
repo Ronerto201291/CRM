@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { parseListResponse } from '@/lib/parseListResponse';
 import PageContainer from '@/components/PageContainer';
 
 interface Invoice {
@@ -37,16 +38,15 @@ export default function CreditNotesPage() {
         setLoading(true);
         try {
             const [invRes, creditRes] = await Promise.all([
-                fetch('/api/proxy/invoices'),
-                fetch('/api/proxy/invoices?type=CreditNote'),
+                fetch('/api/proxy/invoices?pageSize=500'),
+                fetch('/api/proxy/invoices?type=CreditNote&pageSize=500'),
             ]);
             if (invRes.ok) {
-                // Filtrar solo facturas bloqueadas (para poder rectificar)
-                const allInvoices = await invRes.json();
-                setInvoices(allInvoices.filter((i: Invoice) => i.isLocked || i.status === 'Locked'));
+                const allInvoices = parseListResponse<Invoice>(await invRes.json());
+                setInvoices(allInvoices.filter((i) => i.isLocked || i.status === 'Locked'));
             }
             if (creditRes.ok) {
-                setCreditNotes(await creditRes.json());
+                setCreditNotes(parseListResponse<Invoice>(await creditRes.json()));
             }
         } catch (err) {
             console.error('Error cargando facturas:', err);

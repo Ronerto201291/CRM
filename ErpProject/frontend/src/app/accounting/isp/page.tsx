@@ -6,7 +6,7 @@ export default function ISPPage() {
   const [vatRate, setVatRate] = useState(21);
   const [ispList, setIspList] = useState<any[]>([]);
   const create = async () => {
-    const res = await fetch(`/api/v1/accounting/isp`, {
+    const res = await fetch(`/api/proxy/v1/accounting/isp`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ supplierCountryCode: countryCode, vatableBase: base, vatRate })
@@ -16,7 +16,7 @@ export default function ISPPage() {
     fetchList();
   };
   const fetchList = async () => {
-    const res = await fetch(`/api/v1/accounting/isp`);
+    const res = await fetch(`/api/proxy/v1/accounting/isp`);
     const data = await res.json();
     setIspList(data);
   };

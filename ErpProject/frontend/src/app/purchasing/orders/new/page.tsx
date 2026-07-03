@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import PageContainer from "@/components/PageContainer";
+import { parseListResponse } from "@/lib/parseListResponse";
 import { Supplier } from "@/types/api";
 
 interface OrderLine {
@@ -28,9 +29,9 @@ export default function NewPurchaseOrderPage() {
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
-        fetch('/api/proxy/suppliers')
+        fetch('/api/proxy/suppliers?pageSize=500')
             .then(r => r.ok ? r.json() : [])
-            .then(data => setSuppliers(Array.isArray(data) ? data : (data.items ?? [])))
+            .then(data => setSuppliers(parseListResponse<Supplier>(data)))
             .catch(() => {});
     }, []);
 

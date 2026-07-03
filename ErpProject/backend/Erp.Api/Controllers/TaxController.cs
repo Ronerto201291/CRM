@@ -1,3 +1,4 @@
+using Erp.Application.Common;
 using Erp.Application.Common.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -89,8 +90,6 @@ public sealed class ViesValidationResponse
         Address      = r.Address;
         RequestDate  = r.RequestDate;
         ErrorMessage = r.ErrorMessage;
-        Advice = r.IsValid
-            ? $"NIF UE válido. Puede emitir factura exenta de IVA (art. 25 LIVA) a {r.Name ?? "este operador"}."
-            : "NIF UE no validado. No puede aplicar exención intracomunitaria hasta confirmar la validez.";
+        Advice = ViesResponseMapper.BuildAdvice(r);
     }
 }

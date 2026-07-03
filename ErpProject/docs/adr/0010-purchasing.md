@@ -29,9 +29,10 @@ según el patrón compartido, pero con dos desviaciones físicas relevantes
 
 Controllers (`backend/Modules/Purchasing/Api/Controllers/`):
 - `PurchaseOrdersController` — ruta `api/v{version:apiVersion}/purchasing/orders`.
-  `GET` (lista, con `Include(Lines)`), `GET {id}`, `POST`, `PUT {id}`,
-  `DELETE {id}`. No usa MediatR: opera directamente sobre
-  `IPurchasingDbContext` desde el propio controller. No lleva `[Authorize]`.
+  `GET` (lista), `GET {id}`, `POST`, `PUT {id}`, `DELETE {id}`. **Corregido
+  (backlog #11):** controller delgado vía `IMediator`
+  (`Application/Features/Orders/PurchaseOrderHandlers.cs`); filtra por
+  `CompanyId` del tenant. No lleva `[Authorize]`.
 - `ReceiptsController` — ruta `api/v{version:apiVersion}/purchasing/receipts`,
   con `[Authorize]`. `POST` despacha `CreateGoodsReceiptCommand` vía
   `IMediator`. `GET {id}` es un stub que solo devuelve `{ id }`, sin datos
@@ -44,9 +45,10 @@ CQRS (`backend/Modules/Purchasing/Application/Features/`): solo existen dos
 casos de uso implementados con MediatR, `Receipts/Commands/CreateGoodsReceiptCommand`
 con su `Receipts/Handlers/CreateGoodsReceiptHandler`, e
 `Invoices/Commands/CreateSupplierInvoiceCommand` con su
-`Invoices/Handlers/CreateSupplierInvoiceHandler`. No hay queries MediatR (las
-lecturas se hacen directamente en `PurchaseOrdersController`) ni validadores
-FluentValidation; la única validación de negocio no trivial es
+`Invoices/Handlers/CreateSupplierInvoiceHandler`, más queries/commands de
+pedidos en `Orders/PurchaseOrderHandlers.cs` (backlog #11). No hay otros
+queries MediatR de lectura ni validadores FluentValidation; la única
+validación de negocio no trivial es
 `Application/Validators/ThreeWayMatchValidator.cs`.
 
 `CreateGoodsReceiptHandler` valida que la `PurchaseOrderLine` referenciada

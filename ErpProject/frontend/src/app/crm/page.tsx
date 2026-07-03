@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
+import { parseListResponse, parseTotalCount } from '@/lib/parseListResponse';
 import Link from 'next/link';
 import PageContainer from '@/components/PageContainer';
 import NotesPanel from '@/components/NotesPanel';
@@ -27,15 +28,18 @@ export default function CrmPage() {
 
     const load = useCallback(async () => {
         const [r1, r2, r3, r4] = await Promise.all([
-            fetch('/api/proxy/clients'),
-            fetch('/api/proxy/suppliers'),
-            fetch('/api/proxy/contacts'),
-            fetch('/api/proxy/leads'),
+            fetch('/api/proxy/clients?pageSize=500'),
+            fetch('/api/proxy/suppliers?pageSize=500'),
+            fetch('/api/proxy/contacts?pageSize=500'),
+            fetch('/api/proxy/leads?pageSize=500'),
         ]);
-        if (r1.ok) setClients(await r1.json());
-        if (r2.ok) setSuppliers(await r2.json());
-        if (r3.ok) setContacts(await r3.json());
-        if (r4.ok) { const leads = await r4.json(); setProspectsCount(leads.length); }
+        if (r1.ok) setClients(parseListResponse<Client>(await r1.json()));
+        if (r2.ok) setSuppliers(parseListResponse<Supplier>(await r2.json()));
+        if (r3.ok) setContacts(parseListResponse<Contact>(await r3.json()));
+        if (r4.ok) {
+            const data = await r4.json();
+            setProspectsCount(parseTotalCount(data, parseListResponse(data).length));
+        }
     }, []);
 
     useEffect(() => { load(); }, [load]);

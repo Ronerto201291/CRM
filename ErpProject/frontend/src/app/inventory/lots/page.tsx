@@ -6,7 +6,7 @@ export default function LotsPage() {
   const fetchLots = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/v1/inventory/lots`);
+      const res = await fetch(`/api/proxy/v1/inventory/lots`);
       const data = await res.json();
       setLots(data || []);
     } finally {

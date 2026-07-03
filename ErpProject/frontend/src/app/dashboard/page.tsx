@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { parseListResponse } from '@/lib/parseListResponse';
 import PageContainer from '@/components/PageContainer';
 
 interface DashboardStats {
@@ -21,11 +22,11 @@ export default function DashboardPage() {
     async function loadData() {
       try {
         const [invoicesRes, expStatsRes, ivaRes] = await Promise.all([
-          fetch('/api/proxy/invoices'),
+          fetch('/api/proxy/invoices?pageSize=500'),
           fetch('/api/proxy/expenses/stats'),
           fetch('/api/proxy/accounting/liquidacion-iva'),
         ]);
-        const invoices = invoicesRes.ok ? await invoicesRes.json() : [];
+        const invoices = invoicesRes.ok ? parseListResponse<any>(await invoicesRes.json()) : [];
         const expStats = expStatsRes.ok ? await expStatsRes.json() : { totalBase: 0, totalVATSoportado: 0, pending: 0, approved: 0 };
         const iva = ivaRes.ok ? await ivaRes.json() : { ivaRepercutido: 0, ivaSoportado: 0 };
 

@@ -4,7 +4,7 @@ export default function CashFlowPage() {
   const [year, setYear] = useState(new Date().getFullYear());
   const [cashFlow, setCashFlow] = useState<any>(null);
   const generateCashFlow = async () => {
-    const res = await fetch(`/api/v1/accounting/financial-statements/cash-flow`, {
+    const res = await fetch(`/api/proxy/v1/accounting/financial-statements/cash-flow`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(year)

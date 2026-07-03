@@ -1,7 +1,7 @@
-using Erp.Modules.Inventory.Application.Interfaces;
-using Erp.Modules.Inventory.Domain.Entities;
+using Erp.Modules.Inventory.Application.Features.Inventory.Commands;
+using Erp.Modules.Inventory.Application.Features.Inventory.Queries;
+using MediatR;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Asp.Versioning;
 
 namespace Erp.Modules.Inventory.API.Controllers
@@ -11,76 +11,47 @@ namespace Erp.Modules.Inventory.API.Controllers
     [ApiVersion("1.0")]
     public class LotsController : ControllerBase
     {
-        private readonly IInventoryDbContext _context;
+        private readonly IMediator _mediator;
 
-        public LotsController(IInventoryDbContext context) => _context = context;
+        public LotsController(IMediator mediator) => _mediator = mediator;
 
         [HttpGet]
         public async Task<IActionResult> GetAll(CancellationToken ct)
-        {
-            var lots = await _context.Lots.AsNoTracking().ToListAsync(ct);
-            return Ok(lots);
-        }
+            => Ok(await _mediator.Send(new GetLotsQuery(), ct));
 
         [HttpGet("{id}")]
         public async Task<IActionResult> Get(Guid id, CancellationToken ct)
         {
-            var lot = await _context.Lots.FirstOrDefaultAsync(l => l.Id == id, ct);
-            if (lot == null) return NotFound();
-            return Ok(lot);
-        }
-
-        public class CreateLotDto
-        {
-            public Guid ProductId { get; set; }
-            public string LotNumber { get; set; } = string.Empty;
-            public DateTime ExpirationDate { get; set; }
-            public decimal Quantity { get; set; }
-            public decimal UnitCost { get; set; }
+            var lot = await _mediator.Send(new GetLotByIdQuery { Id = id }, ct);
+            return lot == null ? NotFound() : Ok(lot);
         }
 
         [HttpPost]
-        public async Task<IActionResult> Create([FromBody] CreateLotDto dto, CancellationToken ct)
+        public async Task<IActionResult> Create([FromBody] CreateLotCommand cmd, CancellationToken ct)
         {
-            var lot = new Lot
-            {
-                ProductId = dto.ProductId,
-                LotNumber = dto.LotNumber,
-                ExpirationDate = dto.ExpirationDate,
-                Quantity = dto.Quantity,
-                UnitCost = dto.UnitCost,
-                IsActive = true
-            };
-
-            _context.Lots.Add(lot);
-            await _context.SaveChangesAsync(ct);
+            var lot = await _mediator.Send(cmd, ct);
             return CreatedAtAction(nameof(Get), new { id = lot.Id }, lot);
         }
 
         [HttpPut("{id}")]
-        public async Task<IActionResult> Update(Guid id, [FromBody] CreateLotDto dto, CancellationToken ct)
+        public async Task<IActionResult> Update(Guid id, [FromBody] CreateLotCommand cmd, CancellationToken ct)
         {
-            var lot = await _context.Lots.FindAsync(new object[] { id }, ct);
-            if (lot == null) return NotFound();
-
-            lot.LotNumber = dto.LotNumber;
-            lot.ExpirationDate = dto.ExpirationDate;
-            lot.Quantity = dto.Quantity;
-            lot.UnitCost = dto.UnitCost;
-
-            await _context.SaveChangesAsync(ct);
-            return Ok(lot);
+            var lot = await _mediator.Send(new UpdateLotCommand
+            {
+                Id = id,
+                LotNumber = cmd.LotNumber,
+                ExpirationDate = cmd.ExpirationDate,
+                Quantity = cmd.Quantity,
+                UnitCost = cmd.UnitCost,
+            }, ct);
+            return lot == null ? NotFound() : Ok(lot);
         }
 
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
         {
-            var lot = await _context.Lots.FindAsync(new object[] { id }, ct);
-            if (lot == null) return NotFound();
-
-            _context.Lots.Remove(lot);
-            await _context.SaveChangesAsync(ct);
-            return NoContent();
+            var ok = await _mediator.Send(new DeleteLotCommand { Id = id }, ct);
+            return ok ? NoContent() : NotFound();
         }
     }
 }

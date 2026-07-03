@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
 import PageContainer from '@/components/PageContainer';
+import { parseListResponse } from '@/lib/parseListResponse';
 
 interface Invoice {
     id: string; number: string; clientName?: string; issueDate: string;
@@ -53,11 +54,11 @@ export default function BillingPage() {
 
     const load = useCallback(async () => {
         const [r1, r2] = await Promise.all([
-            fetch('/api/proxy/invoices'),
-            fetch('/api/proxy/clients'),
+            fetch('/api/proxy/invoices?pageSize=500'),
+            fetch('/api/proxy/clients?pageSize=500'),
         ]);
-        if (r1.ok) setInvoices(await r1.json());
-        if (r2.ok) setClients(await r2.json());
+        if (r1.ok) setInvoices(parseListResponse<Invoice>(await r1.json()));
+        if (r2.ok) setClients(parseListResponse<Client>(await r2.json()));
     }, []);
 
     useEffect(() => { load(); }, [load]);

@@ -1,10 +1,7 @@
-using Erp.Application.Common.Interfaces;
-using Erp.Modules.Treasury.Application.Interfaces;
-using Erp.Modules.Treasury.Domain.Entities;
-using Erp.Modules.Treasury.Infrastructure.Services;
+using Erp.Modules.Treasury.Application.Features.Currencies;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace Erp.Modules.Treasury.Api.Controllers;
 
@@ -13,176 +10,68 @@ namespace Erp.Modules.Treasury.Api.Controllers;
 [Authorize]
 public class CurrenciesController : ControllerBase
 {
-    private readonly ITreasuryDbContext _ctx;
-    private readonly ITenantContext _tenantContext;
-    private readonly IExchangeRateService _rateService;
+    private readonly IMediator _mediator;
 
-    public CurrenciesController(ITreasuryDbContext ctx, ITenantContext tenantContext, IExchangeRateService rateService)
-    {
-        _ctx = ctx;
-        _tenantContext = tenantContext;
-        _rateService = rateService;
-    }
+    public CurrenciesController(IMediator mediator) => _mediator = mediator;
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct)
-    {
-        var tenantId = _tenantContext.TenantId
-            ?? throw new InvalidOperationException("Tenant not resolved");
-        var currencies = await _ctx.Currencies
-            .Where(c => c.CompanyId == tenantId && c.IsActive)
-            .AsNoTracking()
-            .OrderBy(c => c.Code)
-            .ToListAsync(ct);
-        return Ok(currencies.Select(c => new
-        {
-            c.Id,
-            c.Code,
-            c.Name,
-            c.ExchangeRate,
-            c.RateDate,
-            c.Source
-        }));
-    }
+        => Ok(await _mediator.Send(new GetCurrenciesQuery(), ct));
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateCurrencyDto dto, CancellationToken ct)
     {
-        var tenantId = _tenantContext.TenantId
-            ?? throw new InvalidOperationException("Tenant not resolved");
-
-        var existing = await _ctx.Currencies
-            .AnyAsync(c => c.CompanyId == tenantId && c.Code == dto.Code.ToUpperInvariant(), ct);
-        if (existing)
-            return BadRequest(new { error = $"Currency {dto.Code} already exists for this company" });
-
-        var currency = new Currency
+        try
         {
-            Id = Guid.NewGuid(),
-            CompanyId = tenantId,
-            Code = dto.Code.ToUpperInvariant(),
-            Name = dto.Name,
-            ExchangeRate = dto.ExchangeRate,
-            RateDate = DateTime.UtcNow,
-            Source = "Manual",
-            IsActive = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
-
-        _ctx.Currencies.Add(currency);
-        await _ctx.SaveChangesAsync(ct);
-
-        return CreatedAtAction(nameof(GetAll), new { id = currency.Id }, new
+            var result = await _mediator.Send(new CreateCurrencyCommand(dto.Code, dto.Name, dto.ExchangeRate), ct);
+            return CreatedAtAction(nameof(GetAll), new { id = result.Id }, result);
+        }
+        catch (InvalidOperationException ex)
         {
-            currency.Id,
-            currency.Code,
-            currency.Name,
-            currency.ExchangeRate,
-            currency.RateDate,
-            currency.Source
-        });
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateCurrencyRateDto dto, CancellationToken ct)
     {
-        var tenantId = _tenantContext.TenantId
-            ?? throw new InvalidOperationException("Tenant not resolved");
-
-        var currency = await _ctx.Currencies
-            .FirstOrDefaultAsync(c => c.Id == id && c.CompanyId == tenantId, ct);
-        if (currency == null)
-            return NotFound(new { error = "Currency not found" });
-
-        currency.ExchangeRate = dto.ExchangeRate;
-        currency.RateDate = DateTime.UtcNow;
-        currency.UpdatedAt = DateTime.UtcNow;
-
-        await _ctx.SaveChangesAsync(ct);
-        return Ok(new
+        try
         {
-            currency.Id,
-            currency.Code,
-            currency.Name,
-            currency.ExchangeRate,
-            currency.RateDate
-        });
+            return Ok(await _mediator.Send(new UpdateCurrencyRateCommand(id, dto.ExchangeRate), ct));
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new { error = "Currency not found" });
+        }
     }
 
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
-        var tenantId = _tenantContext.TenantId
-            ?? throw new InvalidOperationException("Tenant not resolved");
-
-        var currency = await _ctx.Currencies
-            .FirstOrDefaultAsync(c => c.Id == id && c.CompanyId == tenantId, ct);
-        if (currency == null)
-            return NotFound(new { error = "Currency not found" });
-
-        currency.IsActive = false;
-        currency.UpdatedAt = DateTime.UtcNow;
-        await _ctx.SaveChangesAsync(ct);
-
-        return NoContent();
+        var deleted = await _mediator.Send(new DeleteCurrencyCommand(id), ct);
+        return deleted ? NoContent() : NotFound(new { error = "Currency not found" });
     }
 
     [HttpGet("rates")]
     public async Task<IActionResult> GetRates(CancellationToken ct)
     {
-        var tenantId = _tenantContext.TenantId
-            ?? throw new InvalidOperationException("Tenant not resolved");
-        var currencies = await _ctx.Currencies
-            .Where(c => c.CompanyId == tenantId && c.IsActive)
-            .AsNoTracking()
-            .ToListAsync(ct);
-        var rates = currencies.ToDictionary(c => c.Code, c => c.ExchangeRate);
+        var rates = await _mediator.Send(new GetCurrencyRatesQuery(), ct);
         return Ok(new { rates });
     }
 
     [HttpPost("exchange")]
     public async Task<IActionResult> ExchangeCurrency([FromBody] ExchangeCurrencyDto dto, CancellationToken ct)
     {
-        var tenantId = _tenantContext.TenantId
-            ?? throw new InvalidOperationException("Tenant not resolved");
-
-        var from = await _ctx.Currencies
-            .FirstOrDefaultAsync(c => c.CompanyId == tenantId && c.Code == dto.FromCurrency.ToUpperInvariant() && c.IsActive, ct);
-        var to = await _ctx.Currencies
-            .FirstOrDefaultAsync(c => c.CompanyId == tenantId && c.Code == dto.ToCurrency.ToUpperInvariant() && c.IsActive, ct);
-
-        if (from == null) return BadRequest(new { error = $"Currency {dto.FromCurrency} not found" });
-        if (to == null) return BadRequest(new { error = $"Currency {dto.ToCurrency} not found" });
-
-        decimal rate;
-        if (dto.Source == "Automatic")
+        try
         {
-            rate = await _rateService.GetRateAsync(dto.FromCurrency, dto.ToCurrency, ct);
+            var result = await _mediator.Send(new ExchangeCurrencyCommand(
+                dto.FromCurrency, dto.ToCurrency, dto.Amount, dto.Source), ct);
+            return Ok(new { exchangedAmount = result.ExchangedAmount, rate = result.Rate });
         }
-        else
+        catch (InvalidOperationException ex)
         {
-            rate = dto.Amount / from.ExchangeRate * to.ExchangeRate;
+            return BadRequest(new { error = ex.Message });
         }
-
-        var exchange = new CurrencyExchange
-        {
-            Id = Guid.NewGuid(),
-            CompanyId = tenantId,
-            FromCurrency = from.Code,
-            ToCurrency = to.Code,
-            Amount = dto.Amount,
-            ExchangedAmount = rate,
-            ExchangeRate = to.ExchangeRate / from.ExchangeRate,
-            ExchangeDate = DateTime.UtcNow,
-            Type = dto.Source == "Automatic" ? "Automatic" : "Manual",
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
-        _ctx.CurrencyExchanges.Add(exchange);
-        await _ctx.SaveChangesAsync(ct);
-
-        return Ok(new { exchangedAmount = rate, rate = exchange.ExchangeRate });
     }
 }
 

@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import PageContainer from '@/components/PageContainer';
+import { parseListResponse } from '@/lib/parseListResponse';
 
 type TreasuryTab = 'accounts' | 'movements' | 'effects' | 'orders' | 'forecast';
 
@@ -65,17 +66,17 @@ export default function TreasuryPage() {
         const id = accountId || selectedAccount;
         if (!id) return;
         setLoading(true);
-        const r = await fetch(`/api/proxy/treasury/bank-accounts/${id}/movements`);
-        if (r.ok) setMovements(await r.json());
+        const r = await fetch(`/api/proxy/treasury/bank-accounts/${id}/movements?pageSize=500`);
+        if (r.ok) { const d = await r.json(); setMovements(parseListResponse<BankMovement>(d)); }
         setLoading(false);
     };
     const loadEffects = async () => {
-        const r = await fetch('/api/proxy/treasury/effects');
-        if (r.ok) setEffects(await r.json());
+        const r = await fetch('/api/proxy/treasury/effects?pageSize=500');
+        if (r.ok) { const d = await r.json(); setEffects(parseListResponse<CashEffect>(d)); }
     };
     const loadOrders = async () => {
-        const r = await fetch('/api/proxy/treasury/payment-orders');
-        if (r.ok) setOrders(await r.json());
+        const r = await fetch('/api/proxy/treasury/payment-orders?pageSize=500');
+        if (r.ok) { const d = await r.json(); setOrders(parseListResponse<PaymentOrder>(d)); }
     };
     const loadForecast = async () => {
         const r = await fetch(`/api/proxy/treasury/forecasts?year=${now.getFullYear()}&month=${now.getMonth() + 1}`);

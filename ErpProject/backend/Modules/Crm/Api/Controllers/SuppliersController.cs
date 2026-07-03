@@ -14,8 +14,16 @@ public class SuppliersController : ControllerBase
     public SuppliersController(IMediator mediator) => _mediator = mediator;
 
     [HttpGet]
-    public async Task<IActionResult> GetAll([FromQuery] string? search, CancellationToken ct)
-        => Ok(await _mediator.Send(new GetSuppliersQuery { Search = search }, ct));
+    public async Task<IActionResult> GetAll(
+        [FromQuery] string? search,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken ct = default)
+    {
+        var result = await _mediator.Send(new GetSuppliersQuery { Search = search, Page = page, PageSize = pageSize }, ct);
+        Response.Headers["X-Total-Count"] = result.TotalCount.ToString();
+        return Ok(result);
+    }
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)

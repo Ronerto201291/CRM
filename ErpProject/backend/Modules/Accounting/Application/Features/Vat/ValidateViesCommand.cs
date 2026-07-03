@@ -1,92 +1,88 @@
 using MediatR;
+using Erp.Application.Common;
 using Erp.Application.Common.Interfaces;
 using Erp.Modules.Accounting.Application.Interfaces;
 using Erp.Modules.Accounting.Domain.Entities;
 
 namespace Erp.Modules.Accounting.Application.Features.Vat;
 
-public class ValidateViesCommand : IRequest<ViesValidationResponse>
+/// <summary>
+/// Valida un NIF-IVA UE vía el servicio oficial VIES (misma fuente que TaxController)
+/// y registra la consulta en IntraEuOperations para trazabilidad contable.
+/// </summary>
+public class ValidateViesCommand : IRequest<ValidateViesResult>
 {
+    public string CountryCode { get; set; } = string.Empty;
     public string VatNumber { get; set; } = string.Empty;
-    public Guid CompanyId { get; set; }
 }
 
-public class ValidateViesHandler : IRequestHandler<ValidateViesCommand, ViesValidationResponse>
+public class ValidateViesHandler : IRequestHandler<ValidateViesCommand, ValidateViesResult>
 {
     private readonly IAccountingDbContext _context;
     private readonly IViesService _vies;
+    private readonly ITenantContext _tenant;
 
-    public ValidateViesHandler(IAccountingDbContext context, IViesService vies)
+    public ValidateViesHandler(
+        IAccountingDbContext context,
+        IViesService vies,
+        ITenantContext tenant)
     {
         _context = context;
         _vies = vies;
+        _tenant = tenant;
     }
 
-    public async Task<ViesValidationResponse> Handle(ValidateViesCommand request, CancellationToken cancellationToken)
+    public async Task<ValidateViesResult> Handle(ValidateViesCommand request, CancellationToken cancellationToken)
     {
-        var response = new ViesValidationResponse
-        {
-            VatNumber = request.VatNumber,
-            RequestedAt = DateTime.UtcNow
-        };
+        if (string.IsNullOrWhiteSpace(request.CountryCode) || request.CountryCode.Length != 2)
+            throw new ArgumentException("countryCode debe ser un código ISO-2 de 2 letras, p.ej. 'FR'.");
+        if (string.IsNullOrWhiteSpace(request.VatNumber))
+            throw new ArgumentException("vatNumber no puede estar vacío.");
 
-        if (!ValidateVatFormat(request.VatNumber))
-        {
-            response.IsValid = false;
-            response.Status = "Invalid";
-            response.Reason = "Formato de NIF-IVA inválido";
-            return response;
-        }
+        var companyId = _tenant.TenantId ?? throw new InvalidOperationException("Tenant no resuelto.");
+        var countryCode = request.CountryCode.ToUpperInvariant();
+        var vatNumber = request.VatNumber.Trim();
 
-        var countryCode = request.VatNumber.Substring(0, 2);
-        var numberWithoutPrefix = request.VatNumber.Substring(2);
-
-        var result = await _vies.ValidateAsync(countryCode, numberWithoutPrefix, cancellationToken);
-
-        response.IsValid = result.IsValid;
-        response.CompanyName = result.Name ?? string.Empty;
-        response.Address = result.Address ?? string.Empty;
-        response.Status = result.IsValid ? "Active" : "Invalid";
-        response.Reason = result.ErrorMessage
-            ?? (result.IsValid ? "Válido en el registro VIES" : "No encontrado en el registro VIES");
+        var result = await _vies.ValidateAsync(countryCode, vatNumber, cancellationToken);
 
         var operation = new IntraEuOperation
         {
-            CompanyId = request.CompanyId,
+            CompanyId = companyId,
             Type = "Service",
             CountryCode = countryCode,
-            PartnerVatId = request.VatNumber,
-            ViesStatus = "NotReported",
+            PartnerVatId = $"{countryCode}{vatNumber}",
+            ViesStatus = result.IsValid ? "Validated" : "Invalid",
         };
 
         _context.IntraEuOperations.Add(operation);
         await _context.SaveChangesAsync(cancellationToken);
 
-        response.ValidationId = operation.Id;
-
-        return response;
-    }
-
-    private static bool ValidateVatFormat(string vatNumber)
-    {
-        if (string.IsNullOrWhiteSpace(vatNumber) || vatNumber.Length < 4)
-            return false;
-
-        var countryCode = vatNumber.Substring(0, 2);
-        var validCountryCodes = new[] { "ES", "IT", "FR", "DE", "NL", "BE", "AT", "PT", "GR" };
-        
-        return validCountryCodes.Contains(countryCode);
+        return new ValidateViesResult
+        {
+            ValidationId = operation.Id,
+            IsValid = result.IsValid,
+            CountryCode = result.CountryCode,
+            VatNumber = result.VatNumber,
+            Name = result.Name,
+            Address = result.Address,
+            RequestDate = result.RequestDate,
+            ErrorMessage = result.ErrorMessage,
+            ValidationStatus = result.IsValid ? "Valid" : "Invalid",
+            Advice = ViesResponseMapper.BuildAdvice(result),
+        };
     }
 }
 
-public class ViesValidationResponse
+public class ValidateViesResult
 {
     public Guid ValidationId { get; set; }
-    public string VatNumber { get; set; } = string.Empty;
     public bool IsValid { get; set; }
-    public string CompanyName { get; set; } = string.Empty;
-    public string Address { get; set; } = string.Empty;
-    public string Reason { get; set; } = string.Empty;
-    public string Status { get; set; } = string.Empty;
-    public DateTime RequestedAt { get; set; }
+    public string CountryCode { get; set; } = string.Empty;
+    public string VatNumber { get; set; } = string.Empty;
+    public string? Name { get; set; }
+    public string? Address { get; set; }
+    public string? RequestDate { get; set; }
+    public string? ErrorMessage { get; set; }
+    public string ValidationStatus { get; set; } = string.Empty;
+    public string Advice { get; set; } = string.Empty;
 }

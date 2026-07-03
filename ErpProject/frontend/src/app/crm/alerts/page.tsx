@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
 import PageContainer from '@/components/PageContainer';
+import { parseListResponse } from '@/lib/parseListResponse';
 
 interface Alert {
     id: string;
@@ -33,10 +34,10 @@ export default function AlertsPage() {
         setLoading(true);
         const [r1, r2] = await Promise.all([
             fetch('/api/proxy/crm/alerts'),
-            fetch('/api/proxy/clients'),
+            fetch('/api/proxy/clients?pageSize=500'),
         ]);
         if (r1.ok) setAlerts(await r1.json());
-        if (r2.ok) setClients(await r2.json());
+        if (r2.ok) setClients(parseListResponse<Client>(await r2.json()));
         setLoading(false);
     }, []);
 

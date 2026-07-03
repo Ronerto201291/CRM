@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import PageContainer from '@/components/PageContainer';
+import { parseListResponse } from '@/lib/parseListResponse';
 
 const STAGES = [
     { key: 'New', label: 'Nuevo', color: '#6b7280', bg: '#f3f4f6' },
@@ -21,8 +22,8 @@ export default function LeadsPipelinePage() {
     const [editing, setEditing] = useState<Lead | null>(null);
 
     const load = async () => {
-        const r = await fetch('/api/proxy/leads');
-        if (r.ok) setLeads(await r.json());
+        const r = await fetch('/api/proxy/leads?pageSize=500');
+        if (r.ok) setLeads(parseListResponse<Lead>(await r.json()));
     };
     useEffect(() => { load(); }, []);
 

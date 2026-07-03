@@ -839,14 +839,17 @@ public class NewQuoteVersionHandler : IRequestHandler<NewQuoteVersionCommand, Gu
 // QUERIES
 // ═════════════════════════════════════════════════════════════════════════════
 
-public class GetQuotesHandler : IRequestHandler<GetQuotesQuery, List<QuoteSummaryDto>>
+public class GetQuotesHandler : IRequestHandler<GetQuotesQuery, PaginatedQuotesResult>
 {
     private readonly IBillingDbContext _ctx;
 
     public GetQuotesHandler(IBillingDbContext ctx) => _ctx = ctx;
 
-    public async Task<List<QuoteSummaryDto>> Handle(GetQuotesQuery req, CancellationToken ct)
+    public async Task<PaginatedQuotesResult> Handle(GetQuotesQuery req, CancellationToken ct)
     {
+        var page = Math.Max(1, req.Page);
+        var pageSize = Math.Clamp(req.PageSize, 1, 500);
+
         var q = _ctx.Quotes.AsQueryable();
 
         if (!string.IsNullOrEmpty(req.Status))
@@ -861,13 +864,19 @@ public class GetQuotesHandler : IRequestHandler<GetQuotesQuery, List<QuoteSummar
         if (req.DateTo.HasValue)
             q = q.Where(x => x.IssueDate <= req.DateTo.Value);
 
-        return await q
+        var totalCount = await q.CountAsync(ct);
+
+        var items = await q
             .OrderByDescending(x => x.IssueDate)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(x => new QuoteSummaryDto(
                 x.Id, x.Number, x.Version, x.Status,
                 x.ClientName, x.ClientTaxId,
                 x.IssueDate, x.ValidUntil, x.TotalAmount, x.Currency, x.CreatedAt))
             .ToListAsync(ct);
+
+        return new PaginatedQuotesResult(items, totalCount, page, pageSize);
     }
 }
 

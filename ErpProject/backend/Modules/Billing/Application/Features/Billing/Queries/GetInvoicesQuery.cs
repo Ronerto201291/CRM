@@ -1,4 +1,17 @@
 using Erp.Application.DTOs;
 using MediatR;
+
 namespace Erp.Modules.Billing.Application.Features.Billing.Queries;
-public class GetInvoicesQuery : IRequest<List<InvoiceDto>> { public string? Status { get; set; } }
+
+public record PaginatedInvoicesResult(
+    IReadOnlyList<InvoiceDto> Items,
+    int TotalCount,
+    int Page,
+    int PageSize);
+
+public class GetInvoicesQuery : IRequest<PaginatedInvoicesResult>
+{
+    public string? Status { get; set; }
+    public int Page { get; set; } = 1;
+    public int PageSize { get; set; } = 50;
+}

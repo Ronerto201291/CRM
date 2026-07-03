@@ -13,8 +13,16 @@ public class AccountingController : ControllerBase
     public AccountingController(IMediator mediator) => _mediator = mediator;
 
     [HttpGet("journal")]
-    public async Task<IActionResult> GetJournal([FromQuery] int? year, CancellationToken ct)
-        => Ok(await _mediator.Send(new GetJournalQuery { Year = year }, ct));
+    public async Task<IActionResult> GetJournal(
+        [FromQuery] int? year,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken ct = default)
+    {
+        var result = await _mediator.Send(new GetJournalQuery { Year = year, Page = page, PageSize = pageSize }, ct);
+        Response.Headers["X-Total-Count"] = result.TotalCount.ToString();
+        return Ok(result);
+    }
 
     [HttpGet("balance")]
     public async Task<IActionResult> GetBalance([FromQuery] int? year, CancellationToken ct)

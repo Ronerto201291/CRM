@@ -165,20 +165,20 @@ Desviaciones:
   seis copias solo en `TreasuryController.cs`).
 
 ### 5. Código limpio — "nada de lógica en los controllers"
-**25 de 43 controllers en todo el backend no inyectan `IMediator`/`ISender`**
-(eran 26; `VatController` y `ProrrataController` se corrigieron — ver §4) y
+**5 de 43 controllers en todo el backend no inyectan `IMediator`/`ISender`**
+(eran 26; Treasury #9, AccountingExport #4, Inventory completo, Billing
+`FacturaEController`/`PublicInvoicesController`, Payroll #10, etc.) y
 en su lugar inyectan el DbContext del módulo directamente, con lógica de
 negocio en el método del controller:
-- Accounting: 8 de 16 controllers (`AccountingExportController`,
-  `AeatModelsController`, `AgingController`, `FinancialStatementsController`,
-  `InversionSujetoActivoController`, `IvaManagementController`,
-  `RecargoController`, `ViesController`).
-- Treasury: los 5 controllers del módulo, sin excepción.
-- Payroll: el único controller del módulo.
-- Además: `FacturaEController` y `PublicInvoicesController` (Billing);
-  `AlertsController`, `CrmNotesController`, `LeadsController` (Crm);
-  `LotsController`, `SerialsController`, `ValuationController` (Inventory);
-  `PurchaseOrdersController` (Purchasing); `SalesOrdersController` (Sales).
+- Accounting: 5 de 16 controllers (`AeatModelsController`,
+  `AgingController`, `FinancialStatementsController`,
+  `InversionSujetoActivoController`, `IvaManagementController`) — stubs mock.
+  `AccountingExportController` ✅ (#4); `RecargoController` en #3b; `ViesController` en #5.
+- Treasury: ninguno pendiente (5/5 vía `IMediator`; ver backlog #9).
+- Payroll: `PayrollController` ✅ delgado — solo `IMediator` (#10).
+- Billing: todos los controllers del módulo usan `IMediator` (FacturaE vía
+  `GenerateFacturaEQuery`; API pública vía `GetPublicInvoicesQuery`).
+- Inventory: todos los controllers del módulo usan `IMediator`.
 
 Ejemplo concreto de gravedad: `TreasuryController.cs` implementa un parser
 CSV de extractos bancarios completo, con construcción de entidades EF y
@@ -291,10 +291,10 @@ futuro — antes de dar por cerrado un módulo o una implementación, verificar:
   fuera de su módulo: ambas comprometen la premisa central de "monolito
   modular" (módulos razonablemente independientes) más que cualquier
   problema de un controller aislado.
-- El hallazgo de mayor volumen es el bypass de CQRS en 26/43 controllers —
-  no es un caso aislado sino el patrón dominante en Accounting y Treasury.
-  Cualquier trabajo futuro en esos dos módulos debería migrar el controller
-  tocado a MediatR en vez de añadir más lógica al patrón existente.
+- El hallazgo de mayor volumen histórico fue el bypass de CQRS en controllers
+  (quedan 5/43 sin `IMediator`, todos stubs mock de Accounting). Cualquier
+  trabajo futuro en Accounting debería migrar el controller tocado a MediatR
+  en vez de añadir más lógica al patrón existente.
 - La validación de FluentValidation "muerta" era un riesgo silencioso: el
   código daba la falsa sensación de estar validado (el validator existía,
   compilaba) pero no se ejecutaba en producción (corregido para CRM; ver
@@ -316,27 +316,27 @@ medida que se completa cada uno.
 | 1 | Duplicado VatController/CalculateVatCommand | Accounting | ✅ Corregido |
 | 2 | `ClientHandlers.cs` código muerto usado como ancla de assembly de MediatR | Crm | ✅ Corregido |
 | 3a | Duplicado ProrrataController/CalculateProrrataCommand (+ bug real: contrato no coincidía con el frontend) | Accounting | ✅ Corregido |
-| 3b | `RecargoController` sin `IMediator` (tiene lógica real: queries a `IBillingDbContext`, mapeo Modelo 303 — migración no trivial) | Accounting | Pendiente |
+| 3b | `RecargoController` sin `IMediator` (tiene lógica real: queries a `IBillingDbContext`, mapeo Modelo 303 — migración no trivial) | Accounting | ✅ Corregido |
 | 3c | `AeatModelsController`, `IvaManagementController`, `InversionSujetoActivoController`, `FinancialStatementsController`, `AgingController` sin `IMediator` | Accounting | Deprioritizado — ver nota |
-| 4 | `AccountingExportController` (SRP, 1362 líneas, 6 módulos inyectados) — el motivo estructural está en el ítem 19b: `Accounting.Api` referencia por `ProjectReference` la Application/Domain de otros 4 módulos solo para alimentar este controller | Accounting | Pendiente |
-| 5 | `ViesController` (Accounting) sigue duplicando lo que ya resuelve `Erp.Api/TaxController` | Accounting | Pendiente |
+| 4 | `AccountingExportController` (SRP, ~350 líneas tras extracción) — el motivo estructural del acoplamiento cross-módulo está en el ítem 19b | Accounting | ✅ Corregido — 16/16 rutas vía `IMediator`; controller delgado; `modelo347-aeat-txt` en `ExportModelo347AeatTxtQuery` + `IModelo347Exporter.ExportAeatTxtAsync` |
+| 5 | `ViesController` (Accounting) sigue duplicando lo que ya resuelve `Erp.Api/TaxController` | Accounting | ✅ Corregido |
 | 6 | Validators de FluentValidation nunca registrados por módulo (`AddValidatorsFromAssembly` ausente) | Crm | ✅ Corregido |
 | 7 | N+1 en `CreateGoodsReceiptHandler` / `CreateDeliveryNoteHandler` | Purchasing / Sales | ✅ Corregido |
-| 8 | Paginación ausente en `Get*Query` (CRM, Accounting, Treasury, Billing, Inventory) | Varios | Pendiente |
-| 9 | Los 5 controllers de Treasury sin `IMediator` (incluye parser CSV inline) | Treasury | Pendiente |
-| 10 | Payroll sin capa CQRS/MediatR | Payroll | Pendiente |
-| 11 | `PurchaseOrdersController` / `SalesOrdersController` sin `IMediator` | Purchasing / Sales | Pendiente |
+| 8 | Paginación ausente en `Get*Query` (CRM, Accounting, Treasury, Billing, Inventory) | Varios | ✅ Corregido — CRM, Billing, Inventory, Accounting (`GetJournalQuery`) y Treasury (`GetBankMovementsQuery`, `GetCashEffectsQuery`, `GetPaymentOrdersQuery`) paginados con `X-Total-Count` |
+| 9 | Los 5 controllers de Treasury sin `IMediator` (incluye parser CSV inline) | Treasury | ✅ Corregido — los 5 controllers del módulo delegan en handlers (`TreasureHandlers`, `GuaranteeHandlers`, `FinancingHandlers`, `ConsolidationHandlers`) |
+| 10 | Payroll sin capa CQRS/MediatR | Payroll | ✅ Corregido — `PayrollController` solo `IMediator`; `Features/{Employees,Settlements,Exports}/`; exportes TC1/TC2/RED en `PayrollExportHandlers.cs` |
+| 11 | `PurchaseOrdersController` / `SalesOrdersController` sin `IMediator` | Purchasing / Sales | ✅ Corregido — handlers en `Application/Features/Orders/`; controllers delgados; filtro por tenant en queries |
 | 12 | Sales y Purchasing: un solo assembly, sin frontera de capas real (confirmado: sin violación activa hoy — es un riesgo latente porque nada impide que el próximo cambio la introduzca, al no haber frontera de compilador dentro del módulo) | Purchasing / Sales | Pendiente |
 | 13 | `Erp.Infrastructure` depende de 5 módulos (dirección invertida) — evidencia exacta: `Erp.Infrastructure/Erp.Infrastructure.csproj:5-9` referencia `Modules/{Inventory,Billing,Crm,Accounting,Expenses}/Application` | Core | Pendiente |
 | 14 | Entidades núcleo fuera de su módulo: Inventory (`Product`, `Warehouse`, `Stock`, `StockMovement` en `Erp.Domain/Modules/Inventory/Entities/`) **y Accounting, que es más grave de lo documentado — no son 2 entidades sino 6**: `Account`, `JournalEntry`, `JournalEntryLine`, `FiscalPeriod`, `FixedAsset`, `DeferredEntry`, todas en `Erp.Domain/Entities/Accounting/`, mapeadas por `AccountingDbContext`. Nota positiva verificada: pese a esto, cada módulo migra su propio esquema de forma independiente — no hay historial de migraciones compartido ni conflictivo (10 `DbContext`/carpetas `Migrations` separadas, una por módulo + core) | Inventory, Accounting | Pendiente |
 | 15 | `ConsolidationController.ConsolidateGroup` responde éxito sin consolidar nada; `ConsolidatedFinancialStatements` nunca se escribe | Treasury | Pendiente |
 | 16 | `ExchangeRateRefreshJob` no hace nada nunca: corre fuera de contexto HTTP y `TenantContext.TenantId` siempre es `null` ahí, sin log ni error | Treasury | Pendiente |
-| 17 | `frontend/billing/facturae/page.tsx` — página 100% mock, botones sin `onClick`, mientras el backend (`FacturaEController`) sí es real | Billing (frontend) | Pendiente |
-| 18 | `frontend/accounting/iva-registers/page.tsx` — página 100% mock con cifras inconsistentes entre cabecera y tabla | Accounting (frontend) | Pendiente |
+| 17 | `frontend/billing/facturae/page.tsx` — página 100% mock, botones sin `onClick`, mientras el backend (`FacturaEController`) sí es real | Billing (frontend) | ✅ Corregido |
+| 18 | `frontend/accounting/iva-registers/page.tsx` — página 100% mock con cifras inconsistentes entre cabecera y tabla | Accounting (frontend) | ✅ Corregido — resumen desde `/api/proxy/invoices` y `/api/proxy/expenses/documents`; descarga CSV real vía `libro-iva-emitidas`/`libro-iva-recibidas`; enlace a `/sii` para envío |
 | 19 | `OutboxMessageProcessorJob.cs` — implementación completa y correcta del procesador de Outbox, pero huérfana: nunca se registra, existe un duplicado distinto que sí corre (`OutboxProcessorJob.cs`) | Core | Pendiente |
 | 19a | **Dependencia circular real entre dos módulos**: `Modules/Crm/Api/Erp.Modules.Crm.Api.csproj:15` referencia `Modules/Expenses/Application`, y a la vez `Modules/Expenses/Api/Erp.Modules.Expenses.Api.csproj:15` referencia `Modules/Crm/Application` — el grafo de ensamblados de Crm y Expenses se referencia mutuamente. Un cambio en la capa Application de cualquiera de los dos puede romper el build del otro sin que sea obvio por qué | Crm ↔ Expenses | Pendiente |
 | 19b | `Accounting.Api` referencia por `ProjectReference` directo la Application/Domain de otros 4 módulos (`Erp.Modules.Accounting.Api.csproj:16-20` → Billing, Crm, Expenses y Payroll Application + Payroll Domain), solo para que `AccountingExportController` (ítem 4) pueda inyectar sus 4 `IXxxDbContext` a la vez | Accounting, Billing, Crm, Expenses, Payroll | Pendiente |
-| 19c | Acoplamiento directo sin abstracción compartida, en ambas direcciones hacia Accounting: Treasury inyecta `IAccountingDbContext` en `BankReconciliationService.cs:20,26` y `TreasureHandlers.cs:235,240,262` (lee `JournalEntryLines` directamente); Payroll inyecta la clase concreta `AccountingService` (no una interfaz) en `PayrollController.cs:6,23,25` | Treasury, Payroll, Accounting | Pendiente |
+| 19c | Acoplamiento directo sin abstracción compartida, en ambas direcciones hacia Accounting: Treasury inyecta `IAccountingDbContext` en `BankReconciliationService.cs:20,26` y `TreasureHandlers.cs:235,240,262` (lee `JournalEntryLines` directamente); Payroll inyecta la clase concreta `AccountingService` (no una interfaz) en `FinalizeSettlementHandler` | Treasury, Payroll, Accounting | Pendiente |
 | 19d | `ExpensesController` inyecta `ICrmDbContext` y escribe directamente en `_crmCtx.ActivityLogs` (`Modules/Expenses/Api/Controllers/ExpensesController.cs:3,23,31,72`) — un módulo de negocio escribiendo en la tabla de otro sin pasar por su API/eventos. Contraste positivo ya existente en el propio código: los `EventHandlers` de Inventory y Crm (`ExpenseApprovedInventoryHandler`, `QuoteAcceptedCrmHandler`, etc.) sí reaccionan a eventos de MediatR sin inyectar el DbContext ajeno — ese es el patrón a copiar aquí | Expenses, Crm | Pendiente |
 | 19e | No existe ninguna abstracción `IModule`/self-registro: añadir un módulo 10 exige tocar `Program.cs` a mano en 6 sitios distintos (referencias de proyecto, `using`, `AddApplicationPart`, `Add<Módulo>Infrastructure`, bloque `AddMediatR`, `MigrateAsync`) — nada obliga a no olvidar uno (la ausencia de `AddMediatR` en Payroll, ya documentada arriba, es consecuencia directa de esto). Además, `Modules/Accounting/Application/DependencyInjection.cs` define `AddAccountingModule()` (con su propio `AddMediatR` interno) que **nunca se invoca** — es el único módulo con este archivo y quedó como código muerto cuando `Program.cs` empezó a registrar el `AddMediatR` de Accounting directamente | Todos (Core) | Pendiente |
 | 19f | Inventory usa `API` en vez de `Api` no solo como nombre de carpeta sino en el namespace real compilado: `namespace Erp.Modules.Inventory.API.Controllers` en sus 5 controllers, referenciado explícitamente en `Program.cs:56` (`typeof(Erp.Modules.Inventory.API.Controllers.ProductsController)`) — inconsistente con los otros 8 módulos (`Erp.Modules.<Nombre>.Api.Controllers`) | Inventory | Baja |
@@ -400,8 +400,8 @@ con cita de archivo para cada hallazgo — amplía y sustituye al ítem 37.
 | 43 | 71 de 72 `page.tsx` son Client Components (`"use client"` + `useEffect`+`fetch`) — no se aprovecha ninguna ventaja de Server Components/Server Actions del App Router (fetch en servidor, menos JS al cliente, streaming) | Patrón idéntico en los 9 módulos revisados, p. ej. `sales/orders/page.tsx:24-40`, `treasury/currencies/page.tsx:16-36` | Media (es un cambio de patrón transversal, no un bug puntual) |
 | 44 | Fugas de `any` pese a `strict: true` en `tsconfig.json`: 24 `: any`, 8 `as any`, 11 `any[]` en 19 archivos — incluye un escape-hatch repetido `(lines[i] as any)[key] = val` en 8 formularios de líneas de pedido/factura | `dashboard/page.tsx:12-13`, `expenses/[id]/page.tsx:38`, `billing/quotes/page.tsx:87`, y 7 archivos más con el mismo patrón | Media |
 | 45 | Sin `error.tsx`/`loading.tsx`/`not-found.tsx` en todo `src/app/` (cero archivos) — cada página gestiona error/carga a mano y de forma inconsistente; algunos fetches fallidos fallan en silencio (solo `console.error`), 91 usos de `alert()` nativo para feedback de error/validación | `crm/clients/[id]/page.tsx:38-51` (falla en silencio) vs. `:56-85` (sí muestra error) en la misma página; `accounting/cash-flow/page.tsx:6-14` sin try/catch ni `res.ok` | Media |
-| 46 | **Proxy abierto de facto**: `api/proxy/[...path]/route.ts` define `PROXY_PATHS` como aparente whitelist pero nunca se usa — cualquier request autenticada se reenvía a `${backendUrl}/api/${path}` para cualquier ruta del backend, sin restricción real | `src/app/api/proxy/[...path]/route.ts:7-11` (definido, no usado) | **Alta** |
-| 47 | Bug real en el proxy: en `proxyFetch`, `response` se declara dentro del `try` pero el `catch` la referencia (`response.headers.get(...)`) — si el `fetch` falla (backend caído, DNS), el catch lanza `ReferenceError` en vez de devolver el JSON de error esperado | `src/app/api/proxy/[...path]/route.ts:38-80`, referencia en línea 68 | **Alta** (rompe justo el caso que el catch debía cubrir) |
+| 46 | **Proxy abierto de facto**: `api/proxy/[...path]/route.ts` define `PROXY_PATHS` como aparente whitelist pero nunca se usa — cualquier request autenticada se reenvía a `${backendUrl}/api/${path}` para cualquier ruta del backend, sin restricción real | `src/app/api/proxy/[...path]/route.ts` — ahora `ALLOWED_PATH_PREFIXES` se valida con `isPathAllowed()` antes de reenviar; rutas no listadas devuelven 403 | ✅ Corregido |
+| 47 | Bug real en el proxy: en `proxyFetch`, `response` se declara dentro del `try` pero el `catch` la referencia (`response.headers.get(...)`) — si el `fetch` falla (backend caído, DNS), el catch lanza `ReferenceError` en vez de devolver el JSON de error esperado | `src/app/api/proxy/[...path]/route.ts` — el `catch` ya no referencia `response`; devuelve 502 con mensaje de conexión | ✅ Corregido |
 | 48 | Accesibilidad mínima: 0 atributos `aria-*` en todo `src/`, 0 `role="dialog"` en los 8+ modales existentes (sin focus trap ni cierre con Escape), 0 `htmlFor` en 51 archivos que usan `<label>` (sin asociación programática label↔input) | `crm/prospects/page.tsx:272`, `crm/leads/page.tsx:134`, `crm/clients/[id]/page.tsx:125-139` | Media |
 | 49 | Sin caché ni estado compartido: existen dos abstracciones de fetch ya construidas (`hooks/useApi.ts`, `lib/api.ts`) con 0 usos — cada página hace su propio `fetch` inline; 6 páginas distintas piden `/api/proxy/clients` completo de forma independiente en cada navegación | `hooks/useApi.ts`, `lib/api.ts` (código muerto); `crm/page.tsx`, `crm/alerts`, `billing/quotes`, etc. | Media |
 | 50 | 0 usos de `useMemo`/`React.memo` en todo `app/` — p. ej. `crm/page.tsx` (316 líneas) refiltra 3 listas completas en cada pulsación de tecla del buscador, sin memoización | `crm/page.tsx:77-79,91` | Baja |
@@ -575,9 +575,9 @@ Próximos pasos; el resto son hallazgos nuevos de este barrido, añadidos como
 | Módulo | Qué aparenta hacer | Qué hace en realidad | Ref. |
 |---|---|---|---|
 | Accounting | `AeatModelsController`, `IvaManagementController`, `InversionSujetoActivoController`, `FinancialStatementsController`, `AgingController` calculan/declaran modelos fiscales reales | Devuelven cifras fijas hardcodeadas, sin persistencia ni cálculo real | ADR-0006, backlog #3c |
-| Accounting | `ViesController` valida NIF-IVA contra el registro VIES de la UE | Diccionario estático de 4 NIFs de prueba; el válido de verdad está en `Erp.Api/TaxController` | ADR-0006/0013, backlog #5 |
-| Accounting (frontend) | `iva-registers/page.tsx` muestra libros de IVA reales exportables a SII | Página 100% estática; cifras de cabecera y de la tabla ni siquiera coinciden entre sí; botones "Descargar .TXT"/"Enviar a SII" sin `onClick` | **Nuevo → backlog #18** |
-| Billing (frontend) | `billing/facturae/page.tsx` gestiona documentos FacturaE reales (firmar, enviar a VERI\*FACTU) | Página 100% estática con array hardcodeado; los 5 botones no tienen `onClick`. El backend (`FacturaEController`) sí es real — es solo el frontend el que está desconectado | **Nuevo → backlog #17** |
+| Accounting | `ViesController` valida NIF-IVA contra el registro VIES de la UE | ✅ Corregido: despacha `ValidateViesCommand` vía `IMediator`, que invoca el mismo `IViesService` SOAP que `TaxController`; el texto `Advice` se centraliza en `ViesResponseMapper` | ADR-0006/0013, backlog #5 |
+| Accounting (frontend) | `iva-registers/page.tsx` muestra libros de IVA reales exportables a SII | ✅ Corregido: carga resumen del ejercicio desde facturas/gastos reales; botones descargan CSV vía `/api/proxy/accounting/export/libro-iva-{emitidas,recibidas}`; enlace a `/sii` | backlog #18 |
+| Billing (frontend) | `billing/facturae/page.tsx` gestiona documentos FacturaE reales (firmar, enviar a VERI\*FACTU) | ✅ Corregido: lista facturas bloqueadas vía `/api/proxy/invoices`, descarga XML (`/api/proxy/v1/billing/facturae/{id}`) y PDF reales; enlace a `/verifactu` para envío por período | backlog #17 |
 | Treasury | `ConsolidationController.ConsolidateGroup` consolida estados financieros de un grupo empresarial | Solo comprueba que el grupo existe y responde `"Consolidated"`; no agrega nada. `ConsolidatedFinancialStatements` (la tabla que lee `GetFinancialStatements`) nunca se escribe en ningún sitio del código — es una tabla de solo lectura que siempre estará vacía | **Nuevo → backlog #15** |
 | Treasury | `ExchangeRateRefreshJob` actualiza tipos de cambio a diario desde el BCE (`EcbExchangeRateProvider`, que sí está bien implementado) | El job corre como `BackgroundService` fuera de contexto HTTP, así que `TenantContext.TenantId` siempre es `null` ahí (solo lo puebla `TenantResolverMiddleware` por request) — el job hace no-op silencioso todos los días, para siempre, sin log ni error visible | **Nuevo → backlog #16** |
 | Automatización | Motor de reglas evalúa condiciones y ejecuta acciones automáticas | `CreateRuleCommand` nunca persiste, el frontend (`settings/automation`) es JSX estático sin `fetch`, y el único job real (`RuleEvaluatorJob`) nunca se registra en Hangfire | ADR-0015, backlog (ver ADR-0015) |

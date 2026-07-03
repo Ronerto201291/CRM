@@ -15,8 +15,21 @@ public class ClientsController : ControllerBase
     public ClientsController(IMediator mediator) => _mediator = mediator;
 
     [HttpGet]
-    public async Task<IActionResult> GetAll([FromQuery] string? search)
-        => Ok(await _mediator.Send(new GetClientsQuery { SearchTerm = search }));
+    public async Task<IActionResult> GetAll(
+        [FromQuery] string? search,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken ct = default)
+    {
+        var result = await _mediator.Send(new GetClientsQuery
+        {
+            SearchTerm = search,
+            Page = page,
+            PageSize = pageSize,
+        }, ct);
+        Response.Headers["X-Total-Count"] = result.TotalCount.ToString();
+        return Ok(result);
+    }
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateClientCommand command)

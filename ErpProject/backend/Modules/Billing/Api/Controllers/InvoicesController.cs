@@ -33,8 +33,21 @@ public class InvoicesController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetAll([FromQuery] string? status)
-        => Ok(await _mediator.Send(new GetInvoicesQuery { Status = status }));
+    public async Task<IActionResult> GetAll(
+        [FromQuery] string? status,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken ct = default)
+    {
+        var result = await _mediator.Send(new GetInvoicesQuery
+        {
+            Status = status,
+            Page = page,
+            PageSize = pageSize,
+        }, ct);
+        Response.Headers["X-Total-Count"] = result.TotalCount.ToString();
+        return Ok(result);
+    }
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateInvoiceCommand cmd, CancellationToken ct)

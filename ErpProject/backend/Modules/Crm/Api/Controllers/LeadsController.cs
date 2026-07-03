@@ -1,6 +1,9 @@
 using Erp.Application.Common.Interfaces;
+using Erp.Modules.Crm.Application.Features.Crm.Commands;
+using Erp.Modules.Crm.Application.Features.Crm.Queries;
 using Erp.Modules.Crm.Application.Interfaces;
 using Erp.Modules.Crm.Domain.Entities;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -10,36 +13,34 @@ namespace Erp.Modules.Crm.Api.Controllers;
 [ApiController, Route("api/[controller]"), Authorize]
 public class LeadsController : ControllerBase
 {
+    private readonly IMediator _mediator;
     private readonly ICrmDbContext _crmCtx;
     private readonly ITenantContext _tenantContext;
 
-    public LeadsController(ICrmDbContext crmCtx, ITenantContext tenantContext)
+    public LeadsController(IMediator mediator, ICrmDbContext crmCtx, ITenantContext tenantContext)
     {
+        _mediator = mediator;
         _crmCtx = crmCtx;
         _tenantContext = tenantContext;
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetAll([FromQuery] string? search, [FromQuery] string? status, CancellationToken ct)
+    public async Task<IActionResult> GetAll(
+        [FromQuery] string? search,
+        [FromQuery] string? status,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken ct = default)
     {
-        var query = _crmCtx.Leads.AsQueryable();
-
-        if (!string.IsNullOrWhiteSpace(search))
-            query = query.Where(l => l.Name.Contains(search) || l.Email.Contains(search) || l.Notes.Contains(search) || l.TaxId.Contains(search));
-
-        if (!string.IsNullOrWhiteSpace(status))
-            query = query.Where(l => l.Status == status);
-
-        var leads = await query
-            .OrderByDescending(l => l.CreatedAt)
-            .Select(l => new
-            {
-                l.Id, l.Name, l.Email, l.Phone, l.TaxId, l.Address,
-                l.Status, l.Source, l.Notes, l.ConvertedToClientId, l.CreatedAt
-            })
-            .ToListAsync(ct);
-
-        return Ok(leads);
+        var result = await _mediator.Send(new GetLeadsQuery
+        {
+            Search = search,
+            Status = status,
+            Page = page,
+            PageSize = pageSize,
+        }, ct);
+        Response.Headers["X-Total-Count"] = result.TotalCount.ToString();
+        return Ok(result);
     }
 
     [HttpGet("{id:guid}")]

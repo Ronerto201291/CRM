@@ -65,9 +65,10 @@ namespace Erp.Api.Controllers
         [HttpGet("invoices")]
         [ProducesResponseType(typeof(List<InvoiceDto>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-        public async Task<IActionResult> GetInvoices([FromQuery] string? status = null)
+        public async Task<IActionResult> GetInvoices([FromQuery] string? status = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 50)
         {
-            var result = await _mediator.Send(new GetInvoicesQuery { Status = status });
+            var result = await _mediator.Send(new GetInvoicesQuery { Status = status, Page = page, PageSize = pageSize });
+            Response.Headers["X-Total-Count"] = result.TotalCount.ToString();
             return Ok(result);
         }
 
@@ -79,8 +80,8 @@ namespace Erp.Api.Controllers
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetInvoice(Guid id)
         {
-            var list = await _mediator.Send(new GetInvoicesQuery());
-            var result = list.FirstOrDefault(i => i.Id == id);
+            var list = await _mediator.Send(new GetInvoicesQuery { Page = 1, PageSize = 500 });
+            var result = list.Items.FirstOrDefault(i => i.Id == id);
             if (result == null)
                 return NotFound(new { error = "Factura no encontrada" });
             return Ok(result);
@@ -145,8 +146,8 @@ namespace Erp.Api.Controllers
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetClient(Guid id)
         {
-            var list = await _mediator.Send(new GetClientsQuery());
-            var result = list.FirstOrDefault(c => c.Id == id);
+            var list = await _mediator.Send(new GetClientsQuery { PageSize = 500 });
+            var result = list.Items.FirstOrDefault(c => c.Id == id);
             if (result == null)
                 return NotFound(new { error = "Cliente no encontrado" });
             return Ok(result);

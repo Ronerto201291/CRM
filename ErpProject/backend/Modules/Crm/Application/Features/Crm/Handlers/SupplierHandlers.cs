@@ -10,25 +10,34 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Erp.Modules.Crm.Application.Features.Crm.Handlers;
 
-public class GetSuppliersHandler : IRequestHandler<GetSuppliersQuery, List<SupplierDto>>
+public class GetSuppliersHandler : IRequestHandler<GetSuppliersQuery, PaginatedSuppliersResult>
 {
     private readonly ICrmDbContext _ctx;
     public GetSuppliersHandler(ICrmDbContext ctx) => _ctx = ctx;
 
-    public async Task<List<SupplierDto>> Handle(GetSuppliersQuery request, CancellationToken ct)
+    public async Task<PaginatedSuppliersResult> Handle(GetSuppliersQuery request, CancellationToken ct)
     {
+        var page = Math.Max(1, request.Page);
+        var pageSize = Math.Clamp(request.PageSize, 1, 500);
+
         var query = _ctx.Suppliers.AsQueryable();
         if (!string.IsNullOrWhiteSpace(request.Search))
             query = query.Where(s => s.Name.Contains(request.Search) || s.TaxId.Contains(request.Search));
 
-        return await query
+        var totalCount = await query.CountAsync(ct);
+
+        var items = await query
             .OrderBy(s => s.Name)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(s => new SupplierDto
             {
                 Id = s.Id, Name = s.Name, TaxId = s.TaxId, Email = s.Email,
                 Phone = s.Phone, Address = s.Address, IsActive = s.IsActive, CreatedAt = s.CreatedAt
             })
             .ToListAsync(ct);
+
+        return new PaginatedSuppliersResult(items, totalCount, page, pageSize);
     }
 }
 

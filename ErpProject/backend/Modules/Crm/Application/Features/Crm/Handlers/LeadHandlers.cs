@@ -10,28 +10,43 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Erp.Modules.Crm.Application.Features.Crm.Handlers;
 
-public class GetLeadsHandler : IRequestHandler<GetLeadsQuery, List<LeadDto>>
+public class GetLeadsHandler : IRequestHandler<GetLeadsQuery, PaginatedLeadsResult>
 {
     private readonly ICrmDbContext _ctx;
     public GetLeadsHandler(ICrmDbContext ctx) => _ctx = ctx;
 
-    public async Task<List<LeadDto>> Handle(GetLeadsQuery request, CancellationToken ct)
+    public async Task<PaginatedLeadsResult> Handle(GetLeadsQuery request, CancellationToken ct)
     {
+        var page = Math.Max(1, request.Page);
+        var pageSize = Math.Clamp(request.PageSize, 1, 500);
+
         var query = _ctx.Leads.AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(request.Search))
             query = query.Where(l => l.Name.Contains(request.Search)
                                   || l.Email.Contains(request.Search)
-                                  || l.Notes.Contains(request.Search));
+                                  || l.Notes.Contains(request.Search)
+                                  || l.TaxId.Contains(request.Search));
 
-        return await query
+        if (!string.IsNullOrWhiteSpace(request.Status))
+            query = query.Where(l => l.Status == request.Status);
+
+        var totalCount = await query.CountAsync(ct);
+
+        var items = await query
             .OrderByDescending(l => l.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(l => new LeadDto
             {
                 Id = l.Id, Name = l.Name, Email = l.Email, Phone = l.Phone,
-                Status = l.Status, Source = l.Source, Notes = l.Notes, CreatedAt = l.CreatedAt
+                TaxId = l.TaxId, Address = l.Address,
+                Status = l.Status, Source = l.Source, Notes = l.Notes,
+                ConvertedToClientId = l.ConvertedToClientId, CreatedAt = l.CreatedAt
             })
             .ToListAsync(ct);
+
+        return new PaginatedLeadsResult(items, totalCount, page, pageSize);
     }
 }
 
@@ -47,7 +62,9 @@ public class GetLeadByIdHandler : IRequestHandler<GetLeadByIdQuery, LeadDto?>
             .Select(l => new LeadDto
             {
                 Id = l.Id, Name = l.Name, Email = l.Email, Phone = l.Phone,
-                Status = l.Status, Source = l.Source, Notes = l.Notes, CreatedAt = l.CreatedAt
+                TaxId = l.TaxId, Address = l.Address,
+                Status = l.Status, Source = l.Source, Notes = l.Notes,
+                ConvertedToClientId = l.ConvertedToClientId, CreatedAt = l.CreatedAt
             })
             .FirstOrDefaultAsync(ct);
     }

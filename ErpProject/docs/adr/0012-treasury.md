@@ -28,32 +28,40 @@ entidades de consolidación `ConsolidationGroups`/`SubsidiaryCompanies`/
 
 Cinco controladores en `Api/Controllers/`:
 - **`TreasuryController`** (`api/treasury`) — el núcleo operativo: cuentas
-  bancarias (`bank-accounts`), movimientos con filtros por fecha/estado de
-  conciliación, importación de extracto CSV (`POST
+  bancarias (`bank-accounts`), movimientos paginados (`page`/`pageSize`,
+  `X-Total-Count`), importación de extracto CSV (`POST
   bank-accounts/{id}/import`, formato `Fecha,Importe,Concepto,Referencia`),
-  conciliación automática (`POST bank-accounts/{id}/reconcile`, delega en
-  `BankReconciliationService`), efectos comerciales (`effects`, con cambio de
-  estado vía `PATCH effects/{id}/status`), órdenes de pago (`payment-orders`)
-  y previsión de caja (`forecasts`, filtrable por año/mes).
+  conciliación automática (`POST bank-accounts/{id}/reconcile`, vía
+  `ReconcileBankAccountCommand`), efectos comerciales paginados (`effects`),
+  órdenes de pago paginadas (`payment-orders`) y previsión de caja
+  (`forecasts`, filtrable por año/mes). **Corregido (backlog #9):** controller
+  delgado vía `IMediator`; handlers en
+  `Application/Features/Treasury/Handlers/TreasureHandlers.cs`.
 - **`CurrenciesController`** (`api/v1/treasury/currencies`) — CRUD de
   divisas por empresa, tipos de cambio (`rates`) y conversión (`POST
-  exchange`, con `IExchangeRateService` para tasa automática o cálculo manual
-  a partir del `ExchangeRate` guardado).
+  exchange`). ✅ Migrado a CQRS (backlog #9): despacha `GetCurrenciesQuery`,
+  `CreateCurrencyCommand`, `UpdateCurrencyRateCommand`, `DeleteCurrencyCommand`,
+  `GetCurrencyRatesQuery` y `ExchangeCurrencyCommand` vía `IMediator`
+  (`Application/Features/Currencies/CurrencyHandlers.cs`). `IExchangeRateService`
+  movido a `Application/Interfaces/` (antes definido en Infrastructure).
 - **`FinancingController`** (`api/v1/treasury/financing`) — confirming
-  (anticipo a proveedores, `AdvanceAmount = InvoiceAmount * AdvancePercentage
-  / 100`), factoring (anticipo de cobro a clientes, con/sin recurso), y
-  líneas de crédito (`credit-lines`), cada una con endpoint de pago/alta
-  independiente.
+  (anticipo a proveedores), factoring (anticipo de cobro a clientes) y
+  líneas de crédito (`credit-lines`). **Corregido (backlog #9):** controller
+  delgado vía `IMediator`; handlers en
+  `Application/Features/Financing/FinancingHandlers.cs`.
 - **`GuaranteesController`** (`api/v1/treasury/guarantees`) — avales
   genéricos (con reclamación `claim` y liberación `release`), colateral
   (`collateral`, con ratio LTV) y avales bancarios específicos
-  (`bank-guarantees`).
+  (`bank-guarantees`). **Corregido (backlog #9):** controller delgado vía
+  `IMediator`; handlers en `Application/Features/Guarantees/GuaranteeHandlers.cs`.
 - **`ConsolidationController`** (`api/v1/treasury/consolidation`) — grupos de
   consolidación, filiales (`subsidiaries` con `OwnershipPercentage`/
   `VotingPercentage`/`ConsolidationMethod`), estados financieros consolidados,
   transacciones intercompañía y su eliminación (`POST
   {groupId}/eliminate-intercompany`, marca `IsEliminated=true` en bloque vía
-  `ExecuteUpdateAsync`). El endpoint `POST {groupId}/consolidate` valida que
+  `ExecuteUpdateAsync`). **Corregido (backlog #9):** controller delgado vía
+  `IMediator`; handlers en `Application/Features/Consolidation/ConsolidationHandlers.cs`.
+  El endpoint `POST {groupId}/consolidate` valida que
   el grupo exista pero solo devuelve un estado `"Consolidated"` con timestamp,
   sin generar aún estados financieros reales — apunta a lógica de
   consolidación pendiente de completar.
@@ -146,13 +154,9 @@ contabilidad:
 ## Evaluación de calidad arquitectónica
 > Metodología completa y hallazgos transversales en `ADR-0018`.
 
-Los 5 controllers de Treasury, sin excepción, bypasean MediatR: inyectan
-`ITreasuryDbContext` directamente, con lógica de negocio inline —
-`TreasuryController.cs` incluye un parser CSV completo de extractos
-bancarios (construcción de entidades EF y `SaveChangesAsync`) dentro de la
-acción del controller. El guard clause de `tenantId` está copy-pegado seis
-veces solo en ese archivo en vez de centralizarse. `ITreasuryDbContext`
-expone 20 DbSets (ISP). La dependencia de `BankReconciliationService` sobre
+Los cinco controllers de Treasury delegan en `IMediator` (backlog #9
+completado). `ITreasuryDbContext` expone 20 DbSets (ISP). La dependencia de
+`BankReconciliationService` / `ReconcileBankAccountHandler` sobre
 `IAccountingDbContext` (ver Relación con otros módulos) es acceso directo a
 otro módulo, no vía evento — acoplamiento real, no solo de lectura trivial.
 

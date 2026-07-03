@@ -2,6 +2,7 @@
 
 import React, { useState, useCallback, useEffect } from "react";
 import PageContainer from "@/components/PageContainer";
+import { parseListResponse } from "@/lib/parseListResponse";
 
 interface Client {
     id: string;
@@ -33,9 +34,9 @@ export default function NewSalesOrderPage() {
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
-        fetch('/api/proxy/clients')
-            .then(r => r.ok ? r.json() : [])
-            .then(data => setClients(Array.isArray(data) ? data : (data.items ?? [])))
+        fetch('/api/proxy/clients?pageSize=500')
+            .then(r => r.ok ? r.json() : { items: [] })
+            .then(data => setClients(parseListResponse<Client>(data)))
             .catch(() => {});
     }, []);
 

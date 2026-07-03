@@ -37,7 +37,9 @@ Seis controllers en `backend/Modules/Inventory/API/Controllers/`:
 
 - **`ProductsController`** (`api/inventory/products`, `[Authorize,
   RequiredModule("Inventory")]`) — CRUD de productos vía MediatR:
-  `GET /` (búsqueda/filtrado por `search`, `active`, `type`),
+  `GET /` (búsqueda/filtrado por `search`, `active`, `type`; **paginado
+  backlog #8:** `page`/`pageSize`, header `X-Total-Count`, respuesta
+  `{ items, totalCount, page, pageSize }`),
   `GET /{id}`, `POST /` (`CreateProductCommand`),
   `PUT /{id}` (`UpdateProductCommand`),
   `PATCH /{id}/activate` (`SetProductActiveCommand`),
@@ -53,17 +55,23 @@ Seis controllers en `backend/Modules/Inventory/API/Controllers/`:
   `GET /api/inventory/movements` (histórico paginado de movimientos, con
   `X-Total-Count`), y `POST /adjustment` (`AdjustStockCommand`, ajuste
   manual de stock).
-- **`LotsController`**, **`SerialsController`**, **`ValuationController`**
-  (rutas versionadas `api/v{version:apiVersion}/inventory/...`, `1.0`) —
-  a diferencia de los tres controllers anteriores, **no usan MediatR ni
-  CQRS**: acceden directamente a `IInventoryDbContext` desde el propio
-  controller (CRUD de `Lot` y `SerialNumber`, y cálculo de valoración
-  bajo demanda en `ValuationController.Calculate`). Tampoco llevan
-  `[Authorize]` ni `[RequiredModule]` explícitos, a diferencia del resto.
+- **`LotsController`** (ruta versionada `api/v{version:apiVersion}/inventory/lots`,
+  `1.0`) — CRUD de `Lot` vía MediatR (`LotCommands`/`LotQueries`/`LotHandlers`).
+- **`SerialsController`** (ruta versionada `api/v{version:apiVersion}/inventory/serials`,
+  `1.0`) — CRUD de `SerialNumber` + `PUT .../status` vía MediatR
+  (`SerialCommands`/`SerialQueries`/`SerialHandlers`).
+- **`ValuationController`** (ruta versionada `api/v{version:apiVersion}/inventory/valuation`,
+  `1.0`) — valoración por producto vía `GetInventoryValuationQuery`/`ValuationHandlers`
+  (estrategia PMP/FIFO; método por query o `Inventory:ValuationMethod` en config).
+  Los tres controllers versionados no llevan `[Authorize]` ni `[RequiredModule]`
+  explícitos, a diferencia de Products/Warehouses/Stock.
 
 CQRS (`backend/Modules/Inventory/Application/Features/Inventory/`):
-`Commands/`, `Queries/` y `Handlers/` para `Product*`, `Warehouse*` y
-`Stock*` (`ProductCommands.cs`/`ProductHandlers.cs`/`ProductQueries.cs`,
+`Commands/`, `Queries/` y `Handlers/` para `Product*`, `Warehouse*`,
+`Stock*`, `Lot*` y `Serial*`/`Valuation*` (`ProductCommands.cs`/`ProductHandlers.cs`/`ProductQueries.cs`,
+`LotCommands.cs`/`LotHandlers.cs`/`LotQueries.cs`,
+`SerialCommands.cs`/`SerialHandlers.cs`/`SerialQueries.cs`,
+`ValuationQueries.cs`/`ValuationHandlers.cs`,
 etc.), todos implementados como `IRequest`/`IRequestHandler` de MediatR
 sobre `IInventoryDbContext`. No se han encontrado `FluentValidation`
 validators específicos del módulo (`Application/Validators/` no existe);
@@ -259,13 +267,12 @@ Entrada de stock al aprobar un gasto de compra (Expenses → Inventory):
   entidades a `backend/Modules/Inventory/Domain/Entities/` en una futura
   limpieza (cambio mecánico: mismo namespace, solo cambia la ruta física).
 - **Inconsistencia interna de estilo entre controllers**: `Products`,
-  `Warehouses` y `Stock` usan CQRS/MediatR, rutas sin versionar
-  (`api/inventory/...`) y `[Authorize, RequiredModule("Inventory")]`; en
-  cambio `Lots`, `Serials` y `Valuation` acceden a `IInventoryDbContext`
-  directamente desde el controller, usan rutas versionadas
-  (`api/v{version}/inventory/...`) y no llevan esos atributos de
-  autorización explícitos — a confirmar si hay autorización global a nivel
-  de pipeline que los cubra, porque a nivel de controller no es evidente.
+  `Warehouses`, `Stock`, `Lots`, `Serials` y `Valuation` usan CQRS/MediatR;
+  `Products`/`Warehouses`/`Stock` usan rutas sin versionar
+  (`api/inventory/...`) y `[Authorize, RequiredModule("Inventory")]`; los
+  tres controllers versionados (`Lots`/`Serials`/`Valuation`) usan
+  `api/v{version}/inventory/...` y no llevan esos atributos de autorización
+  explícitos — a confirmar si hay autorización global a nivel de pipeline.
 - **Integraciones cruzadas incompletas**: ni Purchasing (recepción de
   mercancía) ni Sales (entrega/albarán) mueven stock hoy; el movimiento de
   stock depende de que se apruebe una factura de venta (Billing) o un gasto

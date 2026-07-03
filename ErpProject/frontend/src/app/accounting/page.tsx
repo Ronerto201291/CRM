@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import PageContainer from '@/components/PageContainer';
+import { parseListResponse } from '@/lib/parseListResponse';
 
 type Tab = 'diario' | 'balance' | 'iva' | 'liquidacion';
 
@@ -22,7 +23,7 @@ export default function AccountingPage() {
     const year = new Date().getFullYear();
 
     useEffect(() => {
-        fetch(`/api/proxy/accounting/journal?year=${year}`).then(r => r.json()).then(setJournal).catch(() => { });
+        fetch(`/api/proxy/accounting/journal?year=${year}&pageSize=500`).then(r => r.json()).then(d => setJournal(parseListResponse<JournalEntry>(d))).catch(() => { });
         fetch(`/api/proxy/accounting/balance?year=${year}`).then(r => r.json()).then(setBalance).catch(() => { });
         fetch(`/api/proxy/accounting/iva-soportado?year=${year}`).then(r => r.json()).then(setIvaSoportado).catch(() => { });
         fetch(`/api/proxy/accounting/iva-repercutido?year=${year}`).then(r => r.json()).then(setIvaRepercutido).catch(() => { });

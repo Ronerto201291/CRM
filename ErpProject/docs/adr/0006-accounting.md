@@ -38,12 +38,20 @@ expone, entre otros, `Accounts`, `JournalEntries`, `JournalEntryLines`,
 Los 16 controladores de `Api/Controllers/` se agrupan así:
 
 **Libro diario, cierre y exportación fiscal (implementación real vía MediatR/EF Core):**
-- `AccountingController` (`api/accounting`) — diario (`journal`), balance de
+- `AccountingController` (`api/accounting`) — diario (`journal`, paginado:
+  `page`/`pageSize`, respuesta `{ items, totalCount, page, pageSize }` +
+  header `X-Total-Count`), balance de
   sumas y saldos, IVA soportado/repercutido, liquidación IVA, PyG, mayor por
   cuenta, y cierre contable (`GET/POST api/accounting/cierre`) vía
   `CloseFiscalYearCommand`.
-- `AccountingExportController` (`api/accounting/export`, 1362 líneas) — el
-  controlador más grande del módulo. Genera de forma real, leyendo datos de
+- `AccountingExportController` (`api/accounting/export`, ~350 líneas tras
+  extracción) — **✅ Corregido (backlog #4):** las 16 rutas delegan en
+  `IMediator` (`Application/Features/Export/` + readers/exporters en
+  Infrastructure). Incluye libros IVA, `libro-diario`, modelos 111/130/190,
+  200/202/303/347/349/390 (CSV, JSON, XML y TXT AEAT de `modelo347-aeat-txt`
+  vía `ExportModelo347AeatTxtQuery` + `IModelo347Exporter.ExportAeatTxtAsync`).
+  El controller solo inyecta `IMediator` y delega en `FileFiscal`.
+  Genera de forma real, leyendo datos de
   `IAccountingDbContext`, `IExpensesDbContext`, `IApplicationDbContext`,
   `IBillingDbContext`, `ICrmDbContext` e `IPayrollDbContext`: Libro Diario CSV,
   Modelo 303 (CSV y JSON estructurado en `api/accounting/modelo-303`, y XML
@@ -75,21 +83,29 @@ Los 16 controladores de `Api/Controllers/` se agrupan así:
   inverso a cuenta 795 (Exceso de provisiones).
 
 **IVA, modelos AEAT y fiscalidad especial (mayoritariamente stubs/mock):**
-`AeatModelsController`, `ViesController`, `RecargoController` e
+`AeatModelsController` e
 `IvaManagementController`/`InversionSujetoActivoController` (rutas bajo
-`api/v1/accounting/{aeat,vies,recargo,iva,isp}`) exponen endpoints de
+`api/v1/accounting/{aeat,iva,isp}`) exponen endpoints de
 cálculo/consulta, pero la mayoría **devuelven datos simulados hardcodeados**
-(`Guid.NewGuid()`, importes fijos, un diccionario VIES estático con 4 NIFs de
-prueba) en lugar de persistir o leer del DbContext — son claramente
-placeholders pendientes de conectar a datos reales. La excepción parcial es
-`RecargoController`, cuyo `GetAll`/`GetById`/`modelo303` sí consultan
-`IBillingDbContext.Invoices` reales filtrando por `SurchargeRate > 0`.
+(`Guid.NewGuid()`, importes fijos) en lugar de persistir o leer del DbContext —
+son claramente placeholders pendientes de conectar a datos reales.
+`ViesController` (`api/v1/accounting/vies`) despacha `ValidateViesCommand` vía
+`IMediator`, invocando el mismo `IViesService` SOAP que `TaxController` y
+registrando la consulta en `IntraEuOperations` (ver Evaluación de calidad
+arquitectónica).
+`RecargoController` (`api/v1/accounting/recargo`) despacha
+`GetRecargosQuery`/`GetRecargoByIdQuery`/`CreateRecargoCommand`/
+`GenerateRecargoModelo303Command` vía `IMediator` (controller delgado, ver
+Evaluación de calidad arquitectónica); `GetAll`/`GetById`/`modelo303` consultan
+`IBillingDbContext.Invoices` reales filtrando por `SurchargeRate > 0`, mientras
+que `Create` sigue siendo un stub sin persistencia (igual que antes de la
+migración a CQRS).
 `VatController.CalculateVat` y `ProrrataController.CalculateProrrata` dejaron
 de ser mock (ver Evaluación de calidad arquitectónica más abajo); `VatController.declare/modelo330`
-sigue siendo un stub. El endpoint real y fiable de
-validación VIES está en `Erp.Api/Controllers/TaxController.cs`
-(`api/tax/vies/validate`, ver ADR-0013), no en `ViesController` del módulo
-Accounting. `FinancialStatementsController` (`cash-flow`, `equity`) y
+sigue siendo un stub. Validación VIES real disponible en dos rutas equivalentes:
+`TaxController` (`api/tax/vies/validate`, ver ADR-0013) y `ViesController`
+(`api/v1/accounting/vies/validate`, con persistencia en `IntraEuOperations`).
+`FinancialStatementsController` (`cash-flow`, `equity`) y
 `AgingController` (`receivables`, `payables`) también devuelven datos fijos
 de ejemplo.
 
@@ -165,13 +181,16 @@ dominio, sin intervención manual):
 ## Evaluación de calidad arquitectónica
 > Metodología completa y hallazgos transversales en `ADR-0018`.
 
-Este es el módulo con más incumplimientos del checklist: `AccountingExportController.cs`
-(1362 líneas, 19 endpoints, inyecta contexts de 6 módulos) es una violación
-clara de SRP; `IAccountingDbContext` expone 29 DbSets (ISP, ver
-`GetFiscalPeriodsHandler` que solo usa uno); y 9 de sus 16 controllers todavía
+Este es el módulo con más incumplimientos históricos del checklist:
+`IAccountingDbContext` expone 29 DbSets (ISP, ver
+`GetFiscalPeriodsHandler` que solo usa uno); y 5 de sus 16 controllers todavía
 no usan `IMediator` — tienen lógica de negocio inline (los ya documentados
-como mock: AeatModels, Vies, IvaManagement, InversionSujetoActivo, Prorrata,
-Recargo, FinancialStatements, Aging, más `AccountingExportController`).
+como mock: AeatModels, IvaManagement, InversionSujetoActivo,
+FinancialStatements, Aging).
+
+**Corregido (backlog #4):** `AccountingExportController` (~350 líneas, 16 rutas)
+delega todas las exportaciones en `IMediator` + exporters en Infrastructure;
+ya no inyecta DbContexts cross-módulo ni contiene transformaciones inline.
 
 **Corregido:** `VatController.cs` duplicaba tasas/cálculo de IVA que ya
 existían, correctamente, en `CalculateVatCommand.cs` — el mismo patrón que ya
@@ -184,6 +203,25 @@ como campo del body (el cliente podía enviar cualquier tenant) y ahora lo
 resuelve del `ITenantContext` del handler, igual que el resto de comandos de
 Accounting. `VatController.DeclareModelo330` sigue siendo un stub sin tocar.
 
+**Corregido:** `RecargoController` inyectaba `IBillingDbContext` directamente
+con toda la lógica inline (queries a facturas con `SurchargeRate > 0`, agrupación
+Modelo 303). Ahora despacha `GetRecargosQuery`, `GetRecargoByIdQuery`,
+`CreateRecargoCommand` y `GenerateRecargoModelo303Command` vía `IMediator`
+(`Application/Features/Recargo/RecargoHandlers.cs`). El frontend
+(`frontend/src/app/accounting/recargo/page.tsx`) dejó de llamar a
+`/api/v1/accounting/recargo` (ruta inexistente en Next.js) y usa
+`/api/proxy/v1/accounting/recargo` con el contrato real (`year`/`q` en GET,
+`supplierVat`/`baseAmount`/`rechargeRate` en POST).
+
+**Corregido:** `ViesController` tenía un diccionario estático de 4 NIFs de
+prueba mientras `TaxController` ya usaba `IViesService` (SOAP VIES real). Ahora
+`ViesController` despacha `ValidateViesCommand` vía `IMediator`, que invoca el
+mismo `IViesService` y persiste la consulta en `IntraEuOperations`; el texto
+`Advice` se centraliza en `Erp.Application/Common/ViesResponseMapper.cs` (también
+usado por `TaxController`). El frontend
+(`frontend/src/app/accounting/vies/page.tsx`) usa
+`/api/proxy/v1/accounting/vies/validate` con contrato `{countryCode, vatNumber}`.
+
 ## Buenas prácticas aplicables
 - Todo asiento generado automáticamente debe validar `Σ Debe == Σ Haber`
   antes de `SaveChangesAsync`, siguiendo el patrón de
@@ -194,12 +232,13 @@ Accounting. `VatController.DeclareModelo330` sigue siendo un stub sin tocar.
 - Las cuentas contables se resuelven siempre por `CompanyId` + `Code`
   (multi-tenant); nunca hardcodear un `AccountId`.
 - Antes de extender los controladores "stub" (`AeatModelsController`,
-  `ViesController`, `IvaManagementController`,
+  `IvaManagementController`,
   `InversionSujetoActivoController`, `FinancialStatementsController`,
   `AgingController`), verificar si ya existe lógica real equivalente en
   `AccountingExportController` o en `Erp.Api/Controllers/TaxController.cs`
-  para no duplicar. `VatController` y `ProrrataController` ya no están en
-  esta lista (ver Evaluación de calidad arquitectónica).
+  para no duplicar. `VatController`, `ProrrataController`, `RecargoController`
+  y `ViesController` ya no están en esta lista (ver Evaluación de calidad
+  arquitectónica).
 - Respetar el prefijo `FiscalExportHeaders.MarkAsNonOfficial` en cualquier
   exportación fiscal nueva, para no inducir a pensar que sustituye la
   presentación oficial ante la AEAT.
@@ -208,29 +247,19 @@ Accounting. `VatController.DeclareModelo330` sigue siendo un stub sin tocar.
 - Existe una inconsistencia real de madurez dentro del módulo: los
   controladores de cierre, presupuestos, activos fijos, provisiones y
   exportación fiscal están completamente implementados sobre datos reales,
-  mientras que buena parte de los controladores de IVA especial (recargo de
-  equivalencia salvo lectura, ISP, prorrata, VIES local, modelos AEAT vía
-  `AeatModelsController`) son stubs que devuelven datos de ejemplo — cualquier
-  trabajo futuro debe verificar primero si un endpoint es real o mock antes de
-  asumir su comportamiento.
+  mientras que buena parte de los controladores de IVA especial (ISP, modelos
+  AEAT vía `AeatModelsController`) son stubs que devuelven datos de ejemplo —
+  cualquier trabajo futuro debe verificar primero si un endpoint es real o mock
+  antes de asumir su comportamiento.
 - Las entidades núcleo (`Account`, `JournalEntry`) viven en `Erp.Domain`
   (core) y no en `Modules/Accounting/Domain`, lo que rompe ligeramente el
   aislamiento modular descrito en ADR-0001; cualquier cambio de esquema en
   esas entidades afecta directamente a Billing, Expenses y Treasury a través
   de `IAccountingDbContext`.
-- El doble stub de validación VIES (uno real en `TaxController`, otro mock en
-  `ViesController` de Accounting) es una fuente potencial de confusión si se
-  usa el endpoint equivocado desde el frontend.
-- **Corregido:** `Application/Features/Vat/ValidateViesCommand.cs` y
-  `CalculateProrrataCommand.cs` eran código MediatR huérfano (ningún
-  controller los invocaba — `ViesController` y `ProrrataController` tenían su
-  propia lógica duplicada e independiente) que además **no compilaba**:
-  escribían en `IntraEuOperation`/`ProrrataCalculation` usando propiedades
-  que no existen en esas entidades, rompiendo el build de todo el backend
-  desde el primer commit del repo. `ValidateViesCommand` ahora invoca el
-  `IViesService` real (el mismo que usa `TaxController`, SOAP contra la UE)
-  en vez de un diccionario de NIFs de prueba hardcodeado; `ViesController`
-  sigue sin tocar (mock, endpoint separado).
+- **Corregido:** `ViesController` ya no es mock — despacha
+  `ValidateViesCommand` vía `IMediator` (mismo `IViesService` que
+  `TaxController`, ver ítem corregido arriba en Evaluación de calidad
+  arquitectónica).
 - **Corregido:** `ProrrataController.CalculateProrrata` ya no calcula inline
   con un `CalculateProrrataRequest` propio — ahora despacha
   `CalculateProrrataCommand` vía `IMediator`, que persiste un

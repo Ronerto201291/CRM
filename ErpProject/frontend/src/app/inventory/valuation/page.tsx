@@ -4,7 +4,7 @@ export default function InventoryValuationPage() {
   const [method, setMethod] = useState("PMP");
   const [products, setProducts] = useState<any[]>([]);
   const fetchValuation = async () => {
-    const res = await fetch(`/api/v1/inventory/valuation?method=${method}`);
+    const res = await fetch(`/api/proxy/v1/inventory/valuation?method=${method}`);
     const data = await res.json();
     setProducts(data || []);
   };

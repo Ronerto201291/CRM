@@ -36,6 +36,12 @@ snapshot de cliente (`ClientType`: Registered/Lead/Manual +
 **Facturas (`Invoice`)**, con `InvoicesController`
 (`Api/Controllers/InvoicesController.cs`) y `CreateInvoiceHandler`/
 `LockInvoiceHandler` (`BillingHandlers.cs`) como piezas centrales:
+
+**Corregido (paginación, backlog #8):** `GET /api/invoices` y
+`GET /api/quotes` devuelven `Paginated*Result` (`{ items, totalCount, page,
+pageSize }`) con header `X-Total-Count`; parámetros `page` (default 1) y
+`pageSize` (default 50, máx. 500). Frontends de facturación actualizados con
+`parseListResponse`.
 - **Numeración correlativa**: `{Series}-{FiscalYear}-{Sequence:D6}` (p. ej.
   `A-2026-000001`), calculada dentro de una transacción con
   `pg_advisory_xact_lock` sobre `(companyId, series, fiscalYear)` para
@@ -88,9 +94,9 @@ snapshot de cliente (`ClientType`: Registered/Lead/Manual +
   `PaymentReceivedOutboxHandler` en Billing que releva el mismo evento a la
   tabla `Outbox` para consumidores externos.
 - **FacturaE 3.2.2**: `FacturaEController`
-  (`/api/v1/billing/facturae/{invoiceId}`) e `IFacturaEService` generan el
-  XML bajo demanda (requiere factura bloqueada). Es un servicio sin estado:
-  genera el XML a partir del `Invoice` en cada llamada.
+  (`/api/v1/billing/facturae/{invoiceId}`) despacha `GenerateFacturaEQuery` →
+  `IFacturaEService` genera el XML bajo demanda (requiere factura bloqueada).
+  Es un servicio sin estado: genera el XML a partir del `Invoice` en cada llamada.
 - **PDF**: `GET /api/invoices/{id}/pdf` (`IInvoicePdfService`) y envío por
   email (`POST /api/invoices/{id}/send`), ambos exigen `IsLocked`.
 
@@ -166,9 +172,9 @@ Creación y bloqueo de una factura, con propagación a Accounting:
   calculan en `LockInvoiceHandler`, pero el envío real ocurre en un job
   Hangfire (`VerifactuSubmissionJob`) fuera del ciclo de request.
 - **API pública** (ADR-0016): `PublicInvoicesController`
-  (`/api/v1/public/invoices`) expone lectura de facturas bloqueadas vía
-  `X-Api-Key`, y `PublicQuotesController` expone el portal de aceptación de
-  presupuestos sin autenticación (por `AcceptanceToken`).
+  (`/api/v1/public/invoices`) delega en `GetPublicInvoicesQuery` /
+  `GetPublicInvoiceByIdQuery` (lectura vía `X-Api-Key`), y `PublicQuotesController`
+  expone el portal de aceptación de presupuestos sin autenticación (por `AcceptanceToken`).
 - **Inventory**: `InvoiceApprovedEvent.Lines` incluye `ProductId`/
   `Quantity`/`UnitPrice` pensado para integración de stock (el DTO existe en
   `DomainEvents.cs` con comentario explícito "Inventory integration"),
@@ -206,9 +212,7 @@ Creación y bloqueo de una factura, con propagación a Accounting:
   InvoiceSequecing) que sugieren una migración incompleta hacia un modelo
   más granular; cualquier trabajo futuro en esa área debe empezar
   comprobando si siguen desconectadas del `DbContext`.
-- `frontend/src/app/billing/facturae/page.tsx` es una página 100% estática
-  (array hardcodeado, sin ninguna llamada `fetch`) con los 5 botones
-  ("Descargar XML", "Firmar Digitalmente", "Enviar a VERI\*FACTU"...) sin
-  `onClick` — a pesar de que el backend (`FacturaEController`) sí genera XML
-  real. Es puramente un hueco de frontend, no de backend (ver catálogo de
-  mock en ADR-0018, ítem 17 del backlog).
+- `frontend/src/app/billing/facturae/page.tsx` — ✅ Corregido (backlog #17):
+  lista facturas bloqueadas desde `/api/proxy/invoices`, descarga XML FacturaE
+  (`/api/proxy/v1/billing/facturae/{id}`) y PDF (`/api/proxy/invoices/{id}/pdf`);
+  enlace a `/verifactu` para envío VERI*FACTU por período.

@@ -34,11 +34,10 @@ asume alcance normativo más allá de lo que el código cubre.
   `POST verifactu/submit` (envío al TIKE vía `VerifactuSubmissionService`).
 - `TaxController` (`api/tax`) — validación de NIF-IVA intracomunitario contra
   el servicio oficial VIES de la UE, vía `IViesService`
-  (`POST`/`GET api/tax/vies/validate`). Es el endpoint VIES **real** del
-  sistema (a diferencia del stub en
-  `Modules/Accounting/Api/Controllers/ViesController.cs`, ver ADR-0006);
-  requiere `countryCode` ISO-2 y `vatNumber`, y devuelve además un campo
-  `Advice` orientativo sobre si procede exención por art. 25 LIVA.
+  (`POST`/`GET api/tax/vies/validate`). Comparte la misma fuente SOAP y el
+  texto `Advice` (`ViesResponseMapper`) que `ViesController` del módulo
+  Accounting (`api/v1/accounting/vies/validate`, que además persiste en
+  `IntraEuOperations` vía `ValidateViesCommand`).
 - `FiscalCalendarController` (`api/fiscal/calendar`) — calendario de
   obligaciones tributarias españolas por empresa: `GET` (lista/año),
   `GET {id}`, `POST generate/{year}` (genera automáticamente eventos vía

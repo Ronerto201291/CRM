@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import PageContainer from '@/components/PageContainer';
+import { parseListResponse } from '@/lib/parseListResponse';
 
 interface Product {
     id: string;
@@ -49,8 +50,8 @@ export default function InventoryPage() {
     const [search, setSearch] = useState('');
 
     const load = async () => {
-        const r = await fetch(`/api/proxy/inventory/products?search=${encodeURIComponent(search)}`);
-        if (r.ok) setProducts(await r.json());
+        const r = await fetch(`/api/proxy/inventory/products?search=${encodeURIComponent(search)}&pageSize=500`);
+        if (r.ok) setProducts(parseListResponse<Product>(await r.json()));
     };
 
     const loadWarehouses = async () => {

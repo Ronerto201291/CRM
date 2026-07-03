@@ -21,14 +21,22 @@ public class QuotesController : ControllerBase
         [FromQuery] string? clientName,
         [FromQuery] DateTime? dateFrom,
         [FromQuery] DateTime? dateTo,
-        CancellationToken ct)
-        => Ok(await _mediator.Send(new GetQuotesQuery
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken ct = default)
+    {
+        var result = await _mediator.Send(new GetQuotesQuery
         {
             Status = status,
             ClientName = clientName,
             DateFrom = dateFrom,
-            DateTo = dateTo
-        }, ct));
+            DateTo = dateTo,
+            Page = page,
+            PageSize = pageSize,
+        }, ct);
+        Response.Headers["X-Total-Count"] = result.TotalCount.ToString();
+        return Ok(result);
+    }
 
     // ─── SINGLE ──────────────────────────────────────────────────────────────
 

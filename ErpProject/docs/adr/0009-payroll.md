@@ -16,11 +16,10 @@ Inventory, Payroll, Purchasing, Sales, Treasury), **Payroll es el que
 tiene menor superficie**: un único controller
 (`backend/Modules/Payroll/Api/Controllers/PayrollController.cs`) con 8
 endpoints, frente a los varios controllers y decenas de comandos/queries
-de módulos como Billing o Accounting. No hay carpeta
-`Application/Commands` ni `Application/Queries` con handlers de MediatR:
-el controller accede directamente a `IPayrollDbContext` (patrón
-"controller-repositorio" en vez de CQRS/MediatR), algo distinto al resto
-de módulos documentados hasta ahora. El propio frontend rotula la página
+de módulos como Billing o Accounting. Todo el flujo expuesto por
+`PayrollController` delega en MediatR (`Application/Features/{Employees,Settlements,Exports}/`);
+`Program.cs` registra `AddMediatR` para el assembly de Payroll (backlog #10 ✅).
+El propio frontend rotula la página
 como **"Nóminas (Fase 0)"**, lo que confirma que se trata de un
 alcance inicial deliberado y no de un olvido de documentación.
 
@@ -43,28 +42,12 @@ aún no tiene API ni UI.
 `PayrollController` (`backend/Modules/Payroll/Api/Controllers/PayrollController.cs`,
 ruta base `api/payroll`, `[Authorize]`) expone:
 
-- `GET/POST /api/payroll/employees` — alta y listado de trabajadores
-  (`Employee`: `TaxId`, `FullName`, `SocialSecurityNumber` (NAF),
-  `HireDate`, `ContractType`, `WeeklyHours`).
-- `GET/POST /api/payroll/settlements` — liquidaciones mensuales
-  (`PayrollSettlement`: `Year`, `Month`, `Status` Draft/Final), únicas por
-  `(CompanyId, Year, Month)`.
-- `POST /api/payroll/settlements/{id}/lines` — añade una `PayrollLine`
-  por trabajador a una liquidación en borrador (bruto, base de
-  contingencias comunes, cuota obrera/patronal SS, base/tipo/retención
-  IRPF, líquido). Un empleado no puede tener dos líneas en la misma
-  liquidación.
-- `POST /api/payroll/settlements/{id}/finalize` — cierra la liquidación
-  (`Draft` → `Final`) y genera el asiento contable correspondiente
-  (ver "Relación con otros módulos").
+- `GET/POST /api/payroll/employees` — vía `GetEmployeesQuery` / `CreateEmployeeCommand`.
+- `GET/POST /api/payroll/settlements`, `POST .../lines`, `POST .../finalize` —
+  vía handlers en `Application/Features/Settlements/SettlementHandlers.cs`.
 - `GET /api/payroll/export/tc1`, `/export/tc2`,
-  `/export/tc-red-orientativo` — exportan CSV (TC1: bases y cuotas por
-  trabajador; TC2: retenciones IRPF y líquido) y un XML orientativo,
-  solo para liquidaciones en estado `Final`. Todas las respuestas se
-  marcan explícitamente como **no oficiales** vía
-  `FiscalExportHeaders.MarkAsNonOfficial`, con el mismo mecanismo de
-  cabeceras de aviso usado en otros exportes fiscales del ERP (ver
-  ADR-0013).
+  `/export/tc-red-orientativo` — vía `ExportTc1Query`/`ExportTc2Query`/
+  `ExportTcRedOrientativoQuery` en `Application/Features/Exports/PayrollExportHandlers.cs`.
 
 No hay endpoints para editar/borrar trabajadores o líneas, ni para
 reabrir una liquidación `Final`.
@@ -105,25 +88,25 @@ Cierre de una liquidación mensual y su reflejo contable:
    `PayrollLine` por trabajador con los importes ya calculados
    manualmente fuera del sistema (asesoría externa, hoja de cálculo,
    etc.).
-2. Al pulsar "Finalizar", `POST /settlements/{id}/finalize` suma bruto,
-   SS empresa, SS trabajador, IRPF retenido y líquido de todas las
-   líneas, y llama a
+2. Al pulsar "Finalizar", `POST /settlements/{id}/finalize` despacha
+   `FinalizeSettlementCommand`, que suma bruto, SS empresa, SS trabajador,
+   IRPF retenido y líquido de todas las líneas, y llama a
    `AccountingService.GenerateEntryFromPayrollSettlement(...)`
    (`backend/Modules/Accounting/Application/Services/AccountingService.cs`),
    pasando esos totales y la fecha de devengo (día 1 del mes).
 3. `AccountingService` genera el asiento contable (cuentas 640/642/476/4751/465
    según el comentario en `PayrollSettlement.JournalEntryId`) en el
    esquema `accounting`, y devuelve su `Id`.
-4. El controller marca `Status = "Final"` y guarda `JournalEntryId` en la
+4. El handler marca `Status = "Final"` y guarda `JournalEntryId` en la
    liquidación — llamadas repetidas a `finalize` sobre una liquidación ya
    cerrada devuelven el mismo `journalEntryId` sin duplicar el asiento
-   (comprobación explícita en el controller).
+   (comprobación en `FinalizeSettlementHandler`).
 5. Tras finalizar, el usuario puede descargar TC1/TC2 para esa
    liquidación desde la UI.
 
 ## Relación con otros módulos
 - **Accounting (ADR-0006):** la única integración cross-módulo real del
-  módulo es esta — `PayrollController.Finalize` invoca
+  módulo es esta — `FinalizeSettlementHandler` invoca
   `AccountingService.GenerateEntryFromPayrollSettlement` directamente
   (llamada a servicio, no vía outbox/eventos como en el resto de
   integraciones entre módulos descritas en ADR-0001). Es una dependencia
@@ -139,15 +122,10 @@ Cierre de una liquidación mensual y su reflejo contable:
 ## Evaluación de calidad arquitectónica
 > Metodología completa y hallazgos transversales en `ADR-0018`.
 
-Payroll es el único módulo sin CQRS: `Application/` solo tiene
-`Interfaces/IPayrollDbContext.cs`, sin `Features`/`Commands`/`Queries`/`Handlers`,
-y `Program.cs` no registra ningún `AddMediatR` para este módulo. El único
-`PayrollController` inyecta `IPayrollDbContext` y hasta
-`AccountingService` (de otro módulo) directamente, con toda la lógica de
-altas, liquidaciones y exportación TC1/TC2/RED implementada inline en el
-controller — incumple tanto CQRS como "controllers delgados" en su forma más
-extrema dentro del backend. Cualquier trabajo nuevo en este módulo debería
-plantear migrar a CQRS en vez de seguir ampliando el controller.
+Payroll cumple CQRS en su superficie actual: `Features/Employees/`,
+`Features/Settlements/` y `Features/Exports/` cubren los 8 endpoints.
+`PayrollController` solo inyecta `IMediator` (controller delgado, backlog #10 ✅).
+`FinalizeSettlementHandler` referencia `AccountingService` (acoplamiento 19c ya documentado).
 
 ## Buenas prácticas aplicables
 - Cualquier extensión de este módulo (p. ej. activar

@@ -267,21 +267,27 @@ public class CreateInvoiceHandler : IRequestHandler<CreateInvoiceCommand, Invoic
     }
 }
 
-public class GetInvoicesHandler : IRequestHandler<GetInvoicesQuery, List<InvoiceDto>>
+public class GetInvoicesHandler : IRequestHandler<GetInvoicesQuery, PaginatedInvoicesResult>
 {
     private readonly IBillingDbContext _ctx;
 
     public GetInvoicesHandler(IBillingDbContext ctx) => _ctx = ctx;
 
-
-    public async Task<List<InvoiceDto>> Handle(GetInvoicesQuery req, CancellationToken ct)
+    public async Task<PaginatedInvoicesResult> Handle(GetInvoicesQuery req, CancellationToken ct)
     {
+        var page = Math.Max(1, req.Page);
+        var pageSize = Math.Clamp(req.PageSize, 1, 500);
+
         var q = _ctx.Invoices.AsQueryable();
         if (!string.IsNullOrWhiteSpace(req.Status))
             q = q.Where(i => i.Status == req.Status);
 
-        return await q
+        var totalCount = await q.CountAsync(ct);
+
+        var items = await q
             .OrderByDescending(i => i.IssueDate)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(i => new InvoiceDto
             {
                 Id = i.Id, Number = i.Number, Series = i.Series,
@@ -306,6 +312,8 @@ public class GetInvoicesHandler : IRequestHandler<GetInvoicesQuery, List<Invoice
                 ClientViesName = i.ClientViesName,
             })
             .ToListAsync(ct);
+
+        return new PaginatedInvoicesResult(items, totalCount, page, pageSize);
     }
 }
 

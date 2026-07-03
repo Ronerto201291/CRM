@@ -6,12 +6,6 @@ using Microsoft.Extensions.Logging;
 
 namespace Erp.Modules.Treasury.Infrastructure.Services;
 
-public interface IExchangeRateService
-{
-    Task<decimal> GetRateAsync(string from, string to, CancellationToken ct = default);
-    Task RefreshRatesAsync(CancellationToken ct = default);
-}
-
 public class ExchangeRateService : IExchangeRateService
 {
     private readonly ITreasuryDbContext _ctx;

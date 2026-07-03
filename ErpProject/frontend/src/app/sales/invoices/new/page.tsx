@@ -13,7 +13,7 @@ export default function NewCustomerInvoicePage() {
   };
   const submit = async () => {
     const body = { salesOrderId: soId, number, invoiceDate, lines };
-    const res = await fetch('/api/v1/sales/invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const res = await fetch('/api/proxy/v1/sales/invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     if (!res.ok) {
       const err = await res.json();
       alert('Error: ' + (err.error || 'Unknown'));

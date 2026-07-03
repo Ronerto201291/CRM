@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
 import PageContainer from '@/components/PageContainer';
+import { parseListResponse } from '@/lib/parseListResponse';
 
 interface QuoteSummary {
     id: string; number: string; seriesPrefix: string; fiscalYear: number; version: number;
@@ -69,13 +70,13 @@ export default function QuotesPage() {
     const load = useCallback(async () => {
         setLoading(true);
         const [r1, r2, r3] = await Promise.all([
-            fetch('/api/proxy/quotes'),
-            fetch('/api/proxy/clients'),
-            fetch('/api/proxy/leads'),
+            fetch('/api/proxy/quotes?pageSize=500'),
+            fetch('/api/proxy/clients?pageSize=500'),
+            fetch('/api/proxy/leads?pageSize=500'),
         ]);
-        if (r1.ok) setQuotes(await r1.json());
-        if (r2.ok) setClients(await r2.json());
-        if (r3.ok) setProspects(await r3.json());
+        if (r1.ok) setQuotes(parseListResponse<QuoteSummary>(await r1.json()));
+        if (r2.ok) setClients(parseListResponse<Client>(await r2.json()));
+        if (r3.ok) setProspects(parseListResponse<Prospect>(await r3.json()));
         setLoading(false);
     }, []);
 

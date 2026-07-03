@@ -17,8 +17,21 @@ public class ContactsController : ControllerBase
         [FromQuery] Guid? clientId,
         [FromQuery] Guid? supplierId,
         [FromQuery] string? search,
-        CancellationToken ct)
-        => Ok(await _mediator.Send(new GetContactsQuery { ClientId = clientId, SupplierId = supplierId, Search = search }, ct));
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken ct = default)
+    {
+        var result = await _mediator.Send(new GetContactsQuery
+        {
+            ClientId = clientId,
+            SupplierId = supplierId,
+            Search = search,
+            Page = page,
+            PageSize = pageSize,
+        }, ct);
+        Response.Headers["X-Total-Count"] = result.TotalCount.ToString();
+        return Ok(result);
+    }
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)

@@ -206,6 +206,11 @@ builder.Services.AddMediatR(cfg =>
     cfg.RegisterServicesFromAssembly(
         typeof(Erp.Modules.Sales.Application.Features.Deliveries.Handlers.CreateDeliveryNoteHandler).Assembly));
 
+// Register Payroll module MediatR handlers
+builder.Services.AddMediatR(cfg =>
+    cfg.RegisterServicesFromAssembly(
+        typeof(Erp.Modules.Payroll.Application.Features.Employees.GetEmployeesHandler).Assembly));
+
 // 5. Configure Redis
 var redisString = builder.Configuration.GetConnectionString("Redis");
 if (string.IsNullOrEmpty(redisString))

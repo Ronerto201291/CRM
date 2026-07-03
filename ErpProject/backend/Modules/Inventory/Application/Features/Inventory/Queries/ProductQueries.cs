@@ -56,11 +56,19 @@ public class ProductMovementDto
     public DateTime CreatedAt { get; set; }
 }
 
-public class GetProductsQuery : IRequest<List<ProductListDto>>
+public record PaginatedProductsResult(
+    IReadOnlyList<ProductListDto> Items,
+    int TotalCount,
+    int Page,
+    int PageSize);
+
+public class GetProductsQuery : IRequest<PaginatedProductsResult>
 {
     public string? Search { get; set; }
     public bool? Active { get; set; }
     public string? Type { get; set; }
+    public int Page { get; set; } = 1;
+    public int PageSize { get; set; } = 50;
 }
 
 public class GetProductByIdQuery : IRequest<ProductDetailDto?>

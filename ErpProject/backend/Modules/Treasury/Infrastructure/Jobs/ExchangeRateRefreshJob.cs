@@ -1,4 +1,4 @@
-using Erp.Modules.Treasury.Infrastructure.Services;
+using Erp.Modules.Treasury.Application.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;

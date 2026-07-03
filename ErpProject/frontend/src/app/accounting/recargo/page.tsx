@@ -1,73 +1,187 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 
 interface RecargoItem {
-  supplierVatNumber: string;
-  supplierIsRE: boolean;
-  base: number;
-  rechargeRate: number;
+  invoiceId: string;
+  invoiceNumber: string;
+  clientTaxId: string;
+  clientName: string;
+  baseAmount: number;
+  surchargeRate: number;
+  surchargeAmount: number;
+  invoiceDate: string;
+}
+
+function currentQuarter(): number {
+  return Math.floor(new Date().getMonth() / 3) + 1;
 }
 
 export default function RecargoPage() {
-  const [supplierVatNumber, setSupplierVatNumber] = useState("");
+  const [year, setYear] = useState(new Date().getFullYear());
+  const [quarter, setQuarter] = useState(currentQuarter());
+  const [supplierVat, setSupplierVat] = useState("");
   const [supplierIsRE, setSupplierIsRE] = useState(false);
-  const [base, setBase] = useState(1000);
+  const [baseAmount, setBaseAmount] = useState(1000);
   const [rechargeRate, setRechargeRate] = useState(5.2);
   const [recargoList, setRecargoList] = useState<RecargoItem[]>([]);
+  const [period, setPeriod] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
-  const fetchList = async () => {
-    const res = await fetch(`/api/v1/accounting/recargo`);
+  const fetchList = useCallback(async () => {
+    setError(null);
+    const res = await fetch(`/api/proxy/v1/accounting/recargo?year=${year}&q=${quarter}`);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? `Error ${res.status}`);
+      setRecargoList([]);
+      return;
+    }
     const data = await res.json();
-    setRecargoList(Array.isArray(data) ? data : []);
-  };
+    setPeriod(data.period ?? "");
+    setRecargoList(Array.isArray(data.recargos) ? data.recargos : []);
+  }, [year, quarter]);
 
   useEffect(() => {
-    fetchList();
-  }, []);
+    void fetchList();
+  }, [fetchList]);
 
   const create = async () => {
-    await fetch(`/api/v1/accounting/recargo`, {
+    setError(null);
+    const res = await fetch('/api/proxy/v1/accounting/recargo', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ supplierVatNumber, supplierIsRE, base, rechargeRate })
+      body: JSON.stringify({
+        supplierVat,
+        supplierIsRE,
+        baseAmount,
+        rechargeRate,
+      }),
     });
-    alert('Recargo created');
-    fetchList();
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? `Error ${res.status}`);
+      return;
+    }
+    await fetchList();
   };
 
-  const rechargeAmount = base * (rechargeRate / 100);
+  const rechargeAmount = baseAmount * (rechargeRate / 100);
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">3.4 Recargo de Equivalencia (Extremo a Extremo)</h1>
-      <div className="mb-4 border p-3">
-        <div><label>Supplier VAT Number:</label> <input value={supplierVatNumber} onChange={(e) => setSupplierVatNumber(e.target.value)} className="border p-2 ml-2" /></div>
-        <div className="mt-2"><label>Supplier is RE:</label> <input type="checkbox" checked={supplierIsRE} onChange={(e) => setSupplierIsRE(e.target.checked)} className="ml-2" /></div>
-        <div className="mt-2"><label>Base:</label> <input type="number" value={base} onChange={(e) => setBase(Number(e.target.value))} className="border p-2 ml-2 w-24" /></div>
-        <div className="mt-2"><label>Recharge Rate (%):</label> <input type="number" step="0.1" value={rechargeRate} onChange={(e) => setRechargeRate(Number(e.target.value))} className="border p-2 ml-2 w-24" /></div>
-        <div className="mt-2 p-2 bg-yellow-50"><strong>Recharge Amount:</strong> €{rechargeAmount.toFixed(2)}</div>
-        <button onClick={create} className="mt-3 px-4 py-2 bg-blue-600 text-white rounded">Create Recargo</button>
+      <h1 className="text-2xl font-bold mb-4">Recargo de Equivalencia</h1>
+
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 text-red-700 border border-red-200 rounded">
+          {error}
+        </div>
+      )}
+
+      <div className="mb-4 flex gap-4 items-end">
+        <div>
+          <label className="block text-sm font-medium">Año</label>
+          <input
+            type="number"
+            value={year}
+            onChange={(e) => setYear(Number(e.target.value))}
+            className="border p-2 w-24"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium">Trimestre</label>
+          <select
+            value={quarter}
+            onChange={(e) => setQuarter(Number(e.target.value))}
+            className="border p-2"
+          >
+            {[1, 2, 3, 4].map((q) => (
+              <option key={q} value={q}>T{q}</option>
+            ))}
+          </select>
+        </div>
+        {period && <span className="text-sm text-gray-600">Periodo: {period}</span>}
       </div>
+
+      <div className="mb-4 border p-3">
+        <div>
+          <label>NIF proveedor:</label>
+          <input
+            value={supplierVat}
+            onChange={(e) => setSupplierVat(e.target.value)}
+            className="border p-2 ml-2"
+          />
+        </div>
+        <div className="mt-2">
+          <label>Proveedor en RE:</label>
+          <input
+            type="checkbox"
+            checked={supplierIsRE}
+            onChange={(e) => setSupplierIsRE(e.target.checked)}
+            className="ml-2"
+          />
+        </div>
+        <div className="mt-2">
+          <label>Base:</label>
+          <input
+            type="number"
+            value={baseAmount}
+            onChange={(e) => setBaseAmount(Number(e.target.value))}
+            className="border p-2 ml-2 w-24"
+          />
+        </div>
+        <div className="mt-2">
+          <label>Tipo recargo (%):</label>
+          <input
+            type="number"
+            step="0.1"
+            value={rechargeRate}
+            onChange={(e) => setRechargeRate(Number(e.target.value))}
+            className="border p-2 ml-2 w-24"
+          />
+        </div>
+        <div className="mt-2 p-2 bg-yellow-50">
+          <strong>Cuota recargo:</strong> €{rechargeAmount.toFixed(2)}
+        </div>
+        <button
+          onClick={create}
+          className="mt-3 px-4 py-2 bg-blue-600 text-white rounded"
+        >
+          Registrar recargo
+        </button>
+      </div>
+
       <table className="w-full border">
         <thead>
           <tr className="bg-gray-200">
-            <th className="border p-2">Supplier VAT</th>
+            <th className="border p-2">Factura</th>
+            <th className="border p-2">NIF cliente</th>
+            <th className="border p-2">Cliente</th>
             <th className="border p-2">Base</th>
-            <th className="border p-2">Recharge Rate</th>
-            <th className="border p-2">Recharge Amount</th>
-            <th className="border p-2">Modelo 303 Status</th>
+            <th className="border p-2">Tipo %</th>
+            <th className="border p-2">Cuota</th>
+            <th className="border p-2">Fecha</th>
           </tr>
         </thead>
         <tbody>
-          {recargoList.map((r) => (
-            <tr key={r.supplierVatNumber}>
-              <td className="border p-2">{r.supplierVatNumber}</td>
-              <td className="border p-2">€{r.base}</td>
-              <td className="border p-2">{r.rechargeRate}%</td>
-              <td className="border p-2">€{(r.base * (r.rechargeRate / 100)).toFixed(2)}</td>
-              <td className="border p-2">Pending</td>
+          {recargoList.length === 0 ? (
+            <tr>
+              <td colSpan={7} className="border p-4 text-center text-gray-500">
+                No hay facturas con recargo de equivalencia en este periodo
+              </td>
             </tr>
-          ))}
+          ) : (
+            recargoList.map((r) => (
+              <tr key={r.invoiceId}>
+                <td className="border p-2">{r.invoiceNumber}</td>
+                <td className="border p-2">{r.clientTaxId}</td>
+                <td className="border p-2">{r.clientName}</td>
+                <td className="border p-2">€{r.baseAmount.toFixed(2)}</td>
+                <td className="border p-2">{r.surchargeRate}%</td>
+                <td className="border p-2">€{r.surchargeAmount.toFixed(2)}</td>
+                <td className="border p-2">{new Date(r.invoiceDate).toLocaleDateString('es-ES')}</td>
+              </tr>
+            ))
+          )}
         </tbody>
       </table>
     </div>

@@ -15,8 +15,24 @@ public class ProductsController : ControllerBase
 
     [HttpGet]
     public async Task<IActionResult> GetAll(
-        [FromQuery] string? search, [FromQuery] bool? active, [FromQuery] string? type, CancellationToken ct)
-        => Ok(await _mediator.Send(new GetProductsQuery { Search = search, Active = active, Type = type }, ct));
+        [FromQuery] string? search,
+        [FromQuery] bool? active,
+        [FromQuery] string? type,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken ct = default)
+    {
+        var result = await _mediator.Send(new GetProductsQuery
+        {
+            Search = search,
+            Active = active,
+            Type = type,
+            Page = page,
+            PageSize = pageSize,
+        }, ct);
+        Response.Headers["X-Total-Count"] = result.TotalCount.ToString();
+        return Ok(result);
+    }
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
