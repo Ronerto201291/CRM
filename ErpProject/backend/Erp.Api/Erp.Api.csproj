@@ -31,7 +31,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Erp.Application\Erp.Application.csproj" />
     <ProjectReference Include="..\Erp.Infrastructure\Erp.Infrastructure.csproj" />
-    <ProjectReference Include="..\Modules\Inventory\API\Erp.Modules.Inventory.Api.csproj" />
+    <ProjectReference Include="..\Modules\Inventory\Api\Erp.Modules.Inventory.Api.csproj" />
     <ProjectReference Include="..\Modules\Billing\Application\Erp.Modules.Billing.Application.csproj" />
     <ProjectReference Include="..\Modules\Crm\Application\Erp.Modules.Crm.Application.csproj" />
     <ProjectReference Include="..\Modules\Billing\Api\Erp.Modules.Billing.Api.csproj" />
