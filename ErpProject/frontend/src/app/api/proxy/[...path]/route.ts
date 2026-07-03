@@ -16,6 +16,7 @@ const ALLOWED_PATH_PREFIXES = [
     'contacts',
     'crm/',
     'deferred-entries',
+    'documents',
     'expenses',
     'fiscal/',
     'inventory/',
@@ -73,16 +74,24 @@ async function proxyFetch(request: NextRequest, path: string, method: string) {
     // API_URL se usa server-side (no NEXT_PUBLIC_) para que funcione dentro de Docker
     const backendUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
     const url = `${backendUrl}/api/${path}`;
+
+    // multipart/form-data (subida de archivos, p. ej. documents) no puede
+    // reenviarse como si fuera JSON: forzar Content-Type: application/json
+    // aquí rompía el body y el boundary del multipart. Se reenvía tal cual,
+    // con su propio Content-Type (incluye el boundary real).
+    const requestContentType = request.headers.get('content-type') ?? '';
+    const isMultipart = requestContentType.startsWith('multipart/form-data');
+
     const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
+        'Content-Type': isMultipart ? requestContentType : 'application/json',
         ...(token && { 'Authorization': `Bearer ${token}` }),
         ...(tenantId && { 'X-Tenant-Id': tenantId }),
     };
 
     try {
-        let body: string | undefined;
+        let body: string | ArrayBuffer | undefined;
         if (['POST', 'PUT', 'PATCH'].includes(method)) {
-            body = await request.text();
+            body = isMultipart ? await request.arrayBuffer() : await request.text();
         }
 
         const response = await fetch(url, { method, headers, body, redirect: 'manual' });
