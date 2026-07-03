@@ -252,37 +252,23 @@ por motivos propios y confirmados leyendo el código exacto citado.
   hace POST crudo), Polly retry/circuit-breaker, algoritmos RSA-SHA256/C14N
   correctos, fechas `dd-MM-yyyy` correctas, filtro por facturas bloqueadas.
 
-### FacturaE — namespace incorrecto y validador circular; firma ya real
-- **Firma real**: ~~sin `ds:Signature`~~ **✅ Corregido, re-verificado directamente**
-  — `GenerateSignedAsync` → `GenerateCoreAsync(sign: true)` llama a
-  `_signer.Sign(xmlString)` (`FacturaEService.cs:43-80`), el mismo firmante
-  XAdES de SII (ya con el orden de operaciones corregido, ver sección SII). El
-  archivo solo se nombra `.xsig` cuando `sign=true` (línea 78); si no, `.xml`.
-  El texto anterior de esta sección decía "sigue sin generarse ds:Signature",
-  lo cual ya no es cierto tras la última ronda de correcciones — corregido
-  aquí. Nota: el perfil de firma es XAdES-**BES**; FACe exige XAdES-**EPES**
-  con `SignaturePolicyIdentifier` — pendiente ese detalle de perfil.
-- **Namespace sigue siendo incorrecto**: `FacturaEService.cs:20` usa
-  `http://www.facturae.gob.es/formato/Version3.2.2/Facturae32.xsd`; el
-  namespace real de la versión 3.2.2 es
-  `http://www.facturae.gob.es/formato/Versiones/Facturaev3_2_2.xml`
-  (confirmado contra la publicación oficial de facturae.gob.es). Un receptor
-  FACe/validador real rechazaría el documento por este motivo.
-- **El nuevo `FacturaEXmlStructureValidator` no detecta el problema anterior
-  — validación circular confirmada**: el validador comprueba el namespace
-  contra la misma constante equivocada que usa el generador, así que siempre
-  informa "correcto" aunque el namespace esté mal — da una falsa sensación de
-  seguridad, no protege de nada. Corregir el namespace en el generador sin
-  tocar el validador dejaría el mismo problema (el validador seguiría
-  comparando contra el valor viejo si no se actualiza a la vez).
-- **Bloque `Extensions` sigue mal formado** dentro de `FileHeader`
-  (`FacturaEService.cs:236-264`) con una estructura inventada, no la que
-  define el estándar (que exige contenido de un namespace ajeno, no hijos
-  con nombres inventados).
-- **NIF sin validar**: ~~se pasa tal cual~~ **✅ Corregido** — `SpanishTaxIdValidator` en `FacturaEService.ValidateTaxId` valida emisor y cliente antes de generar XML; CIF con lógica de control corregida (jul 2026).
-- **Dirección con placeholders hardcodeados**: ~~`PostCode="00000"`,
-  `Town="N/D"`, `Province="N/D"`~~ **🟡 Parcial** — `ExtractTown`/`ExtractPostCode`
-  parsean la dirección; `Province` sigue como `N/D` si no hay dato.
+### FacturaE — ✅ corregido en código (jul 2026); homologación FACe test pendiente
+- **Namespace oficial**: `FacturaEConstants.Namespace` =
+  `http://www.facturae.gob.es/formato/Versiones/Facturaev3_2_2.xml` en
+  `FacturaEService` y validador estructural.
+- **Validador no circular**: `FacturaEXmlStructureValidator` compara contra la
+  constante oficial y rechaza explícitamente el namespace obsoleto
+  (`LegacyWrongNamespace`). Tests en `FacturaEXmlStructureValidatorTests`.
+- **Extensions**: solo `Extension` → `ExtensionContent` con namespace ajeno
+  `urn:es:verifactu:representaciongrafica:1.0` (sin `ExtensionCode`/`ExtensionName`).
+- **Firma XAdES-EPES**: `FacturaESigningService` dedicado con
+  `SignaturePolicyIdentifier` (política Facturae v3.1, hash SHA1 oficial).
+  `GenerateSignedAsync` ya no reutiliza el perfil BES de SII.
+- **Endpoints**: `GET .../signed`, `GET .../validate`, `POST .../submit-face`
+  vía MediatR; `FaceSubmissionService` + `FaceSoapStructureValidator`.
+- **NIF validado**: `SpanishTaxIdValidator` en emisión (jul 2026).
+- **Dirección**: `ExtractTown`/`ExtractPostCode` parsean CP y localidad.
+- **Pendiente externo**: homologación FACe en entorno test real.
 - **Envío a FACe**: **🟡 Parcial+** — `POST
   /api/v1/billing/facturae/{id}/submit-face` + `IFaceSubmissionService`: SOAP
   validado con `FaceSoapStructureValidator` y POST HTTP opcional (`Face:SendEnabled=true`).

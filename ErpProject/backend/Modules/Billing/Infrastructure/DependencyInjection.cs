@@ -2,6 +2,7 @@ using Erp.Application.Common.Interfaces;
 using Erp.Modules.Billing.Application.Interfaces;
 using Erp.Modules.Billing.Infrastructure.Data;
 using Erp.Modules.Billing.Infrastructure.Services;
+using Erp.Infrastructure.Services.FacturaE;
 using Erp.Infrastructure.Services.Sii;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -24,22 +25,16 @@ public static class DependencyInjection
 
         services.AddScoped<IBillingDbContext>(p => p.GetRequiredService<BillingDbContext>());
 
-        // PDF de facturas (QuestPDF, singleton thread-safe)
         services.AddSingleton<IInvoicePdfService, InvoicePdfService>();
-
-        // PDF de presupuestos (QuestPDF, singleton thread-safe)
         services.AddSingleton<IQuotePdfService, QuotePdfService>();
 
-        // FacturaE 3.2.2 (Ley 18/2022 Crea y Crece)
+        services.AddScoped<FacturaESigningService>();
         services.AddScoped<IFacturaEService, FacturaEService>();
+        services.AddScoped<IFaceSubmissionService, FaceSubmissionService>();
+        services.AddHttpClient("Face", client => client.Timeout = TimeSpan.FromSeconds(60));
 
-        // VERI*FACTU: XML generator (bridge from Application to Infrastructure impl)
         services.AddScoped<IVerifactuXmlGenerator, VerifactuXmlGeneratorBridge>();
-
-        // Job de expiración de presupuestos (Hangfire lo resuelve del DI)
         services.AddScoped<ExpireQuotesJob>();
-
-        // VERI*FACTU submission job (Hangfire)
         services.AddScoped<VerifactuSubmissionJob>();
         services.AddScoped<IVerifactuSubmissionGateway, VerifactuSubmissionGateway>();
 
