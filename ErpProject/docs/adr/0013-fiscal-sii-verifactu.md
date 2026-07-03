@@ -252,7 +252,7 @@ por motivos propios y confirmados leyendo el código exacto citado.
   hace POST crudo), Polly retry/circuit-breaker, algoritmos RSA-SHA256/C14N
   correctos, fechas `dd-MM-yyyy` correctas, filtro por facturas bloqueadas.
 
-### FacturaE — namespace incorrecto y validador circular; firma ya real
+### FacturaE — namespace y validador circular ya corregidos; firma ya real
 - **Firma real**: ~~sin `ds:Signature`~~ **✅ Corregido, re-verificado directamente**
   — `GenerateSignedAsync` → `GenerateCoreAsync(sign: true)` llama a
   `_signer.Sign(xmlString)` (`FacturaEService.cs:43-80`), el mismo firmante
@@ -262,28 +262,28 @@ por motivos propios y confirmados leyendo el código exacto citado.
   lo cual ya no es cierto tras la última ronda de correcciones — corregido
   aquí. Nota: el perfil de firma es XAdES-**BES**; FACe exige XAdES-**EPES**
   con `SignaturePolicyIdentifier` — pendiente ese detalle de perfil.
-- **Namespace sigue siendo incorrecto**: `FacturaEService.cs:20` usa
-  `http://www.facturae.gob.es/formato/Version3.2.2/Facturae32.xsd`; el
-  namespace real de la versión 3.2.2 es
-  `http://www.facturae.gob.es/formato/Versiones/Facturaev3_2_2.xml`
-  (confirmado contra la publicación oficial de facturae.gob.es). Un receptor
-  FACe/validador real rechazaría el documento por este motivo.
-- **El nuevo `FacturaEXmlStructureValidator` no detecta el problema anterior
-  — validación circular confirmada**: el validador comprueba el namespace
-  contra la misma constante equivocada que usa el generador, así que siempre
-  informa "correcto" aunque el namespace esté mal — da una falsa sensación de
-  seguridad, no protege de nada. Corregir el namespace en el generador sin
-  tocar el validador dejaría el mismo problema (el validador seguiría
-  comparando contra el valor viejo si no se actualiza a la vez).
+- **Namespace incorrecto**: ~~`FacturaEService.cs:20` usaba
+  `http://www.facturae.gob.es/formato/Version3.2.2/Facturae32.xsd`~~
+  **✅ Corregido** — ahora usa
+  `http://www.facturae.gob.es/formato/Versiones/Facturaev3_2_2.xml`, el
+  namespace real de la versión 3.2.2 (confirmado contra la publicación
+  oficial de facturae.gob.es).
+- **Validación circular del `FacturaEXmlStructureValidator`**: ~~el validador
+  comprobaba el namespace contra la misma constante equivocada que usaba el
+  generador~~ **✅ Corregido** — el namespace correcto ahora vive como única
+  constante en `FacturaEXmlStructureValidator.FacturaENamespace`, y
+  `FacturaEService.cs` la referencia directamente en vez de mantener su
+  propio literal — generador y validador ya no pueden volver a divergir
+  entre sí. Verificado con build+test completo tras el cambio.
 - **Bloque `Extensions` sigue mal formado** dentro de `FileHeader`
   (`FacturaEService.cs:236-264`) con una estructura inventada, no la que
   define el estándar (que exige contenido de un namespace ajeno, no hijos
   con nombres inventados).
-- **NIF sin validar**: ~~se pasa tal cual~~ **🟡 Parcial, con un bug real
-  en CIF** — `SpanishTaxIdValidator` en `FacturaEService.ValidateTaxId` sí
-  se invoca en emisión de factura, pero hereda el bug de inversión
-  letra/dígito documentado en la sección "Hallazgo sistémico" más abajo — un
-  CIF de S.A./S.L. real puede ser rechazado aquí también.
+- **NIF sin validar**: ~~se pasa tal cual~~ **✅ Corregido** —
+  `SpanishTaxIdValidator` en `FacturaEService.ValidateTaxId` se invoca en
+  emisión de factura; el bug de inversión letra/dígito en CIF (ver "Hallazgo
+  sistémico" más abajo) ya está corregido, así que un CIF de S.A./S.L. real
+  ya no se rechaza aquí.
 - **Dirección con placeholders hardcodeados**: ~~`PostCode="00000"`,
   `Town="N/D"`, `Province="N/D"`~~ **🟡 Parcial** — `ExtractTown`/`ExtractPostCode`
   parsean la dirección; `Province` sigue como `N/D` si no hay dato.
@@ -291,52 +291,45 @@ por motivos propios y confirmados leyendo el código exacto citado.
   /api/v1/billing/facturae/{id}/submit-face` + `IFaceSubmissionService`: SOAP
   validado con `FaceSoapStructureValidator` y POST HTTP opcional (`Face:SendEnabled=true`).
   Homologación offline: `GET .../validate` + `FacturaEXmlStructureValidator`
-  (ver arriba, es circular respecto al namespace). Pendiente: namespace real,
-  perfil XAdES-EPES, homologación entorno test.
+  (namespace y circularidad ya corregidos, ver arriba). Pendiente: perfil
+  XAdES-EPES, bloque `Extensions`, homologación entorno test.
 - Lo que sí está bien: la aritmética de IVA/IRPF por línea y su agregación
   (`FacturaEService.cs:65-71,151,163`) es correcta; el orden general de
   bloques sigue razonablemente la forma del estándar.
 
 ### Hallazgo sistémico transversal — validación NIF/CIF/NIE
-**⚠️ Parcial, con un bug grave de nuevo cuño en CIF — verificado con cálculo manual.**
 `SpanishTaxIdValidator` (`Erp.Application/Common/Validation/SpanishTaxIdValidator.cs`)
-está centralizado y sí se invoca en alta/edición cliente y proveedor
+está centralizado y se invoca en alta/edición cliente y proveedor
 (FluentValidation), registro empresa, `UpdateCompanyHandler`, emisión de
 factura (`BillingHandlers`) y generación FacturaE — el hueco sistémico de
-"cero validación en ningún sitio" está cerrado. Pero:
+"cero validación en ningún sitio" está cerrado.
 
 - **NIF y NIE están bien**: `ValidateNif` usa la tabla oficial de 23
   caracteres `"TRWAGMYFPDXBNJZSQVHLCKE"[numero % 23]`; verificado con
   ejemplo manual (`12345678 % 23 = 14 → 'Z'` → `12345678Z`, correcto). NIE
   mapea X/Y/Z a 0/1/2 y reutiliza el mismo cálculo — correcto.
-- **CIF tiene la lógica de letra/dígito de control invertida**
-  (`ValidateCif`, líneas ~68-72): las letras de tipo de entidad `A, B, E, H`
-  (que legalmente llevan **dígito** de control) reciben una **letra**
-  calculada; y `P, Q, R, S, W` (que legalmente llevan **letra**) reciben un
-  **dígito**. Confirmado con un CIF real conocido: **Banco Santander,
-  `A39000013`** — el algoritmo de suma calcula correctamente el dígito de
-  control `3` (coincide con el CIF real), pero como el código empieza por
-  `A`, ejecuta la rama de letra (`(char)('A'+3-1)='C'`) y compara `cif[8]`
-  (`'3'`) contra `'C'` → **falso** → **rechaza un CIF real y válido**. El
-  mismo problema afecta a cualquier S.A./S.L. (prefijos `A`/`B`, la inmensa
-  mayoría de las empresas españolas).
-- **El test unitario no lo detecta y da falsa confianza**:
-  `SpanishTaxIdValidatorTests.FindValidCif` genera un CIF por fuerza bruta
-  hasta que el propio validador (ya roto) lo acepte — es decir, el test
-  verifica que el validador es consistente consigo mismo, no que sea
-  correcto frente a la regla real. Un fichero suelto
-  `ErpProject/backend/tmp-find-cif.cs` (resto de depuración, no debería
-  estar commiteado) hace el mismo cálculo por fuerza bruta — indicio de que
-  el CIF "válido" usado en tests se obtuvo así, en vez de tomarlo de un caso
-  real conocido.
-- **Impacto de negocio**: esto bloquearía el alta de clientes/proveedores o
-  la propia empresa cuando su CIF empiece por `A`/`B`/`E`/`H`/`P`/`Q`/`R`/`S`/`W`
-  — es decir, la mayoría de sociedades mercantiles españolas reales — pese a
-  que el validador exista y "funcione" en apariencia. Prioridad alta de
-  corrección: invertir las dos ramas del `switch` en `ValidateCif`.
+- **CIF tenía la lógica de letra/dígito de control invertida**: ~~las letras
+  de tipo de entidad `A, B, E, H` (que legalmente llevan **dígito** de
+  control) recibían una **letra** calculada; y `P, Q, S` (que legalmente
+  llevan **letra**) recibían un **dígito**. El CIF real de Banco Santander
+  `A39000013` (control real `3`) era rechazado, ya que el código esperaba
+  `C`.~~ **✅ Corregido** — `ValidateCif` ahora exige dígito para
+  `A/B/E/H`, letra para `P/Q/S`, y acepta cualquiera de los dos para el
+  resto de prefijos (`C/D/F/G/J/N/R/U/V/W`, que es la regla real para esos
+  casos ambiguos). Re-verificado con cálculo manual: `A39000013` (Banco
+  Santander) y `A28015865` (Telefónica) ya se aceptan.
+- **El test unitario que daba falsa confianza también se corrigió**: ~~`SpanishTaxIdValidatorTests.FindValidCif`
+  generaba un CIF por fuerza bruta hasta que el propio validador (ya roto)
+  lo aceptaba~~ **✅ Corregido** — sustituido por casos con los dos CIFs
+  reales conocidos de arriba, más casos de rechazo con el dígito de control
+  alterado deliberadamente. También se eliminó `tmp-find-cif.cs`, un
+  fichero suelto de depuración que hacía el mismo cálculo por fuerza bruta
+  y no debía estar commiteado.
+- Verificado con build+test completo tras el cambio (43 tests, incluidos
+  los nuevos casos de CIF).
 
-Pendiente además: cobertura en todos los puntos de entrada (p. ej.
-importaciones masivas) y leads (sin campo NIF hoy).
+Pendiente: cobertura en todos los puntos de entrada (p. ej. importaciones
+masivas) y leads (sin campo NIF hoy).
 
 ### Cadena de hash genérica antifraude (Ley 11/2021) — correcta, con una duplicación menor
 A diferencia de VeriFactu, esta cadena (`Invoice.Hash`/`PreviousHash`,

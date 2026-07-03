@@ -65,14 +65,19 @@ public static partial class SpanishTaxIdValidator
         }
 
         var control = (10 - (sumEven + sumOdd) % 10) % 10;
-        var controlChar = cif[0] switch
-        {
-            'P' or 'Q' or 'R' or 'S' or 'W' => (char)('0' + control),
-            'A' or 'B' or 'E' or 'H' => (char)('A' + control - 1),
-            _ => CifLetters[control]
-        };
+        var digitChar = (char)('0' + control);
+        var letterChar = CifLetters[control];
 
-        return cif[8] == controlChar;
+        // A/B/E/H (sociedades anónimas, limitadas, comunidades de bienes,
+        // sociedades civiles) llevan siempre dígito de control; P/Q/S
+        // (organismos públicos, corporaciones, cooperativas) llevan siempre
+        // letra; el resto (C/D/F/G/J/N/R/U/V/W) acepta cualquiera de los dos.
+        return cif[0] switch
+        {
+            'A' or 'B' or 'E' or 'H' => cif[8] == digitChar,
+            'P' or 'Q' or 'S' => cif[8] == letterChar,
+            _ => cif[8] == digitChar || cif[8] == letterChar
+        };
     }
 
     [GeneratedRegex(@"^[0-9]{8}[A-Z]$")]

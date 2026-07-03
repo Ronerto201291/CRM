@@ -1,3 +1,4 @@
+using Erp.Application.Common.Fiscal;
 using Erp.Application.Common.Interfaces;
 using Erp.Application.Common.Validation;
 using Erp.Domain.Entities.Core;
@@ -19,7 +20,11 @@ namespace Erp.Modules.Billing.Infrastructure.Services;
 public sealed class FacturaEService : IFacturaEService
 {
     private static readonly CultureInfo Inv   = CultureInfo.InvariantCulture;
-    private static readonly XNamespace  FE    = "http://www.facturae.gob.es/formato/Version3.2.2/Facturae32.xsd";
+    // Referencia la constante de FacturaEXmlStructureValidator en vez de un
+    // literal propio, para que generador y validador no puedan volver a
+    // divergir (antes ambos hardcodeaban el mismo namespace incorrecto por
+    // separado, lo que hacía que la validación fuera circular).
+    private static readonly XNamespace  FE    = FacturaEXmlStructureValidator.FacturaENamespace;
     private static readonly XNamespace  DS    = "http://www.w3.org/2000/09/xmldsig#";
 
     private readonly IBillingDbContext     _billing;

@@ -13,25 +13,24 @@ public class SpanishTaxIdValidatorTests
         Assert.True(SpanishTaxIdValidator.IsValid(taxId));
     }
 
-    [Fact]
-    public void IsValid_AcceptsValidCif()
+    // CIFs reales conocidos (no generados por fuerza bruta contra el propio
+    // validador — eso ocultaba la inversión letra/dígito descrita en
+    // ADR-0013/ADR-0018 ítem 0f, porque el "CIF válido" se obtenía forzando
+    // hasta que el validador ya roto lo aceptara).
+    [Theory]
+    [InlineData("A39000013")] // Banco Santander — A lleva siempre dígito de control
+    [InlineData("A28015865")] // Telefónica — A lleva siempre dígito de control
+    public void IsValid_AcceptsKnownRealCif(string taxId)
     {
-        Assert.True(SpanishTaxIdValidator.IsValid(FindValidCif()));
+        Assert.True(SpanishTaxIdValidator.IsValid(taxId));
     }
 
-    private static string FindValidCif()
+    [Theory]
+    [InlineData("A39000010")] // dígito de control alterado
+    [InlineData("A39000019")]
+    public void IsValid_RejectsCifWithWrongControlDigit(string taxId)
     {
-        for (var n = 1; n < 1_000_000; n++)
-        {
-            var digits = n.ToString("D7");
-            foreach (var suffix in "0123456789ABCDEFGHIJ")
-            {
-                var candidate = $"B{digits}{suffix}";
-                if (SpanishTaxIdValidator.IsValid(candidate))
-                    return candidate;
-            }
-        }
-        throw new InvalidOperationException("No valid CIF found");
+        Assert.False(SpanishTaxIdValidator.IsValid(taxId));
     }
 
     [Theory]

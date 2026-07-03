@@ -5,8 +5,13 @@ namespace Erp.Application.Common.Fiscal;
 /// <summary>Validación estructural FacturaE 3.2.2 sin certificado (homologación offline).</summary>
 public static class FacturaEXmlStructureValidator
 {
+    // Namespace real de FacturaE 3.2.2 (facturae.gob.es); antes apuntaba a
+    // "Version3.2.2/Facturae32.xsd", que no es el namespace oficial de la
+    // versión — un receptor FACe/validador real rechazaría el documento.
+    // Única fuente de verdad: FacturaEService.cs referencia esta misma
+    // constante para que generador y validador no puedan volver a divergir.
     public const string FacturaENamespace =
-        "http://www.facturae.gob.es/formato/Version3.2.2/Facturae32.xsd";
+        "http://www.facturae.gob.es/formato/Versiones/Facturaev3_2_2.xml";
 
     public static FacturaEValidationResult Validate(string xml)
     {
