@@ -5,7 +5,7 @@ import AccessibleModal from '@/components/AccessibleModal';
 import { parseListResponse } from '@/lib/parseListResponse';
 import type { BankAccount } from './page';
 
-type TreasuryTab = 'accounts' | 'movements' | 'effects' | 'orders' | 'forecast';
+type TreasuryTab = 'accounts' | 'movements' | 'effects' | 'orders' | 'forecast' | 'cash';
 
 interface BankMovement {
     id: string; bankAccountId: string; date: string; reference: string;
@@ -22,6 +22,11 @@ interface PaymentOrder {
 interface ForecastItem {
     id: string; forecastDate: string; expectedInflow: number; expectedOutflow: number;
     expectedBalance: number; source: string; isActual: boolean; notes?: string;
+}
+interface CashSession {
+    id: string; openedAt: string; openingBalance: number;
+    closedAt?: string; expectedClosingBalance?: number; countedClosingBalance?: number;
+    difference?: number; status: 'Open' | 'Closed'; notes?: string;
 }
 
 const EMPTY_ACCOUNT = { name: '', iban: '', bic: '', bankName: '', notes: '', accountingAccountCode: '' };
@@ -57,6 +62,12 @@ export default function TreasuryClient({ initialAccounts }: TreasuryClientProps)
     const [importCsv, setImportCsv] = useState('');
     const [reconciling, setReconciling] = useState(false);
     const [reconcileResult, setReconcileResult] = useState<{ matchedCount: number; matchedAmount: number; message: string } | null>(null);
+    const [openCashSessionData, setOpenCashSessionData] = useState<CashSession | null>(null);
+    const [cashSessions, setCashSessions] = useState<CashSession[]>([]);
+    const [cashOpeningBalance, setCashOpeningBalance] = useState('');
+    const [cashCountedBalance, setCashCountedBalance] = useState('');
+    const [cashSaving, setCashSaving] = useState(false);
+    const [cashMessage, setCashMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
     const fmt = (n: number) => `€ ${(n || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}`;
     const fmtDate = (d?: string) => d ? new Date(d).toLocaleDateString('es-ES') : '—';
@@ -93,13 +104,64 @@ export default function TreasuryClient({ initialAccounts }: TreasuryClientProps)
         const r = await fetch(`/api/proxy/treasury/forecasts?year=${now.getFullYear()}&month=${now.getMonth() + 1}`);
         if (r.ok) setForecast(await r.json());
     };
+    const loadCashSession = async () => {
+        const [openRes, allRes] = await Promise.all([
+            fetch('/api/proxy/treasury/cash-sessions/open'),
+            fetch('/api/proxy/treasury/cash-sessions'),
+        ]);
+        setOpenCashSessionData(openRes.ok ? await openRes.json() : null);
+        if (allRes.ok) setCashSessions(await allRes.json());
+    };
 
     useEffect(() => {
         if (tab === 'movements') loadMovements();
         if (tab === 'effects') loadEffects();
         if (tab === 'orders') loadOrders();
         if (tab === 'forecast') loadForecast();
+        if (tab === 'cash') loadCashSession();
     }, [tab, selectedAccount]);
+
+    const openCashSession = async () => {
+        setCashSaving(true);
+        setCashMessage(null);
+        try {
+            const res = await fetch('/api/proxy/treasury/cash-sessions/open', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ openingBalance: parseFloat(cashOpeningBalance) || 0 }),
+            });
+            if (res.ok) {
+                setCashOpeningBalance('');
+                await loadCashSession();
+            } else {
+                const err = await res.json().catch(() => ({}));
+                setCashMessage({ type: 'error', text: err.error || err.title || 'Error al abrir la caja.' });
+            }
+        } finally {
+            setCashSaving(false);
+        }
+    };
+
+    const closeCashSession = async () => {
+        if (!openCashSessionData) return;
+        setCashSaving(true);
+        setCashMessage(null);
+        try {
+            const res = await fetch(`/api/proxy/treasury/cash-sessions/${openCashSessionData.id}/close`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ countedClosingBalance: parseFloat(cashCountedBalance) || 0 }),
+            });
+            if (res.ok) {
+                setCashCountedBalance('');
+                setCashMessage({ type: 'success', text: 'Caja cerrada correctamente.' });
+                await loadCashSession();
+            } else {
+                const err = await res.json().catch(() => ({}));
+                setCashMessage({ type: 'error', text: err.error || err.title || 'Error al cerrar la caja.' });
+            }
+        } finally {
+            setCashSaving(false);
+        }
+    };
 
     const saveAccount = async () => {
         setSaving(true);
@@ -163,6 +225,7 @@ export default function TreasuryClient({ initialAccounts }: TreasuryClientProps)
         { key: 'effects', label: 'Efectos Comerciales' },
         { key: 'orders', label: 'Órdenes de Pago' },
         { key: 'forecast', label: 'Previsión de Caja' },
+        { key: 'cash', label: 'Arqueo de Caja' },
     ];
 
     return (
@@ -445,6 +508,94 @@ export default function TreasuryClient({ initialAccounts }: TreasuryClientProps)
                         </table>
                     </div>
                 )
+            )}
+
+            {/* ── TAB: CASH SESSIONS (Arqueo de Caja) ── */}
+            {tab === 'cash' && (
+                <div>
+                    {cashMessage && (
+                        <div style={{
+                            marginBottom: '16px', padding: '12px 16px', borderRadius: '6px',
+                            background: cashMessage.type === 'success' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+                            border: `1px solid ${cashMessage.type === 'success' ? '#22c55e' : '#ef4444'}`,
+                            color: cashMessage.type === 'success' ? '#15803d' : '#991b1b',
+                            fontSize: '13px',
+                        }}>
+                            {cashMessage.text}
+                        </div>
+                    )}
+
+                    <div className="erp-card" style={{ padding: '20px', marginBottom: '20px' }}>
+                        {!openCashSessionData ? (
+                            <>
+                                <h2 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '12px' }}>Abrir caja</h2>
+                                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
+                                    <div style={{ flex: 1 }}>
+                                        <label className="erp-label">IMPORTE DE APERTURA</label>
+                                        <input type="number" step="0.01" className="erp-input" value={cashOpeningBalance}
+                                            onChange={e => setCashOpeningBalance(e.target.value)} placeholder="0.00" />
+                                    </div>
+                                    <button className="btn btn-primary" onClick={openCashSession} disabled={cashSaving}>
+                                        {cashSaving ? 'Abriendo...' : '🔓 Abrir Caja'}
+                                    </button>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <h2 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '4px' }}>Caja abierta</h2>
+                                <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '12px' }}>
+                                    Abierta el {fmtDate(openCashSessionData.openedAt)} con {fmt(openCashSessionData.openingBalance)} de apertura.
+                                </p>
+                                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
+                                    <div style={{ flex: 1 }}>
+                                        <label className="erp-label">IMPORTE CONTADO AL CIERRE</label>
+                                        <input type="number" step="0.01" className="erp-input" value={cashCountedBalance}
+                                            onChange={e => setCashCountedBalance(e.target.value)} placeholder="0.00" />
+                                    </div>
+                                    <button className="btn btn-primary" onClick={closeCashSession} disabled={cashSaving}>
+                                        {cashSaving ? 'Cerrando...' : '🔒 Cerrar Caja'}
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+
+                    {cashSessions.length === 0 ? (
+                        <div className="erp-card" style={{ padding: '56px', textAlign: 'center' }}>
+                            <div style={{ fontSize: '36px', marginBottom: '12px' }}>🧾</div>
+                            <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Sin arqueos de caja todavía.</p>
+                        </div>
+                    ) : (
+                        <div className="erp-card" style={{ overflow: 'hidden' }}>
+                            <table className="erp-table">
+                                <thead><tr>
+                                    <th>Apertura</th>
+                                    <th style={{ textAlign: 'right' }}>Importe apertura</th>
+                                    <th>Cierre</th>
+                                    <th style={{ textAlign: 'right' }}>Esperado</th>
+                                    <th style={{ textAlign: 'right' }}>Contado</th>
+                                    <th style={{ textAlign: 'right' }}>Diferencia</th>
+                                    <th>Estado</th>
+                                </tr></thead>
+                                <tbody>
+                                    {cashSessions.map(s => (
+                                        <tr key={s.id}>
+                                            <td style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{fmtDate(s.openedAt)}</td>
+                                            <td style={{ textAlign: 'right' }}>{fmt(s.openingBalance)}</td>
+                                            <td style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{s.closedAt ? fmtDate(s.closedAt) : '—'}</td>
+                                            <td style={{ textAlign: 'right' }}>{s.expectedClosingBalance != null ? fmt(s.expectedClosingBalance) : '—'}</td>
+                                            <td style={{ textAlign: 'right' }}>{s.countedClosingBalance != null ? fmt(s.countedClosingBalance) : '—'}</td>
+                                            <td style={{ textAlign: 'right', fontWeight: 700, color: !s.difference ? 'var(--text-secondary)' : s.difference > 0 ? 'var(--success)' : 'var(--danger)' }}>
+                                                {s.difference != null ? fmt(s.difference) : '—'}
+                                            </td>
+                                            <td><span className={`badge ${s.status === 'Open' ? 'badge-info' : 'badge-gray'}`}>{s.status === 'Open' ? 'Abierta' : 'Cerrada'}</span></td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
             )}
 
             {/* ── MODAL: Nueva cuenta ── */}

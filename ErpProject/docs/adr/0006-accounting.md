@@ -181,9 +181,15 @@ dominio, sin intervención manual):
   (`Application/Handlers/ExpenseApprovedEventHandler.cs`) genera asientos de
   gasto de forma análoga a `InvoiceApprovedEventHandler`.
 - **Treasury (ADR-0012):** `BankReconciliationService` de Treasury lee
-  `JournalEntryLines` de Accounting (cuenta 572) para conciliar movimientos
-  bancarios contra apuntes contables — dependencia cruzada de solo lectura en
-  sentido Treasury → Accounting.
+  `JournalEntryLines` de Accounting (cuenta 572) vía el puerto compartido
+  `IBankReconciliationLedgerQuery` (`Erp.Application.Common.Interfaces`,
+  implementado por `BankReconciliationLedgerQuery` aquí) para conciliar
+  movimientos bancarios contra apuntes contables, sin que Treasury referencie
+  el ensamblado de Accounting. En la otra dirección, Accounting **consume**
+  `CashSessionClosedEvent` (publicado por Treasury al cerrar un arqueo de
+  caja con diferencia, ADR-0018 #42b) vía `PostCashDifferenceHandler`, que
+  registra el ajuste (Debe 570/Haber 778 si sobra; Debe 668/Haber 570 si
+  falta) — Treasury nunca crea el asiento directamente.
 - **Fiscal/SII/VeriFactu (ADR-0013):** los modelos AEAT (303, 390, 347, etc.)
   generados aquí son insumo para la presentación telemática que documenta
   ADR-0013; la validación VIES real está disponible en dos rutas equivalentes:

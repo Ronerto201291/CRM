@@ -43,6 +43,10 @@ public class SeedChartOfAccountsHandlerTests
         // ADR-0018 #42b — cuentas de liquidación TPV/Bizum, distintas de "572"
         Assert.Equal("Asset", byCode["5721"].Type);
         Assert.Equal("Asset", byCode["5722"].Type);
+
+        // ADR-0018 #42b — ajuste por diferencia de caja en arqueo
+        Assert.Equal("Expense", byCode["668"].Type);
+        Assert.Equal("Income", byCode["778"].Type);
     }
 
     [Fact]

@@ -21,6 +21,22 @@ public class CompanyCreatedEvent : IDomainEvent
 }
 
 /// <summary>
+/// Fired by Treasury (CloseCashSessionHandler) when a cash session closes
+/// with a non-zero difference between the expected and counted balance
+/// (ADR-0018 #42b — arqueo de caja).
+/// → Accounting: registra el ajuste contable (668/778) — Treasury nunca crea
+/// asientos contables directamente.
+/// </summary>
+public class CashSessionClosedEvent : IDomainEvent
+{
+    public Guid CashSessionId { get; set; }
+    public Guid CompanyId { get; set; }
+    /// <summary>CountedClosingBalance - ExpectedClosingBalance. Positivo = sobra, negativo = falta.</summary>
+    public decimal Difference { get; set; }
+    public DateTime ClosedAt { get; set; }
+}
+
+/// <summary>
 /// Fired when an invoice is approved/locked.
 /// → AccountingService generates journal entry (430/700/477/4751)
 /// </summary>

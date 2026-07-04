@@ -27,5 +27,7 @@
     <ProjectReference Include="..\..\Modules\Sales\Infrastructure\Erp.Modules.Sales.Infrastructure.csproj" />
     <ProjectReference Include="..\..\Modules\Inventory\Application\Erp.Modules.Inventory.Application.csproj" />
     <ProjectReference Include="..\..\Modules\Inventory\Infrastructure\Erp.Modules.Inventory.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\Modules\Treasury\Application\Erp.Modules.Treasury.Application.csproj" />
+    <ProjectReference Include="..\..\Modules\Treasury\Infrastructure\Erp.Modules.Treasury.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

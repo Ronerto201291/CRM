@@ -106,6 +106,8 @@ public class SeedChartOfAccountsHandler : INotificationHandler<CompanyCreatedEve
             new() { Id = Guid.NewGuid(), CompanyId = companyId, Code = "640", Name = "Sueldos y salarios", Type = "Expense" },
             new() { Id = Guid.NewGuid(), CompanyId = companyId, Code = "642", Name = "Seguridad Social a cargo de la empresa", Type = "Expense" },
             new() { Id = Guid.NewGuid(), CompanyId = companyId, Code = "681", Name = "Amortización del inmovilizado material", Type = "Expense" },
+            // ADR-0018 #42b — ajuste por diferencia de caja en arqueo (falta)
+            new() { Id = Guid.NewGuid(), CompanyId = companyId, Code = "668", Name = "Otras pérdidas en gestión corriente", Type = "Expense" },
 
             // Grupo 7 – Ventas e ingresos
             new() { Id = Guid.NewGuid(), CompanyId = companyId, Code = "700", Name = "Ventas de mercaderías", Type = "Income" },
@@ -115,6 +117,8 @@ public class SeedChartOfAccountsHandler : INotificationHandler<CompanyCreatedEve
             new() { Id = Guid.NewGuid(), CompanyId = companyId, Code = "751", Name = "Subvenciones a la explotación", Type = "Income" },
             new() { Id = Guid.NewGuid(), CompanyId = companyId, Code = "760", Name = "Ingresos de participaciones en instrumentos de patrimonio", Type = "Income" },
             new() { Id = Guid.NewGuid(), CompanyId = companyId, Code = "770", Name = "Beneficios procedentes del inmovilizado material", Type = "Income" },
+            // ADR-0018 #42b — ajuste por diferencia de caja en arqueo (sobra)
+            new() { Id = Guid.NewGuid(), CompanyId = companyId, Code = "778", Name = "Ingresos excepcionales", Type = "Income" },
         };
 
         _context.Accounts.AddRange(accounts);

@@ -23,10 +23,25 @@ frontend vive en `frontend/src/app/treasury/`.
 `FinancingAccounts`, `Guarantees`/`Collaterals`/`BankGuarantees`, y las
 entidades de consolidación `ConsolidationGroups`/`SubsidiaryCompanies`/
 `ConsolidationAdjustments`/`ConsolidatedFinancialStatements`/
-`IntercompanyTransactions`. Migraciones: `InitialCreate` y
-`Phase4TreasuryFinancingGroups`.
+`IntercompanyTransactions`, y `CashSessions` (arqueo de caja, ADR-0018 #42b).
+Migraciones: `InitialCreate`, `Phase4TreasuryFinancingGroups` y
+`AddCashSessions` (esta última también corrigió un hallazgo real: la tabla
+`Collaterals` nunca había tenido migración pese a usarse en
+`GuaranteeHandlers.cs` — quedaba sin crear en cualquier base de datos real).
 
-Cinco controladores en `Api/Controllers/`:
+**Arqueo de caja (`CashSession`, ADR-0018 #42b):** apertura
+(`OpenCashSessionCommand`, importe inicial, rechaza si ya hay una caja
+abierta) y cierre (`CloseCashSessionCommand`, importe contado) vía
+`CashSessionsController` (`api/treasury/cash-sessions`, seis controladores en
+total). El importe esperado al cerrar se calcula reutilizando
+`IBankReconciliationLedgerQuery` (el mismo puerto compartido que ya usa
+`BankReconciliationService`, sin inyectar `IAccountingDbContext` de nuevo)
+sobre los movimientos de la cuenta "570" desde la apertura. Si hay
+diferencia, se publica `CashSessionClosedEvent` — Treasury no crea el
+asiento contable, lo hace Accounting (`PostCashDifferenceHandler`, ver
+ADR-0006).
+
+Seis controladores en `Api/Controllers/`:
 - **`TreasuryController`** (`api/treasury`) — el núcleo operativo: cuentas
   bancarias (`bank-accounts`), movimientos paginados (`page`/`pageSize`,
   `X-Total-Count`), importación de extracto CSV (`POST
@@ -132,11 +147,20 @@ contabilidad:
    se devuelve al frontend.
 
 ## Relación con otros módulos
-- **Accounting (ADR-0006):** relación de lectura directa y fuerte —
+- **Accounting (ADR-0006):** ~~relación de lectura directa y fuerte —
   `BankReconciliationService` inyecta `IAccountingDbContext` para conciliar
-  contra `JournalEntryLines` de cuenta 572. Es la única dependencia
-  cross-módulo real detectada en Treasury a nivel de código (no vía eventos,
-  sino acceso directo al DbContext de otro módulo).
+  contra `JournalEntryLines` de cuenta 572~~ **✅ Corregido (ADR-0018 #19c)**:
+  `BankReconciliationService` ya no inyecta `IAccountingDbContext`
+  directamente — usa `IBankReconciliationLedgerQuery` (puerto definido en
+  `Erp.Application.Common.Interfaces`, implementado por
+  `BankReconciliationLedgerQuery` en Accounting.Infrastructure), evitando la
+  dependencia de proyecto directa. El nuevo `CloseCashSessionHandler`
+  (arqueo de caja, ADR-0018 #42b) reutiliza el mismo puerto para calcular el
+  importe esperado, en vez de inyectar `IAccountingDbContext` de nuevo.
+  Además, Treasury **publica** `CashSessionClosedEvent` cuando un arqueo
+  cierra con diferencia — consumido por `PostCashDifferenceHandler` en
+  Accounting, que registra el ajuste (668/778). Ningún módulo referencia el
+  ensamblado del otro para este flujo.
 - **Billing/Sales (ADR-0005/ADR-0011) — cobro de facturas:** al marcar una
   factura como pagada, `MarkPaidHandler` (Billing) publica
   `PaymentReceivedEvent`, que es consumido por
