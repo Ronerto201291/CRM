@@ -12,6 +12,8 @@ public interface ICrmDbContext
     DbSet<ActivityLog> ActivityLogs { get; }
     DbSet<CrmNote> Notes { get; }
     DbSet<ScheduledAlert> ScheduledAlerts { get; }
-    
+    DbSet<ServiceCatalogItem> ServiceCatalogItems { get; }
+    DbSet<ClientContractedService> ClientContractedServices { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

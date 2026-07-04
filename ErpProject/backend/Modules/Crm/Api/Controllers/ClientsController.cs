@@ -1,5 +1,7 @@
 using Erp.Modules.Crm.Application.Features.Crm.Commands;
 using Erp.Modules.Crm.Application.Features.Crm.Queries;
+using Erp.Modules.Crm.Application.Features.Services.Commands;
+using Erp.Modules.Crm.Application.Features.Services.Queries;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -55,5 +57,23 @@ public class ClientsController : ControllerBase
     {
         var result = await _mediator.Send(new AnonymizeClientCommand { Id = id });
         return result ? Ok(new { message = "Datos personales anonimizados correctamente." }) : NotFound();
+    }
+
+    [HttpGet("{id}/contracted-services")]
+    public async Task<IActionResult> GetContractedServices(Guid id, CancellationToken ct)
+        => Ok(await _mediator.Send(new GetClientContractedServicesQuery { ClientId = id }, ct));
+
+    [HttpPost("{id}/contracted-services")]
+    public async Task<IActionResult> AddContractedService(Guid id, [FromBody] CreateClientContractedServiceCommand command, CancellationToken ct)
+    {
+        command.ClientId = id;
+        return Created("", await _mediator.Send(command, ct));
+    }
+
+    [HttpDelete("{id}/contracted-services/{contractId}")]
+    public async Task<IActionResult> CancelContractedService(Guid id, Guid contractId, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new CancelClientContractedServiceCommand { Id = contractId }, ct);
+        return result ? NoContent() : NotFound();
     }
 }

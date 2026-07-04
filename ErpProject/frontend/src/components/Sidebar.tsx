@@ -19,6 +19,7 @@ const navGroups = [
             { href: '/crm/prospects', label: 'Posibles Clientes', icon: <IconProspects /> },
             { href: '/crm/alerts', label: 'Alertas', icon: <IconAlerts /> },
             { href: '/crm/suppliers', label: 'Proveedores', icon: <IconSuppliers /> },
+            { href: '/crm/services', label: 'Catálogo de Servicios', icon: <IconServices /> },
             { href: '/billing', label: 'Facturación', icon: <IconBilling /> },
             { href: '/billing/quotes', label: 'Presupuestos', icon: <IconQuotes /> },
             { href: '/billing/credit-notes', label: '↩ Rectificativas', icon: <IconCreditNotes /> },
@@ -154,6 +155,7 @@ export default function Sidebar() {
 function IconDashboard() { return <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>; }
 function IconClients() { return <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a4 4 0 00-4-4h-1M9 20H4v-2a4 4 0 014-4h1m4 6v-1a3 3 0 00-6 0v1m3-9a4 4 0 100-8 4 4 0 000 8z" /></svg>; }
 function IconSuppliers() { return <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>; }
+function IconServices() { return <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M11 4a4 4 0 10-4.899 3.899L3 11l3 3 3.101-3.101A4 4 0 0011 4zm5.657 2.343l1.414-1.414 2.828 2.828-1.414 1.414m-2.828-2.828L9.172 13.83m7.485-7.487L21 10.686 10.686 21 6.343 16.657 16.657 6.343z" /></svg>; }
 function IconBilling() { return <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>; }
 function IconCreditNotes() { return <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m-9 8h18a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>; }
 function IconExpenses() { return <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>; }

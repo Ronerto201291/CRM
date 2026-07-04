@@ -99,6 +99,13 @@ pageSize }`) con header `X-Total-Count`; parámetros `page` (default 1) y
   CRM (`PaymentReceivedActivityHandler`, ver ADR-0004). También hay un
   `PaymentReceivedOutboxHandler` en Billing que releva el mismo evento a la
   tabla `Outbox` para consumidores externos.
+- **Facturación recurrente de servicios (ADR-0018 #42f)**:
+  `GenerateRecurringServiceInvoiceHandler`
+  (`Modules/Billing/Application/Handlers/`) consume
+  `ClientServiceDueForBillingEvent` (publicado por Crm) y envía
+  `CreateInvoiceCommand` — no es un flujo nuevo de facturación, reutiliza el
+  mismo command que usa el frontend; ver ADR-0004 y Relación con otros
+  módulos más abajo.
 - **FacturaE 3.2.2**: `FacturaEController`
   (`/api/v1/billing/facturae/{invoiceId}`) despacha `GenerateFacturaEQuery` →
   `IFacturaEService` genera el XML bajo demanda (requiere factura bloqueada).
@@ -178,6 +185,15 @@ Creación y bloqueo de una factura, con propagación a Accounting:
   (sin dependencia directa de `ICrmDbContext`) al crear facturas; CRM
   consume `QuoteAcceptedEvent` (conversión de Lead a Client) y
   `PaymentReceivedEvent` (timeline de actividad) publicados por Billing.
+  Además, Billing **consume** `ClientServiceDueForBillingEvent` — publicado
+  por `ContractedServiceBillingJob` en Crm (ADR-0018 #42f) cuando vence un
+  `ClientContractedService` — vía `GenerateRecurringServiceInvoiceHandler`
+  (`Modules/Billing/Application/Handlers/`), que arma y envía el
+  `CreateInvoiceCommand` real (cero lógica de facturación duplicada: reutiliza
+  la numeración/hash chain/IVA existentes) y publica de vuelta
+  `RecurringServiceInvoiceGeneratedEvent` para que Crm avance el contrato. El
+  asiento contable no necesita ningún código nuevo: la factura generada sigue
+  el mismo camino (`PaymentReceivedEvent` → Accounting) que cualquier otra.
 - **Fiscal/SII/Veri*Factu** (ADR-0013): la huella y el envío a AEAT se
   calculan en `LockInvoiceHandler`, pero el envío real ocurre en un job
   Hangfire (`VerifactuSubmissionJob`) fuera del ciclo de request.

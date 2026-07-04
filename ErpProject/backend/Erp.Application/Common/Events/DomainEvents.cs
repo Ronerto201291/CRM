@@ -247,3 +247,33 @@ public class StockLineEventDto
     public decimal Quantity { get; set; }
     public decimal UnitCost { get; set; }
 }
+
+// ── Crm ↔ Billing: Servicios contratados por cliente (ADR-0018 #42f) ──────────
+
+/// <summary>
+/// Fired by ContractedServiceBillingJob (Crm) when a ClientContractedService's
+/// NextBillingDate is due.
+/// → Billing: genera la factura recurrente (GenerateRecurringServiceInvoiceHandler).
+/// </summary>
+public class ClientServiceDueForBillingEvent : IDomainEvent
+{
+    public Guid ClientContractedServiceId { get; set; }
+    public Guid ClientId { get; set; }
+    public Guid CompanyId { get; set; }
+    public string ServiceName { get; set; } = string.Empty;
+    public decimal Price { get; set; }
+    public decimal TaxRate { get; set; }
+    public DateTime PeriodStart { get; set; }
+}
+
+/// <summary>
+/// Fired by Billing after successfully creating the recurring invoice for a
+/// ClientServiceDueForBillingEvent.
+/// → Crm: avanza NextBillingDate/LastInvoiceId del contrato (AdvanceContractedServiceBillingHandler).
+/// </summary>
+public class RecurringServiceInvoiceGeneratedEvent : IDomainEvent
+{
+    public Guid ClientContractedServiceId { get; set; }
+    public Guid InvoiceId { get; set; }
+    public Guid CompanyId { get; set; }
+}

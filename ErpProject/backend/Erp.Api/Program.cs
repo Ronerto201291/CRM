@@ -356,6 +356,11 @@ for (int attempt = 1; attempt <= 10; attempt++)
             job => job.ExecuteAsync(),
             "0 1 * * *");
 
+        RecurringJob.AddOrUpdate<Erp.Modules.Crm.Infrastructure.Services.ContractedServiceBillingJob>(
+            "contracted-service-billing",
+            job => job.ExecuteAsync(),
+            "0 2 * * *"); // Diario a las 2:00 — servicios contratados (ADR-0018 #42f)
+
         RecurringJob.AddOrUpdate<Erp.Infrastructure.Services.FiscalReminderJob>(
             "fiscal-reminder",
             job => job.ExecuteAsync(),

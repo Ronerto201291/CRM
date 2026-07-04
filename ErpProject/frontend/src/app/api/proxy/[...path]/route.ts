@@ -27,6 +27,7 @@ const ALLOWED_PATH_PREFIXES = [
     'purchasing/',
     'quotes',
     'reports/',
+    'service-catalog',
     'sii/',
     'subscription/',
     'suppliers',

@@ -21,6 +21,8 @@
     <ProjectReference Include="..\..\Modules\Accounting\Application\Erp.Modules.Accounting.Application.csproj" />
     <ProjectReference Include="..\..\Modules\Accounting\Infrastructure\Erp.Modules.Accounting.Infrastructure.csproj" />
     <ProjectReference Include="..\..\Modules\Billing\Infrastructure\Erp.Modules.Billing.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\Modules\Crm\Application\Erp.Modules.Crm.Application.csproj" />
+    <ProjectReference Include="..\..\Modules\Crm\Infrastructure\Erp.Modules.Crm.Infrastructure.csproj" />
     <ProjectReference Include="..\..\Modules\Sales\Application\Erp.Modules.Sales.Application.csproj" />
     <ProjectReference Include="..\..\Modules\Sales\Infrastructure\Erp.Modules.Sales.Infrastructure.csproj" />
     <ProjectReference Include="..\..\Modules\Inventory\Application\Erp.Modules.Inventory.Application.csproj" />
