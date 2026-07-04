@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import PageContainer from '@/components/PageContainer';
 import { parseListResponse } from '@/lib/parseListResponse';
+import { useCachedApi } from '@/hooks/useCachedApi';
 
 export interface SalesOrder {
     id: string;
@@ -31,18 +32,23 @@ export default function SalesOrdersClient({ initialOrders }: SalesOrdersClientPr
     const [orders, setOrders] = useState<SalesOrder[]>(initialOrders);
     const [loading, setLoading] = useState(false);
     const [filter, setFilter] = useState('all');
+    const { fetchCached, invalidateCached } = useCachedApi();
 
     const refresh = async () => {
         setLoading(true);
         try {
-            const res = await fetch('/api/proxy/v1/sales/orders');
-            if (res.ok) setOrders(parseListResponse<SalesOrder>(await res.json()));
+            invalidateCached('v1/sales/orders');
+            const data = await fetchCached<unknown>('v1/sales/orders');
+            if (data) setOrders(parseListResponse<SalesOrder>(data));
         } finally {
             setLoading(false);
         }
     };
 
-    const filtered = filter === 'all' ? orders : orders.filter(o => o.status === filter);
+    const filtered = useMemo(
+        () => (filter === 'all' ? orders : orders.filter(o => o.status === filter)),
+        [orders, filter]
+    );
     const fmt = (n: number) => `€ ${(n || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}`;
 
     return (

@@ -5,6 +5,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import AccessibleModal from '@/components/AccessibleModal';
 import FormLabel from '@/components/FormLabel';
 import { createUserSchema, type CreateUserFormValues } from '@/lib/schemas/userSchema';
+import { useCachedApi } from '@/hooks/useCachedApi';
+import { parseListResponse } from '@/lib/parseListResponse';
 
 interface User {
     id: string;
@@ -56,19 +58,22 @@ export default function UsersClient({
     const [saving, setSaving]     = useState(false);
     const [tempPassword, setTempPassword] = useState<string | null>(null);
     const [message, setMessage]   = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+    const { fetchCached, invalidateCached } = useCachedApi();
 
     const loadUsers = async () => {
-        const res = await fetch('/api/proxy/users');
-        if (res.ok) setUsers(await res.json());
+        invalidateCached('users');
+        const data = await fetchCached<unknown>('users');
+        if (data) setUsers(parseListResponse<User>(data));
         setLoading(false);
     };
 
     const loadRoles = async () => {
-        const res = await fetch('/api/proxy/users/roles');
-        if (res.ok) {
-            const data: Role[] = await res.json();
-            setRoles(data);
-            if (data.length > 0) reset({ firstName: '', lastName: '', email: '', roleId: data[data.length - 1].id });
+        invalidateCached('users/roles');
+        const data = await fetchCached<unknown>('users/roles');
+        if (data) {
+            const roleList = parseListResponse<Role>(data);
+            setRoles(roleList);
+            if (roleList.length > 0) reset({ firstName: '', lastName: '', email: '', roleId: roleList[roleList.length - 1].id });
         }
     };
 
