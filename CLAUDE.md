@@ -94,6 +94,22 @@ de considerar terminada una implementación en un módulo:
   `SpanishTaxIdValidatorTests.FindValidCif`, ADR-0018 ítem 0f) — el test
   tiene que verificar contra un caso conocido/externo, no contra el mismo
   código que pretende probar.
+- **Migraciones de EF Core generadas en paralelo por dos sesiones pueden
+  quedar desordenadas entre sí**: `dotnet ef migrations add` genera el
+  timestamp del nombre de archivo a partir de la hora local del momento en
+  que se ejecuta, no de un orden lógico de dependencias. Si dos cambios en
+  paralelo tocan el mismo tipo de entidad (uno añade una columna vía código
+  +migración, otro genera su propia migración sin haber tirado antes esa
+  migración ajena), la migración de quien la generó antes puede acabar
+  con un `AlterColumn`/referencia a una columna que otra migración —con
+  timestamp posterior— es la que de verdad la crea; en una base de datos
+  nueva esto revienta con "column ... does not exist" (pasó de verdad:
+  `AddDocumentTable` vs `AddMatchingToleranceAmountToCompany`). Antes de
+  hacer `git push` de cualquier migración nueva: `git fetch`/`pull` primero
+  para tener las migraciones más recientes de la otra sesión, y verificar
+  el orden con `dotnet ef migrations script --idempotent` (no necesita una
+  BBDD real) buscando que cada columna se cree antes de que otra migración
+  la altere.
 
 ## Comandos básicos
 
