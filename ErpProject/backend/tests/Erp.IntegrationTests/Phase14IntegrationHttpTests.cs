@@ -3,7 +3,8 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Erp.Application.Features.Auth.Commands;
 using Erp.Modules.Accounting.Infrastructure.Data;
-using Erp.Modules.Accounting.Infrastructure.Seeding;
+using Erp.Application.Common.Events;
+using Erp.Modules.Accounting.Application.Handlers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -217,7 +218,7 @@ public class Phase14IntegrationHttpTests : IClassFixture<PostgresWebApplicationF
             .UseNpgsql(connectionString)
             .Options;
         await using var ctx = new AccountingDbContext(options, tenant);
-        var seeder = new PgcSeeder(ctx, NullLogger<PgcSeeder>.Instance);
-        await seeder.SeedAsync(companyId);
+        var seeder = new SeedChartOfAccountsHandler(ctx, NullLogger<SeedChartOfAccountsHandler>.Instance);
+        await seeder.Handle(new CompanyCreatedEvent { CompanyId = companyId }, CancellationToken.None);
     }
 }
