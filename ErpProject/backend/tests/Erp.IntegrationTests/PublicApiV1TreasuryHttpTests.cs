@@ -74,9 +74,10 @@ public class PublicApiV1TreasuryHttpTests : IClassFixture<PostgresWebApplication
         Assert.Equal(HttpStatusCode.OK, registerResponse.StatusCode);
         var registerBody = await registerResponse.Content.ReadFromJsonAsync<RegisterCompanyResponse>();
         Assert.NotNull(registerBody);
+        await IntegrationTestRegistration.EnableAllModulesAsync(_factory.GetConnectionString(), registerBody!.CompanyId);
 
         var client = _factory.CreatePostgresClient();
-        TestAuthHelper.ApplyAuth(client, registerBody!.Token, registerBody.CompanyId);
+        TestAuthHelper.ApplyAuth(client, registerBody.Token, registerBody.CompanyId);
 
         var keyResponse = await client.PostAsJsonAsync("/api/apikeys", new Erp.Application.Features.ApiKeys.Commands.CreateApiKeyCommand
         {

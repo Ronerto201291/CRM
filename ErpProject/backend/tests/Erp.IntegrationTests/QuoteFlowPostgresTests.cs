@@ -158,9 +158,10 @@ public class QuoteFlowPostgresTests : IClassFixture<PostgresWebApplicationFactor
 
         Assert.Equal(HttpStatusCode.OK, registerResponse.StatusCode);
         var body = await registerResponse.Content.ReadFromJsonAsync<RegisterCompanyResponse>();
+        await IntegrationTestRegistration.EnableAllModulesAsync(_factory.GetConnectionString(), body!.CompanyId);
 
         var authedClient = _factory.CreatePostgresClient();
-        TestAuthHelper.ApplyAuth(authedClient, body!.Token, body.CompanyId);
+        TestAuthHelper.ApplyAuth(authedClient, body.Token, body.CompanyId);
         return (authedClient, body.CompanyId);
     }
 }

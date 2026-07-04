@@ -108,9 +108,10 @@ public class LockInvoiceJournalEntryTests : IClassFixture<PostgresWebApplication
         Assert.Equal(HttpStatusCode.OK, registerResponse.StatusCode);
         var registerBody = await registerResponse.Content.ReadFromJsonAsync<RegisterCompanyResponse>();
         Assert.NotNull(registerBody);
+        await IntegrationTestRegistration.EnableAllModulesAsync(_factory.GetConnectionString(), registerBody!.CompanyId);
 
         var authedClient = _factory.CreatePostgresClient();
-        TestAuthHelper.ApplyAuth(authedClient, registerBody!.Token, registerBody.CompanyId);
+        TestAuthHelper.ApplyAuth(authedClient, registerBody.Token, registerBody.CompanyId);
         return (authedClient, registerBody.CompanyId);
     }
 }
@@ -175,9 +176,10 @@ public class FiscalEndpointsSmokeTests : IClassFixture<PostgresWebApplicationFac
 
         Assert.Equal(HttpStatusCode.OK, registerResponse.StatusCode);
         var body = await registerResponse.Content.ReadFromJsonAsync<RegisterCompanyResponse>();
+        await IntegrationTestRegistration.EnableAllModulesAsync(_factory.GetConnectionString(), body!.CompanyId);
 
         var authedClient = _factory.CreatePostgresClient();
-        TestAuthHelper.ApplyAuth(authedClient, body!.Token, body.CompanyId);
+        TestAuthHelper.ApplyAuth(authedClient, body.Token, body.CompanyId);
         return authedClient;
     }
 }

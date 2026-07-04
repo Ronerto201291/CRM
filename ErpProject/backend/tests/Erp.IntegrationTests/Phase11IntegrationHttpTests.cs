@@ -161,9 +161,10 @@ public class Phase11IntegrationHttpTests : IClassFixture<PostgresWebApplicationF
 
         Assert.Equal(HttpStatusCode.OK, registerResponse.StatusCode);
         var body = await registerResponse.Content.ReadFromJsonAsync<RegisterCompanyResponse>();
+        await IntegrationTestRegistration.EnableAllModulesAsync(_factory.GetConnectionString(), body!.CompanyId);
 
         var authedClient = _factory.CreatePostgresClient();
-        TestAuthHelper.ApplyAuth(authedClient, body!.Token, body.CompanyId);
+        TestAuthHelper.ApplyAuth(authedClient, body.Token, body.CompanyId);
 
         var keyResponse = await authedClient.PostAsJsonAsync("/api/apikeys", new Erp.Application.Features.ApiKeys.Commands.CreateApiKeyCommand
         {

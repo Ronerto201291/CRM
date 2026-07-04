@@ -41,6 +41,7 @@ public class EliminateIntercompanyHttpTests : IClassFixture<PostgresWebApplicati
         Assert.NotNull(registerBody);
 
         var companyId = registerBody!.CompanyId;
+        await IntegrationTestRegistration.EnableAllModulesAsync(_factory.GetConnectionString(), companyId);
         var authedClient = _factory.CreatePostgresClient();
         TestAuthHelper.ApplyAuth(authedClient, registerBody.Token, companyId);
 
