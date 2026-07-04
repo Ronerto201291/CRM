@@ -27,7 +27,7 @@ public class ApiKeyRateLimitMiddleware
         _logger = logger;
     }
 
-    public async Task InvokeAsync(HttpContext context, IServiceProvider services)
+    public async Task InvokeAsync(HttpContext context, IServiceProvider services, ITenantContext tenantContext)
     {
         if (!PublicApiPaths.RequiresApiKey(context.Request.Path))
         {
@@ -47,7 +47,6 @@ public class ApiKeyRateLimitMiddleware
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ErpDbContext>();
         var cache = scope.ServiceProvider.GetRequiredService<IDistributedCache>();
-        var tenantContext = scope.ServiceProvider.GetRequiredService<ITenantContext>();
 
         var incomingKeyHash = ComputeKeyHash(apiKeyHeader);
 

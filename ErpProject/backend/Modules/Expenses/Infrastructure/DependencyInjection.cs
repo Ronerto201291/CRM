@@ -1,5 +1,7 @@
 using Erp.Application.Common.Interfaces;
 using Erp.Modules.Expenses.Application.Interfaces;
+using Erp.Modules.Expenses.Application.Validators;
+using FluentValidation;
 using Erp.Modules.Expenses.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -24,6 +26,7 @@ public static class DependencyInjection
         services.AddScoped<IExpensesDbContext>(p => p.GetRequiredService<ExpensesDbContext>());
         services.AddScoped<ISiiRecibidasExpenseSource, Services.SiiRecibidasExpenseSource>();
         services.AddHostedService<Services.OcrBackgroundService>();
+        services.AddValidatorsFromAssembly(typeof(CreateExpenseDocumentCommandValidator).Assembly);
 
         return services;
     }

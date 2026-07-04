@@ -66,10 +66,10 @@ public sealed record ValidateSiiXmlResult(
 public class ValidateSiiXmlHandler : IRequestHandler<ValidateSiiXmlQuery, ValidateSiiXmlResult>
 {
     private readonly SiiXmlGenerator _generator;
-    private readonly SiiSigningService _signer;
+    private readonly ISiiSigningService _signer;
     private readonly ITenantContext _tenant;
 
-    public ValidateSiiXmlHandler(SiiXmlGenerator generator, SiiSigningService signer, ITenantContext tenant)
+    public ValidateSiiXmlHandler(SiiXmlGenerator generator, ISiiSigningService signer, ITenantContext tenant)
     {
         _generator = generator;
         _signer = signer;
@@ -139,13 +139,13 @@ public sealed record SubmitSiiResult(bool Success, string? Estado, string Period
 public class SubmitSiiHandler : IRequestHandler<SubmitSiiCommand, SubmitSiiResult>
 {
     private readonly SiiXmlGenerator _generator;
-    private readonly SiiSigningService _signer;
+    private readonly ISiiSigningService _signer;
     private readonly SiiSubmissionService _submission;
     private readonly ITenantContext _tenant;
 
     public SubmitSiiHandler(
         SiiXmlGenerator generator,
-        SiiSigningService signer,
+        ISiiSigningService signer,
         SiiSubmissionService submission,
         ITenantContext tenant)
     {

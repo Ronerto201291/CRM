@@ -1,10 +1,14 @@
 using System;
+using Erp.Modules.Accounting.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace Erp.Modules.Accounting.Infrastructure.Migrations
 {
+    [DbContext(typeof(AccountingDbContext))]
+    [Migration("20260420000000_Phase2ContabilityAndAnalytics")]
     public partial class Phase2ContabilityAndAnalytics : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)

@@ -1,4 +1,6 @@
 using Erp.Modules.Treasury.Application.Interfaces;
+using Erp.Modules.Treasury.Application.Validators;
+using FluentValidation;
 using Erp.Modules.Treasury.Infrastructure.Data;
 using Erp.Modules.Treasury.Infrastructure.Jobs;
 using Erp.Modules.Treasury.Infrastructure.Services;
@@ -34,6 +36,7 @@ public static class DependencyInjection
         services.AddScoped<IExchangeRateProvider, EcbExchangeRateProvider>();
         services.AddScoped<IExchangeRateService, ExchangeRateService>();
         services.AddHostedService<ExchangeRateRefreshJob>();
+        services.AddValidatorsFromAssembly(typeof(CreateBankAccountCommandValidator).Assembly);
 
         return services;
     }

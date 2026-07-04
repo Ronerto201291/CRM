@@ -138,6 +138,9 @@ namespace Erp.Modules.Accounting.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<Guid>("OpeningJournalEntryId")
+                        .HasColumnType("uuid");
+
                     b.Property<decimal>("ResultadoNeto")
                         .HasColumnType("numeric");
 

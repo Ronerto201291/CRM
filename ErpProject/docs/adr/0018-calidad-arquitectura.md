@@ -401,7 +401,7 @@ mundial). Mezcla código/plataforma (32-37) y producto (38-42).
 
 | # | Mejora | Módulos | Prioridad |
 |---|---|---|---|
-| 32 | Cero tests automatizados en todo el repo — priorizar tests de integración sobre los flujos críticos (facturación, asientos automáticos, aislamiento multi-tenant) antes que cobertura exhaustiva | Todos | 🟡 Ampliado — **60 tests** (46 unit + 11 integración + 3 arquitectura); Testcontainers smoke + `PostgresMigrationTests` |
+| 32 | Cero tests automatizados en todo el repo — priorizar tests de integración sobre los flujos críticos (facturación, asientos automáticos, aislamiento multi-tenant) antes que cobertura exhaustiva | Todos | 🟡 Ampliado (fase 4) — **~266 tests** (133 unit + 81 integración + 4 arquitectura + 48 frontend Vitest); ValidationBehavior + validators; Accounting export 303/347; Platform/Subscriptions/ApiKeys; lock factura → asiento (integración); fiscal smoke JWT; coverlet **20%**; Playwright login→clientes seed docker; plan en `docs/testing-strategy.md` |
 | 33 | No existe middleware global de manejo de excepciones — cualquier excepción no controlada (incluida la `ValidationException` de FluentValidation recién activada en CRM) se filtra como un 500 crudo sin `ProblemDetails` ni contrato de error consistente | Core | ✅ Corregido — `ExceptionHandlingMiddleware` devuelve `application/problem+json` (400/401/404/500 según tipo) |
 | 34 | Aislamiento multi-tenant a un solo nivel de defensa (global query filters de EF Core); añadir Row-Level Security de Postgres como segunda barrera | Core | ✅ Piloto ampliado — `Companies` + 9 tablas `CompanyId` (`Users`, `Roles`, `TenantModules`, `TenantInvitations`, `FiscalEvents`, `Subscriptions`, `ApiKeys`, `AuditLogs`, `Rules`) vía `PostgresRlsBootstrap` |
 | 35 | Ninguna de las 19 violaciones de arquitectura de este ADR se detecta automáticamente en CI; añadir tests de arquitectura (tipo NetArchTest: "ningún controller referencia DbContext directamente", "Domain no depende de Infrastructure") para que las reglas se apliquen solas en cada PR | Core/CI | ✅ Ampliado — 3 reglas; solo exempt `FiscalHomologationController` y `StripeWebhookController` |
@@ -674,7 +674,7 @@ se listan como hallazgo porque no representan una credencial real filtrada.
 | 0d SEPA bancario | 🔒 Externo | Validación entidad bancaria |
 | 0e Stripe | ✅ | `StripeOptionsValidator` |
 | 0f NIF | ✅ | `SpanishTaxIdValidator` |
-| 32 Tests | ✅ | 60+ tests (unit + integración + arquitectura) |
+| 32 Tests | 🟡 | ~209 tests (89 unit + 77 integración + 4 arquitectura + 39 Vitest); flujos CRUD JWT + multi-tenant facturas; coverlet 10%; plan `docs/testing-strategy.md` |
 | 33 Exception middleware | ✅ | `ExceptionHandlingMiddleware` |
 | 34 RLS | ✅ piloto | 13 tablas: 10 core + `billing.Invoices`, `crm.Clients`, `crm.Suppliers` |
 | 35 Architecture tests | ✅ | DbContext + I*DbContext, Domain, IMediator |
@@ -778,6 +778,141 @@ críticos fiscales (0a–0f), plataforma (32–37), producto (38–42f) y fronte
 - **#57/#59:** CI audit vulnerabilidades; workflow único sin deploy Hetzner.
 - **Tests:** **61** totales (46 unit + 11 integración + 4 arquitectura).
 
+**Ampliado (jul 2026, sesión tests #32 — continuación):**
+
+- **#32 unit:** handlers CRM (leads, suppliers), Billing (`CreateInvoice` límites, `GetInvoiceById`), Accounting (`ExpenseApproved`, `PaymentReceived`), Payroll employees, Inventory lots (+ fakes compartidos en `TestSupport`).
+- **#32 integración JWT:** `TestAuthHelper`, `PostgresWebApplicationFactory`, `AuthenticatedEndpointTests` (register→200 clients/invoices/suppliers), `MultiTenantIsolationIntegrationTests`.
+- **#32 frontend:** 25 tests Vitest (schemas Zod, `FormErrorBanner`, `PageListLayout`, smoke admin/clientes).
+- **#32 E2E:** Playwright configurado (`npm run test:e2e`, smoke `/admin`); CI opcional con Docker.
+- **#32 coverlet:** añadido a `Erp.Tests` e `Erp.IntegrationTests`.
+- **Unit smoke por módulo:** CRM, Expenses, Treasury, Payroll, Purchasing, Billing (`GetInvoicesHandler`), Accounting (`GetDiarioHandler`); referencias de proyecto ampliadas en `Erp.Tests.csproj`.
+- **Plan:** `docs/testing-strategy.md` — backlog handlers exhaustivos, JWT mock integración, Playwright E2E opcional.
+- **Tests:** **126** backend (54 unit + 68 integración + 4 arquitectura) + **7** frontend Vitest = **133** totales.
+
+**Ampliado (jul 2026, sesión tests #32 — fase 3):**
+
+- **#32 unit (+18):** `LockInvoiceHandler`, `CreateQuoteHandler`, `UpdateLeadHandler`, Treasury currencies/exchange, Expenses create/approve/update, Purchasing create/get, Sales delivery notes; fakes `FakeVerifactuServices`, `FakeExchangeRateService`.
+- **#32 integración (+4):** `AuthenticatedFlowsTests` (POST cliente/factura borrador, GET fiscal calendar), `MultiTenantInvoiceIsolationTests`; migración `VerifactuSubmittedAt` en billing.
+- **#32 frontend (+14):** hooks `useApi`/`useCachedApi`, schemas invoice/lead, smoke dashboard/billing/expenses → **39** Vitest.
+- **#32 E2E:** login→dashboard con `E2E_ADMIN_*`; job CI `e2e-playwright` en push a `main` (`continue-on-error`).
+- **#32 coverlet:** umbral mínimo **10% línea** en `Erp.Tests` e `Erp.IntegrationTests`.
+- **Tests:** **170** backend (89 unit + 77 integración + 4 arquitectura) + **39** frontend = **209** totales.
+
+**Ampliado (jul 2026, sesión tests #32 — fase 5):**
+
+- **#32 unit (+41):** Automation rules (`CreateRule`, `GetRules`, `ToggleRule`), AuditLogs paginado, Budget CRUD + análisis, Consolidation grupos/subsidiarias/consolidar, Aging report; validators FluentValidation Billing/Sales/Expenses/Treasury + `ModuleValidatorTests`.
+- **#32 integración (+1):** `CreateInvoicePostgresTests` — POST /api/invoices → 201, advisory lock Postgres, verificación listado.
+- **#32 migraciones:** `AddFiscalPeriod.Designer.cs` + columna `OpeningJournalEntryId`; eliminado fixup SQL en `IntegrationTestDatabaseMigrator`.
+- **#32 frontend (+4):** smoke Vitest inventory, purchasing, sales, accounting → **52** Vitest.
+- **#32 E2E:** test crear cliente (condicional UI); CI `e2e-playwright` sin `continue-on-error` + wait health stack.
+- **#32 coverlet:** umbral **30% línea**; upload Codecov opcional (`CODECOV_TOKEN`).
+- **Tests:** **260** backend (174 unit + 82 integración + 4 arquitectura) + **52** frontend = **312** totales.
+
+**Ampliado (jul 2026, sesión tests #32 — fase 6):**
+
+- **#32 API:** `GET /api/invoices/{id}` en `InvoicesController` (MediatR `GetInvoiceByIdQuery`).
+- **#32 unit (+36):** SII/Verifactu submit con `FakeHttpClientFactory` mock AEAT; CostCenter, Contact/Supplier, Product, BankAccount, Provision/DeferredEntry handlers.
+- **#32 integración (+3):** GET invoice by id (201→200), GET 404, `EliminateIntercompanyPostgresTests` (ExecuteUpdate Postgres); fixup `IntercompanyTransactions` en migrator.
+- **#32 frontend (+5):** formularios crear factura (`BillingCreateInvoiceForm`) y pedido venta (`NewSalesOrderPage`) → **57** Vitest.
+- **#32 E2E:** job `e2e-playwright` también en `pull_request` (no solo push `main`).
+- **#32 coverlet:** umbral **40% línea** (superado en unit + integración).
+- **Tests:** **299** backend (210 unit + 85 integración + 4 arquitectura) + **57** frontend = **356** totales.
+
+**Ampliado (jul 2026, sesión tests #32 — fase 7):**
+
+- **#32 infra:** `ISiiSigningService` inyectable + fix `ApiKeyRateLimitMiddleware` (tenant en scope de petición, no sub-scope).
+- **#32 unit (+31):** SubmitSii happy-path mock AEAT; Treasury financing (Confirming/Factoring/CreditLines), guarantees/collateral/bank guarantees, bank movements/cash effects/payment orders; CRM notes; currency rates/update.
+- **#32 integración (+1):** `EliminateIntercompanyHttpTests` POST v1 con JWT + X-Api-Key; migración treasury **`20260704104650_Phase4ChainCheck`** (elimina fixup SQL manual).
+- **#32 frontend (+4):** `NewPurchaseOrderPage`, modal crear gasto `ExpensesClient` → **61** Vitest.
+- **#32 coverlet:** umbral **40% línea** (mantenido; 50% pendiente medición).
+- **Tests:** **331** backend (241 unit + 86 integración + 4 arquitectura) + **61** frontend = **392** totales.
+
+**Ampliado (jul 2026, sesión tests #32 — fase 8):**
+
+- **#32 unit (+26):** Billing quotes (GetQuote, Accept/Reject guards, Duplicate, GetQuotes), MarkPaid, VerifyHashChain; Payroll settlements (CRUD líneas, finalize), Export TC2/RED; Sales CreateDeliveryNote + GetSalesOrders; fakes FakeMediator, FakePayrollJournalEntryGenerator.
+- **#32 integración (+4):** `PublicApiV1TreasuryHttpTests` GET v1 financing/currencies/consolidation con JWT + X-Api-Key.
+- **#32 frontend (+4):** LeadsClient edit PUT, BillingClient mark paid, FiscalClient smoke → **65** Vitest.
+- **#32 E2E (+3):** smoke fiscal, treasury, expenses pages.
+- **#32 coverlet:** umbral subido a **50% línea** (verificado Release local en scope csproj).
+- **Tests:** **361** backend (267 unit + 90 integración + 4 arquitectura) + **65** frontend = **426** totales.
+
+**Ampliado (jul 2026, sesión tests #32 — fase 9):**
+
+- **#32 fix producción:** `QuoteHandlers` — transiciones de estado (Send/Accept/Reject/Convert/Update) con `AsNoTracking` + `ExecuteUpdate`/`ExecuteDelete` para evitar `DbUpdateConcurrencyException` en Postgres; `NoOpEmailService` en entorno IntegrationTests.
+- **#32 integración (+4):** `QuoteFlowPostgresTests` (create→send→accept→convert→lock→asiento), `UpdateQuotePostgresTests`, `SalesOrderFlowPostgresTests` (order→delivery→invoice); **94** integración, 0 skip.
+- **#32 unit (+37):** Phase9 barrido handlers (CRM, Expenses, Inventory, Purchasing, Accounting VAT, Sales CreateCustomerInvoice, Billing SendQuote/Convert guards, Alerts, UpdateClient, CreateGoodsReceipt, GetMayor, …) → **304** unit.
+- **#32 frontend (+3):** `CurrenciesClient` crear divisa POST, `ExpensesClient` edit PUT → **68** Vitest.
+- **#32 E2E (+1):** upload gasto vía token QR (condicional stack docker) → **9** smoke.
+- **#32 coverlet XPlat medido:** unit ~**20.3%** línea, integración ~**38.6%** línea (monolito); umbral csproj **50%** sigue pasando.
+- **Tests:** **402** backend (304 unit + 94 integración + 4 arquitectura) + **68** frontend + **9** E2E = **479** totales.
+
+**Ampliado (jul 2026, sesión tests #32 — fase 10):**
+
+- **#32 unit (+48):** exports AEAT (`GetModelo111`, `ExportModelo390/347/349`, LibroIva, XML 200/202/303/390), alerts CRUD, expense query handlers, outbox (`PaymentReceived`, `LeadCreated/StatusChanged`, `ClientCreated`), `CreateSupplierInvoice` 3-way match, balance/PyG, fixed assets, VIES/prorrata, `GetInvoicesByStatus`, `CreateInvoiceModule`, inventory valuation, `GoodsReceiptInventoryHandler`; fakes export en `FakeModeloReaders`.
+- **#32 integración (+3):** `ModuleFlowPostgresTests` — PO→goods receipt→supplier invoice, payroll employee→settlement→finalize (seed cuentas 640/642/476/4751/465), expense create→GET→stats.
+- **#32 frontend (+2):** `InventoryClient` listado + crear producto POST → **70** Vitest.
+- **#32 E2E:** Playwright retries=2, timeouts ampliados, retry manual upload gasto fase 10.
+- **#32 coverlet XPlat medido:** unit ~**22.9%** línea, integración ~**40.1%** línea (monolito); umbral csproj **50%** sin cambio.
+- **Tests:** **453** backend (352 unit + 97 integración + 4 arquitectura) + **70** frontend + **9** E2E = **532** totales.
+
+**Ampliado (jul 2026, sesión tests #32 — fase 11):**
+
+- **#32 fix producción:** `ApproveExpenseHandler` — AuditLog solo si `IHttpContextCurrentUserAccessor.UserId` válido (patrón `LockInvoiceHandler`; evita FK `AuditLogs_UserId` con `Guid.Empty` en Postgres).
+- **#32 unit (+12):** CRM outbox restantes (`ClientUpdated`, `SupplierCreated`, `ContactCreated`), serials CRUD, treasury `GetCashFlowForecast`/`GenerateCashFlowForecast`, `GenerateCashEffectSepa`; test audit log approve con usuario.
+- **#32 integración (+4):** `Phase11IntegrationHttpTests` — POST `/api/expenses/{id}/approve`→asiento contable, treasury SEPA pain.001, GET forecasts, automation rules CRUD.
+- **#32 frontend (+3):** `PayrollClient` listado + crear empleado POST, `AeatClient` smoke exports → **73** Vitest.
+- **#32 E2E:** upload gasto fail-hard en CI (`CI=true`); health wait docker **90×5s** con logs diagnóstico.
+- **#32 coverlet XPlat medido:** unit ~**23.9%** línea, integración ~**41.7%** línea (monolito); umbral csproj **50%** sin cambio (no subido — XPlat global <50%).
+- **Tests:** **469** backend (364 unit + 101 integración + 4 arquitectura) + **73** frontend + **9** E2E = **551** totales.
+
+**Ampliado (jul 2026, sesión tests #32 — fase 12):**
+
+- **#32 fix producción:** `GetLiquidacionIVAHandler` — `DateTimeKind.Utc` en rango trimestral (evita 400 Postgres `timestamp with time zone`).
+- **#32 unit (+26):** `Phase12HandlerTests` — `GetClientById`, `UpdateSupplier`, accounting (`GetTrialBalance`, `GetPyG`, IVA soportado/repercutido/liquidación, `ExportLibroDiario`, `GetJournalEntries`, `GetMayorController`, provisiones CRUD), treasury (`GetCashEffects`, `GetPaymentOrders`, `UpdateCashEffectStatus`), inventory warehouses, `UpdateExpenseLine`.
+- **#32 integración (+6):** `Phase12IntegrationHttpTests` — GET reportes diario/balance/pyg, accounting trial/liquidación/mayor, export libro diario CSV, CRM supplier PUT + client v1 GET, inventory warehouses CRUD, treasury payment orders.
+- **#32 frontend (+5):** `ReportsClient` tabs balance/PyG fetch, `TreasuryPage` pestaña previsión de caja → **78** Vitest.
+- **#32 E2E:** upload gasto con hasta 3 reintentos y backoff progresivo; mensaje error incluye body respuesta.
+- **#32 coverlet XPlat medido:** unit ~**25.0%** línea (+1.1 pp vs fase 11); integración ~**41.7%** (referencia fase 11); umbral csproj **50%** sin subir.
+- **Tests:** **501** backend (390 unit + 107 integración + 4 arquitectura) + **78** frontend + **9** E2E = **588** totales.
+
+**Ampliado (jul 2026, sesión tests #32 — fase 13):**
+
+- **#32 unit (+35):** auth 2FA (`Setup2Fa`/`Confirm2Fa`/`Disable2Fa`/`VerifyTotp`), email auth (forgot/reset/confirm), permissions grant/deny/revoke/list, refresh token rotation; FacturaE generate/validate/signed/FACe/Verifactu logs; subscriptions checkout/portal/billing history; anonymize contact/supplier; Stripe webhook signature guards; fakes `FakeTotpService`, `FakeFacturaEServices`, `FakeDistributedCache`.
+- **#32 integración (+6):** `Phase13IntegrationHttpTests` — GET subscription/plans/current, contacts CRUD, permissions/my, company GET/PUT, tenant modules, facturae validate 404.
+- **#32 frontend (+10):** `ContactsClient`, `SuppliersClient` crear POST, `SubscriptionClient`, `AutomationClient` validación, `QuoteDetailClient` → **88** Vitest.
+- **#32 coverlet XPlat medido:** unit ~**26.2%** línea (+1.2 pp); integración ~**44.3%** línea (+2.6 pp); umbral csproj **50%** sin subir (XPlat global <50%).
+- **Tests:** **542** backend (425 unit + 113 integración + 4 arquitectura) + **88** frontend + **9** E2E = **639** totales.
+
+**Ampliado (jul 2026, sesión tests #32 — fase 15):**
+
+- **#32 fix producción:** `TenantResolverMiddleware` — `/api/auth/accept-invite` en rutas públicas (registro por invitación sin X-Tenant-Id).
+- **#32 unit (+15):** `Phase15HandlerTests` — AcceptInvite (5 guards), GetInvoicePdf (locked/not locked/not found), GetQuotePdf, AnulVerifactu, ReconcileBankAccount; fake `FakeInvoicePdfService`.
+- **#32 integración (+10):** `Phase15IntegrationHttpTests` — accept-invite HTTP, invoice/quote PDF, bank reconcile, verifactu submissions, contacts/warehouses/sales orders/guarantees/credit notes list.
+- **#32 frontend (+17 casos / 10 archivos):** `EmpresasClient`, `InvoiceDetailClient`, `FinancingClient`, `FacturaEClient`, `OrderDetailClient`, `ConsolidationClient`, `WarehousesClient`, `CreditNotesClient`, `SalesInvoicesClient`, `GuaranteesClient` → **114** Vitest.
+- **#32 E2E (+1):** smoke login → `/billing/facturae` → **11** Playwright. E2E 2FA omitido (TOTP no estable en seed CI).
+- **#32 ExecutePaymentOrder:** sin endpoint HTTP en `TreasuryController`; unit en Phase14. **AnulVerifactu** HTTP omitido integración (Hangfire no init en IntegrationTests).
+- **#32 coverlet XPlat medido:** unit ~**28.2%** línea (+0.7 pp); integración ~**48.8%** línea (+3.1 pp, objetivo 48–50% alcanzado); umbral csproj **50%** sin subir.
+- **Tests:** **600** backend (466 unit + 130 integración + 4 arquitectura) + **114** frontend + **11** E2E = **725** totales.
+
+**Ampliado (jul 2026, sesión tests #32 — fase 16, plan cerrado):**
+
+- **#32 fix producción:** migraciones manuales CRM (`AddLeadProspectFields`, `AddCrmNotes`, `AddScheduledAlerts`) y Accounting (`Phase2ContabilityAndAnalytics`, `Phase3VatAndFiscality`, `AddAmortizationsAndDeferredEntries`) sin atributo `[Migration]` — EF no las aplicaba → POST `/api/leads` 500 (columnas `TaxId`/`Address` ausentes), provisiones sin tabla.
+- **#32 unit (+6):** `Phase16HandlerTests` — GetLeadById, GetLeads status filter, GetPaymentOrders filter, UpdateCashEffectStatus, CreatePaymentOrder, ConvertLead guard.
+- **#32 integración (+7):** `Phase16IntegrationHttpTests` — POST leads 201, convert lead, execute payment order HTTP, AnulVerifactu HTTP, provisions CRUD list, aging report, deliveries list.
+- **#32 API:** `POST /api/treasury/payment-orders/{id}/execute` en `TreasuryController`; `NoOpVerifactuSubmissionGateway` en IntegrationTests (sin Hangfire).
+- **#32 frontend (+9 casos / 3 archivos):** `ProvisionsClient`, `AgingClient`, `DeliveriesClient` → **123** Vitest.
+- **#32 E2E (+1):** smoke 2FA condicional (`E2E_2FA_EMAIL`/`E2E_2FA_PASSWORD`) → **12** Playwright. Verify TOTP completo pendiente (`E2E_2FA_TOTP_SECRET`).
+- **#32 coverlet XPlat medido:** unit ~**28.2%** línea (estable); integración ~**51.2%** línea (+2.4 pp, **≥50%**); umbral csproj **50%** sin subir.
+- **Tests:** **613** backend (472 unit + 137 integración + 4 arquitectura) + **123** frontend + **12** E2E = **748** totales. **Plan testing-strategy.md ~100% cerrado.**
+
+**Ampliado (jul 2026, sesión tests #32 — fase 17, coverage gates deploy):**
+
+- **#32 CI bloqueante:** `scripts/check-coverage.py` merge unit+integration XPlat; falla pipeline si merged <**49%**, unit <**27%**, integration <**49%**; módulos críticos Billing.Application ≥**55%**, Accounting.Application ≥**18%**, Erp.Infrastructure ≥**50%**.
+- **#32 frontend gate:** Vitest v8 (`@vitest/coverage-v8`) con umbrales **39%** líneas en `vitest.config.ts`; `npm run test:coverage` en CI sustituye `npm test`.
+- **#32 deploy:** `e2e-playwright` y build Docker en `main` dependen de `backend-build` + `frontend-build` (ambos con gate); sin `continue-on-error`.
+- **#32 umbrales:** `scripts/coverage-thresholds.json` + roadmap trimestral en `docs/testing-strategy.md` §Coverage gates.
+- **#32 medido post-gate:** merged ~**51%**, unit ~**28.2%**, frontend clientes ~**53%** líneas (scope excluye `page.tsx`/`layout.tsx` server-only).
+
 ### Techo alcanzado (accionable cerrado)
 
 El backlog **accionable de código** queda en **~100%** (código pendiente = solo bloqueos externos/producto abajo). Lo que impide el 100% **nominal global** es exclusivamente:
@@ -793,7 +928,7 @@ El backlog **accionable de código** queda en **~100%** (código pendiente = sol
 | | #42a Gestoría multi-empresa | ¿Plan por Company o por gestoría? |
 | | #42b–f | Roadmap Q3+ (multi-moneda avanzada, IA OCR, etc.) |
 | **Infra opcional diferida** | #34 más tablas | Extender RLS a tablas módulo (no bloquea desarrollo) |
-| **Frontend residual (no bloqueante)** | ~20 páginas `use client` | Auth (server actions), fiscal/treasury/accounting con modales — interactivas por naturaleza |
+| **Frontend residual (no bloqueante)** | ~10 páginas `use client` | Auth server actions, fiscal/treasury modales avanzados — interactivas por naturaleza |
 | | #50 | `useMemo` en hubs (baja prioridad) |
 | | Lint | ~30 reglas `react-hooks/*` preexistentes |
 

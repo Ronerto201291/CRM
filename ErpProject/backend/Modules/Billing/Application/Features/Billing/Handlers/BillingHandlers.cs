@@ -376,6 +376,7 @@ public class LockInvoiceHandler : IRequestHandler<LockInvoiceCommand, bool>
     private readonly IPublisher _publisher;
     private readonly IVerifactuSubmissionGateway _verifactuGateway;
     private readonly IVerifactuModeSettings _verifactuMode;
+    private readonly IHttpContextCurrentUserAccessor _currentUser;
     private readonly Microsoft.Extensions.Logging.ILogger<LockInvoiceHandler> _log;
 
     public LockInvoiceHandler(
@@ -386,6 +387,7 @@ public class LockInvoiceHandler : IRequestHandler<LockInvoiceCommand, bool>
         IPublisher publisher,
         IVerifactuSubmissionGateway verifactuGateway,
         IVerifactuModeSettings verifactuMode,
+        IHttpContextCurrentUserAccessor currentUser,
         Microsoft.Extensions.Logging.ILogger<LockInvoiceHandler> log)
     {
         _ctx              = ctx;
@@ -395,6 +397,7 @@ public class LockInvoiceHandler : IRequestHandler<LockInvoiceCommand, bool>
         _publisher        = publisher;
         _verifactuGateway = verifactuGateway;
         _verifactuMode    = verifactuMode;
+        _currentUser      = currentUser;
         _log              = log;
     }
 
@@ -459,19 +462,22 @@ public class LockInvoiceHandler : IRequestHandler<LockInvoiceCommand, bool>
             _log.LogInformation("VerifactuSubmissionJob enqueued for invoice {Number}", inv.Number);
         }
 
-        // AuditLog inmutable con hash
-        var auditEntry = new AuditLog
+        // AuditLog inmutable con hash (solo si hay usuario autenticado — evita FK inválida)
+        if (_currentUser.UserId is Guid auditUserId)
         {
-            Id = Guid.NewGuid(), CompanyId = inv.CompanyId,
-            UserId = Guid.Empty, Entity = "Invoice", EntityId = inv.Id,
-            Action = "Locked", Timestamp = DateTime.UtcNow,
-            OldValues = System.Text.Json.JsonSerializer.Serialize(new { IsLocked = false }),
-            NewValues = System.Text.Json.JsonSerializer.Serialize(new { IsLocked = true, inv.Hash })
-        };
-        auditEntry.Hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(
-            $"{auditEntry.Entity}|{auditEntry.EntityId}|{auditEntry.Action}|{auditEntry.Timestamp:O}")));
-        _appCtx.AuditLogs.Add(auditEntry);
-        await _appCtx.SaveChangesAsync(ct);
+            var auditEntry = new AuditLog
+            {
+                Id = Guid.NewGuid(), CompanyId = inv.CompanyId,
+                UserId = auditUserId, Entity = "Invoice", EntityId = inv.Id,
+                Action = "Locked", Timestamp = DateTime.UtcNow,
+                OldValues = System.Text.Json.JsonSerializer.Serialize(new { IsLocked = false }),
+                NewValues = System.Text.Json.JsonSerializer.Serialize(new { IsLocked = true, inv.Hash })
+            };
+            auditEntry.Hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(
+                $"{auditEntry.Entity}|{auditEntry.EntityId}|{auditEntry.Action}|{auditEntry.Timestamp:O}")));
+            _appCtx.AuditLogs.Add(auditEntry);
+            await _appCtx.SaveChangesAsync(ct);
+        }
 
         await _publisher.Publish(new InvoiceApprovedEvent
         {

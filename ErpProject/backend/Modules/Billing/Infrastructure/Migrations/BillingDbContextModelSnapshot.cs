@@ -163,6 +163,12 @@ namespace Erp.Modules.Billing.Infrastructure.Migrations
                     b.Property<string>("VerifactuQrUrl")
                         .HasColumnType("text");
 
+                    b.Property<bool>("VerifactuRealtimeSubmission")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("VerifactuSubmittedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CompanyId");

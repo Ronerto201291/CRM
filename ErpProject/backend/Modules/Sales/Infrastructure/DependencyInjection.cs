@@ -1,5 +1,7 @@
 using Erp.Modules.Sales.Application.Interfaces;
+using Erp.Modules.Sales.Application.Validators;
 using Erp.Modules.Sales.Infrastructure.Data;
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,6 +23,7 @@ public static class DependencyInjection
                .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
 
         services.AddScoped<ISalesDbContext>(p => p.GetRequiredService<SalesDbContext>());
+        services.AddValidatorsFromAssembly(typeof(CreateSalesOrderCommandValidator).Assembly);
 
         return services;
     }

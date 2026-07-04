@@ -67,6 +67,7 @@ public static class DependencyInjection
 
         // SII: XML generation, XAdES-BES signing, AEAT SOAP submission
         services.AddScoped<SiiXmlGenerator>();
+        services.AddScoped<ISiiSigningService, SiiSigningService>();
         services.AddScoped<SiiSigningService>();
         services.AddScoped<SiiSubmissionService>();
 

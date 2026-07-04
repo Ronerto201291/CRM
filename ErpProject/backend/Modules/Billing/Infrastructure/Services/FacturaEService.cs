@@ -29,12 +29,12 @@ public sealed class FacturaEService : IFacturaEService
 
     private readonly IBillingDbContext     _billing;
     private readonly IApplicationDbContext _app;
-    private readonly SiiSigningService     _signer;
+    private readonly ISiiSigningService    _signer;
 
     public FacturaEService(
         IBillingDbContext billing,
         IApplicationDbContext app,
-        SiiSigningService signer)
+        ISiiSigningService signer)
     {
         _billing = billing;
         _app     = app;

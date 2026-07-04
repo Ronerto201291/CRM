@@ -115,6 +115,7 @@ public class TenantResolverMiddleware
         {
             "/api/auth/login",
             "/api/auth/register",
+            "/api/auth/accept-invite",
             "/api/auth/refresh",
             "/api/expenses/upload",  // Público pero con token
             "/api/stripe/webhook",   // Stripe webhook - no tenant context required

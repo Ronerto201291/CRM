@@ -12,7 +12,7 @@ namespace Erp.Infrastructure.Services.Sii;
 /// <summary>
 /// Firma SII con XAdES-BES (RSA-SHA256). SignedProperties vía DataObject antes de ComputeSignature.
 /// </summary>
-public class SiiSigningService
+public class SiiSigningService : ISiiSigningService
 {
     private readonly ILogger<SiiSigningService> _logger;
     private readonly string? _certPath;

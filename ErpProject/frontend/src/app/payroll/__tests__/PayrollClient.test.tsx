@@ -1,0 +1,67 @@
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import PayrollClient from '@/app/payroll/PayrollClient';
+
+describe('PayrollClient', () => {
+    it('renderiza empleados y liquidaciones iniciales', () => {
+        render(
+            <PayrollClient
+                initialEmployees={[
+                    {
+                        id: 'e1',
+                        taxId: '12345678Z',
+                        fullName: 'Ana García',
+                        hireDate: '2024-01-01',
+                        contractType: 'Indefinido',
+                        weeklyHours: 40,
+                    },
+                ]}
+                initialSettlements={[
+                    {
+                        id: 's1',
+                        year: 2026,
+                        month: 6,
+                        status: 'Draft',
+                        lineCount: 0,
+                        totalGross: 0,
+                        totalIrpf: 0,
+                        totalEmployerSs: 0,
+                    },
+                ]}
+                initialYear={2026}
+            />,
+        );
+
+        expect(screen.getByRole('heading', { name: /nóminas/i })).toBeInTheDocument();
+        expect(screen.getAllByText('Ana García').length).toBeGreaterThanOrEqual(1);
+        expect(screen.getByText('6/2026')).toBeInTheDocument();
+    });
+
+    it('crea empleado vía POST', async () => {
+        const fetchMock = vi.fn().mockImplementation((url: string) => {
+            if (url.includes('/employees')) {
+                return Promise.resolve({ ok: true, json: async () => [] });
+            }
+            if (url.includes('/settlements')) {
+                return Promise.resolve({ ok: true, json: async () => [] });
+            }
+            return Promise.resolve({ ok: true, json: async () => ({}) });
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        render(
+            <PayrollClient initialEmployees={[]} initialSettlements={[]} initialYear={2026} />,
+        );
+
+        fireEvent.change(screen.getByPlaceholderText('NIF'), { target: { value: '87654321X' } });
+        fireEvent.change(screen.getByPlaceholderText('Nombre completo'), { target: { value: 'Nuevo Empleado' } });
+        fireEvent.click(screen.getByRole('button', { name: /^añadir$/i }));
+
+        await waitFor(() => {
+            expect(fetchMock).toHaveBeenCalledWith(
+                '/api/proxy/payroll/employees',
+                expect.objectContaining({ method: 'POST' }),
+            );
+        });
+    });
+});

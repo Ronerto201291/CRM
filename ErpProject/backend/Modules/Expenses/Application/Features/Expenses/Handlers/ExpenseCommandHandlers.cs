@@ -92,10 +92,15 @@ public class ApproveExpenseHandler : IRequestHandler<ApproveExpenseCommand, Appr
     private readonly IExpensesDbContext _ctx;
     private readonly IApplicationDbContext _app;
     private readonly IPublisher _publisher;
+    private readonly IHttpContextCurrentUserAccessor _currentUser;
 
-    public ApproveExpenseHandler(IExpensesDbContext ctx, IApplicationDbContext app, IPublisher publisher)
+    public ApproveExpenseHandler(
+        IExpensesDbContext ctx,
+        IApplicationDbContext app,
+        IPublisher publisher,
+        IHttpContextCurrentUserAccessor currentUser)
     {
-        _ctx = ctx; _app = app; _publisher = publisher;
+        _ctx = ctx; _app = app; _publisher = publisher; _currentUser = currentUser;
     }
 
     public async Task<ApproveExpenseResult> Handle(ApproveExpenseCommand request, CancellationToken ct)
@@ -113,21 +118,24 @@ public class ApproveExpenseHandler : IRequestHandler<ApproveExpenseCommand, Appr
             doc.IssueDate?.ToString("yyyy-MM-dd"), doc.SupplierTaxId);
         doc.HashSignature = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(hashInput)));
 
-        var auditEntry = new AuditLog
-        {
-            Id = Guid.NewGuid(), CompanyId = doc.CompanyId,
-            UserId = Guid.Empty, Entity = "ExpenseDocument", EntityId = doc.Id,
-            Action = "Approved", Timestamp = DateTime.UtcNow,
-            OldValues = System.Text.Json.JsonSerializer.Serialize(new { Status = "Draft" }),
-            NewValues = System.Text.Json.JsonSerializer.Serialize(new { doc.Status, doc.HashSignature })
-        };
-        var auditHashInput = string.Join("|", auditEntry.Entity, auditEntry.EntityId,
-            auditEntry.Action, auditEntry.Timestamp.ToString("O"));
-        auditEntry.Hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(auditHashInput)));
-        _app.AuditLogs.Add(auditEntry);
-
         await _ctx.SaveChangesAsync(ct);
-        await _app.SaveChangesAsync(ct);
+
+        if (_currentUser.UserId is Guid auditUserId)
+        {
+            var auditEntry = new AuditLog
+            {
+                Id = Guid.NewGuid(), CompanyId = doc.CompanyId,
+                UserId = auditUserId, Entity = "ExpenseDocument", EntityId = doc.Id,
+                Action = "Approved", Timestamp = DateTime.UtcNow,
+                OldValues = System.Text.Json.JsonSerializer.Serialize(new { Status = "Draft" }),
+                NewValues = System.Text.Json.JsonSerializer.Serialize(new { doc.Status, doc.HashSignature })
+            };
+            var auditHashInput = string.Join("|", auditEntry.Entity, auditEntry.EntityId,
+                auditEntry.Action, auditEntry.Timestamp.ToString("O"));
+            auditEntry.Hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(auditHashInput)));
+            _app.AuditLogs.Add(auditEntry);
+            await _app.SaveChangesAsync(ct);
+        }
 
         await _publisher.Publish(new ExpenseApprovedEvent
         {

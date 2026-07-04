@@ -31,6 +31,16 @@ public class InvoicesController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>GET /api/invoices/{id} — detalle de factura por id.</summary>
+    [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof(object), 200)]
+    [ProducesResponseType(404)]
+    public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new GetInvoiceByIdQuery { Id = id }, ct);
+        return result is null ? NotFound() : Ok(result);
+    }
+
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateInvoiceCommand cmd, CancellationToken ct)
     {

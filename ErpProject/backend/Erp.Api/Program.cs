@@ -8,6 +8,7 @@ using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
@@ -170,6 +171,12 @@ builder.Services.AddScoped<Microsoft.AspNetCore.Mvc.Filters.IAsyncAuthorizationF
     Erp.Infrastructure.Security.ModuleAuthorizationFilter>();
 
 builder.Services.AddInfrastructureServices();
+
+if (isIntegrationTest)
+{
+    builder.Services.RemoveAll<Erp.Application.Common.Interfaces.IEmailService>();
+    builder.Services.AddScoped<Erp.Application.Common.Interfaces.IEmailService, NoOpEmailService>();
+}
 builder.Services.AddApplicationServices();
 
 // Per-module DbContexts (todos vía IErpModule — ADR-0018 #19e)
@@ -182,6 +189,13 @@ builder.Services.AddErpModule(Erp.Modules.Treasury.Api.TreasuryErpModule.Instanc
 builder.Services.AddErpModule(Erp.Modules.Payroll.Api.PayrollErpModule.Instance, builder.Configuration);
 builder.Services.AddErpModule(Erp.Modules.Purchasing.Api.PurchasingErpModule.Instance, builder.Configuration);
 builder.Services.AddErpModule(Erp.Modules.Sales.Api.SalesErpModule.Instance, builder.Configuration);
+
+if (isIntegrationTest)
+{
+    builder.Services.RemoveAll<Erp.Modules.Billing.Application.Interfaces.IVerifactuSubmissionGateway>();
+    builder.Services.AddScoped<Erp.Modules.Billing.Application.Interfaces.IVerifactuSubmissionGateway,
+        Erp.Modules.Billing.Infrastructure.Services.NoOpVerifactuSubmissionGateway>();
+}
 
 // RabbitMQ is optional — if disabled, Hangfire OutboxProcessorJob is the fallback transport.
 // Set RabbitMQ:Enabled = false in appsettings to run without a RabbitMQ instance.

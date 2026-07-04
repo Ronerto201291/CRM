@@ -253,6 +253,26 @@ public class TreasuryController : ControllerBase
         });
     }
 
+    [HttpPost("payment-orders/{id:guid}/execute")]
+    public async Task<IActionResult> ExecutePaymentOrder(Guid id, CancellationToken ct)
+    {
+        try
+        {
+            var order = await _mediator.Send(new ExecutePaymentOrderCommand(id), ct);
+            return Ok(new
+            {
+                order.Id, order.PaymentType, order.BeneficiaryName,
+                order.Amount, order.Status,
+                ExecutedAt = order.ExecutedAt?.ToString("yyyy-MM-dd"),
+                order.BankAccountId,
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     // ─── Cash Flow Forecast ────────────────────────────────────────────────────
 
     [HttpGet("forecasts")]

@@ -211,7 +211,7 @@ public class GetLiquidacionIVAHandler : IRequestHandler<GetLiquidacionIVAQuery, 
         var y = request.Year ?? DateTime.UtcNow.Year;
         var q = request.Quarter ?? ((DateTime.UtcNow.Month - 1) / 3 + 1);
         var startMonth = (q - 1) * 3 + 1;
-        var start = new DateTime(y, startMonth, 1);
+        var start = new DateTime(y, startMonth, 1, 0, 0, 0, DateTimeKind.Utc);
         var end   = start.AddMonths(3);
 
         var repercutido = await _ctx.JournalEntryLines

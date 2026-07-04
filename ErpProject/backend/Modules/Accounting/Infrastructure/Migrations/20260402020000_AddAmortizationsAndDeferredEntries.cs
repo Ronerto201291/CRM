@@ -1,4 +1,6 @@
 using System;
+using Erp.Modules.Accounting.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -6,6 +8,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Erp.Modules.Accounting.Infrastructure.Migrations
 {
     /// <inheritdoc />
+    [DbContext(typeof(AccountingDbContext))]
+    [Migration("20260402020000_AddAmortizationsAndDeferredEntries")]
     public partial class AddAmortizationsAndDeferredEntries : Migration
     {
         /// <inheritdoc />

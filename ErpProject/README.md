@@ -45,6 +45,40 @@ docker compose up -d --build
 
 Las migraciones EF Core (core + módulos) se aplican **automáticamente** al arrancar el backend; no hace falta ejecutarlas a mano.
 
+## 🧪 Tests y cobertura
+
+```bash
+cd ErpProject/backend && dotnet test              # 613 tests backend
+cd ErpProject/frontend && npm test                # 123 Vitest (sin cobertura)
+cd ErpProject/frontend && npm run test:coverage   # Vitest + gate umbral líneas 39%
+```
+
+### Coverage gates (bloquean deploy en CI)
+
+Si la cobertura baja por debajo del umbral, **el pipeline falla** y no se construyen imágenes Docker en `main`.
+
+| Área | Umbral mínimo | Medido (jul 2026) |
+|------|---------------|-------------------|
+| Backend merged (unit+integration XPlat) | **49%** línea | ~51% |
+| Backend unit XPlat | **27%** línea | ~28.2% |
+| Backend integration XPlat | **49%** línea | ~51.2% |
+| Billing.Application | **55%** | ~59.7% |
+| Accounting.Application | **18%** | ~20.1% |
+| Erp.Infrastructure (auth) | **50%** | ~55.1% |
+| Frontend Vitest (clientes testeados) | **39%** líneas | ~53% |
+
+Umbrales en `scripts/coverage-thresholds.json`. Gate backend: `scripts/check-coverage.py`. Local:
+
+```bash
+# Backend (requiere Python 3)
+bash ErpProject/scripts/run-backend-coverage-gate.sh
+
+# Frontend
+bash ErpProject/scripts/run-frontend-coverage-gate.sh
+```
+
+Upload Codecov opcional: secret `CODECOV_TOKEN` en GitHub.
+
 ## 🏢 Multi-Tenant
 
 Cada empresa tiene su `CompanyId`. Global query filters en EF Core aseguran aislamiento total de datos. Middleware automático inyecta `CompanyId` en cada request.

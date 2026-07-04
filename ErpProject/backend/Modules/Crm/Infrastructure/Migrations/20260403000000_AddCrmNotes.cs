@@ -1,4 +1,6 @@
 using System;
+using Erp.Modules.Crm.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -6,6 +8,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Erp.Modules.Crm.Infrastructure.Migrations
 {
     /// <inheritdoc />
+    [DbContext(typeof(CrmDbContext))]
+    [Migration("20260403000000_AddCrmNotes")]
     public partial class AddCrmNotes : Migration
     {
         /// <inheritdoc />

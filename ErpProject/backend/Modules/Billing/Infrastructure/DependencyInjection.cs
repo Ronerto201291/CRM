@@ -1,5 +1,7 @@
 using Erp.Application.Common.Interfaces;
 using Erp.Modules.Billing.Application.Interfaces;
+using Erp.Modules.Billing.Application.Validators;
+using FluentValidation;
 using Erp.Modules.Billing.Infrastructure.Data;
 using Erp.Modules.Billing.Infrastructure.Services;
 using Erp.Infrastructure.Services.Sii;
@@ -47,6 +49,7 @@ public static class DependencyInjection
         // VERI*FACTU submission job (Hangfire)
         services.AddScoped<VerifactuSubmissionJob>();
         services.AddScoped<IVerifactuSubmissionGateway, VerifactuSubmissionGateway>();
+        services.AddValidatorsFromAssembly(typeof(CreateInvoiceCommandValidator).Assembly);
 
         return services;
     }

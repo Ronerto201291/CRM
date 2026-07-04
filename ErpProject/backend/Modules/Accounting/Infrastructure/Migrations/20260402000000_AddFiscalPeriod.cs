@@ -22,6 +22,7 @@ namespace Erp.Modules.Accounting.Infrastructure.Migrations
                     ClosedAt              = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     ClosedByUserId        = table.Column<Guid>(type: "uuid", nullable: true),
                     ClosingJournalEntryId = table.Column<Guid>(type: "uuid", nullable: false),
+                    OpeningJournalEntryId = table.Column<Guid>(type: "uuid", nullable: false),
                     ResultadoNeto         = table.Column<decimal>(type: "numeric", nullable: false),
                     Notes                 = table.Column<string>(type: "text", nullable: false)
                 },
