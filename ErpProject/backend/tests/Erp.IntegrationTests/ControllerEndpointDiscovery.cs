@@ -52,12 +52,22 @@ public static class ControllerEndpointDiscovery
             if (SkipControllers.Contains(controller.Name))
                 continue;
 
-            if (controller.GetCustomAttribute<AllowAnonymousAttribute>() != null
-                && controller.GetCustomAttribute<AuthorizeAttribute>() == null)
-                continue;
-
             var classRoute = controller.GetCustomAttribute<RouteAttribute>()?.Template ?? "";
             var classAuthorize = controller.GetCustomAttribute<AuthorizeAttribute>() != null;
+            var classAllowAnonymous = controller.GetCustomAttribute<AllowAnonymousAttribute>() != null;
+
+            if (classAllowAnonymous && !classAuthorize)
+            {
+                // Portal público por diseño (token-based, sin JWT): no aplica el filtro de
+                // "sin AllowAnonymous" de PickEndpoint, porque aquí toda la clase lo es.
+                var (anonMethod, anonHttpMethod) = PickAnyEndpoint(controller);
+                if (anonMethod == null)
+                    continue;
+
+                var anonPath = BuildPath(classRoute, GetMethodRouteTemplate(anonMethod), controller.Name);
+                probes.Add(new ControllerProbe(controller.Name, anonHttpMethod, anonPath, ExpectUnauthorized: false));
+                continue;
+            }
 
             var (method, httpMethod) = PickEndpoint(controller);
             if (method == null)
@@ -74,6 +84,20 @@ public static class ControllerEndpointDiscovery
         }
 
         return probes;
+    }
+
+    private static (MethodInfo? Method, string HttpMethod) PickAnyEndpoint(Type controller)
+    {
+        var methods = controller.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly)
+            .Where(m => m.GetCustomAttribute<NonActionAttribute>() == null)
+            .ToList();
+
+        var get = methods.FirstOrDefault(m => m.GetCustomAttribute<HttpGetAttribute>() != null);
+        if (get != null)
+            return (get, "GET");
+
+        var post = methods.FirstOrDefault(m => m.GetCustomAttribute<HttpPostAttribute>() != null);
+        return post != null ? (post, "POST") : (null, "GET");
     }
 
     private static string GetMethodRouteTemplate(MethodInfo method)

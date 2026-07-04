@@ -6,7 +6,8 @@ using Erp.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Erp.Modules.Accounting.Infrastructure.Data;
-using Erp.Modules.Accounting.Infrastructure.Seeding;
+using Erp.Application.Common.Events;
+using Erp.Modules.Accounting.Application.Handlers;
 using Xunit;
 
 namespace Erp.IntegrationTests;
@@ -261,8 +262,8 @@ public class Phase15IntegrationHttpTests : IClassFixture<PostgresWebApplicationF
             .UseNpgsql(connectionString)
             .Options;
         await using var ctx = new AccountingDbContext(options, tenant);
-        var seeder = new PgcSeeder(ctx, NullLogger<PgcSeeder>.Instance);
-        await seeder.SeedAsync(companyId);
+        var seeder = new SeedChartOfAccountsHandler(ctx, NullLogger<SeedChartOfAccountsHandler>.Instance);
+        await seeder.Handle(new CompanyCreatedEvent { CompanyId = companyId }, CancellationToken.None);
     }
 
     private async Task<(HttpClient Client, Guid CompanyId)> RegisterAndAuthAsync(string emailPrefix)
