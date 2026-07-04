@@ -8,6 +8,7 @@ public interface ITreasuryDbContext
     DbSet<BankAccount> BankAccounts { get; }
     DbSet<BankMovement> BankMovements { get; }
     DbSet<CashEffect> CashEffects { get; }
+    DbSet<CashSession> CashSessions { get; }
     DbSet<ReconciliationBatch> ReconciliationBatches { get; }
     DbSet<CashFlowForecast> CashFlowForecasts { get; }
     DbSet<PaymentOrder> PaymentOrders { get; }

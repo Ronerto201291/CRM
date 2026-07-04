@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import PageContainer from "@/components/PageContainer";
+import { useCachedApi } from "@/hooks/useCachedApi";
+import { parseListResponse } from "@/lib/parseListResponse";
 
 interface DeliveryNote {
     id: string;
@@ -28,21 +30,23 @@ export default function DeliveriesClient({ initialDeliveries }: DeliveriesClient
     const [deliveries, setDeliveries] = useState<DeliveryNote[]>(initialDeliveries);
     const [loading, setLoading] = useState(false);
     const [filter, setFilter] = useState('all');
+    const { fetchCached, invalidateCached } = useCachedApi();
 
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const res = await fetch('/api/proxy/v1/sales/deliveries');
-            if (res.ok) {
-                const data = await res.json();
-                setDeliveries(Array.isArray(data) ? data : (data.items ?? []));
-            }
+            invalidateCached('v1/sales/deliveries');
+            const data = await fetchCached<unknown>('v1/sales/deliveries');
+            if (data) setDeliveries(parseListResponse<DeliveryNote>(data));
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [fetchCached, invalidateCached]);
 
-    const filtered = filter === 'all' ? deliveries : deliveries.filter(d => d.status === filter);
+    const filtered = useMemo(
+        () => (filter === 'all' ? deliveries : deliveries.filter(d => d.status === filter)),
+        [deliveries, filter]
+    );
 
     return (
         <PageContainer>

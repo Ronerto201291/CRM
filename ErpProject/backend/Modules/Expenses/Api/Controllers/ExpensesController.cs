@@ -1,3 +1,4 @@
+using Erp.Application.Common.Attributes;
 using Erp.Application.Common.Interfaces;
 using Erp.Modules.Expenses.Application.Features.Expenses.Commands;
 using Erp.Modules.Expenses.Application.Features.Expenses.Queries;
@@ -8,6 +9,9 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Erp.Modules.Expenses.Api.Controllers;
 
+// [RequiredModule] is applied per-action (not at class level) because Upload is
+// AllowAnonymous (public token-based upload link) and has no resolved tenant/user
+// to check a module license against.
 [ApiController, Route("api/expenses")]
 public class ExpensesController : ControllerBase
 {
@@ -46,11 +50,11 @@ public class ExpensesController : ControllerBase
         }
     }
 
-    [HttpGet("uploads"), Authorize]
+    [HttpGet("uploads"), Authorize, RequiredModule("Expenses"), RequirePermission(Permissions.Expense.Read)]
     public async Task<IActionResult> GetUploads(CancellationToken ct)
         => Ok(await _mediator.Send(new GetExpenseUploadsQuery(), ct));
 
-    [HttpPost, Authorize]
+    [HttpPost, Authorize, RequiredModule("Expenses"), RequirePermission(Permissions.Expense.Create)]
     public async Task<IActionResult> CreateManual([FromBody] CreateExpenseDocumentCommand cmd, CancellationToken ct)
     {
         try
@@ -61,22 +65,22 @@ public class ExpensesController : ControllerBase
         catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
     }
 
-    [HttpGet, Authorize]
+    [HttpGet, Authorize, RequiredModule("Expenses"), RequirePermission(Permissions.Expense.Read)]
     public async Task<IActionResult> GetDocuments(CancellationToken ct)
         => Ok(await _mediator.Send(new GetExpenseDocumentsQuery(), ct));
 
-    [HttpGet("by-supplier/{supplierId:guid}"), Authorize]
+    [HttpGet("by-supplier/{supplierId:guid}"), Authorize, RequiredModule("Expenses"), RequirePermission(Permissions.Expense.Read)]
     public async Task<IActionResult> GetBySupplier(Guid supplierId, CancellationToken ct)
         => Ok(await _mediator.Send(new GetSupplierExpensesQuery { SupplierId = supplierId }, ct));
 
-    [HttpGet("{id}"), Authorize]
+    [HttpGet("{id}"), Authorize, RequiredModule("Expenses"), RequirePermission(Permissions.Expense.Read)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetExpenseByIdQuery { Id = id }, ct);
         return result == null ? NotFound() : Ok(result);
     }
 
-    [HttpPut("{id}"), Authorize]
+    [HttpPut("{id}"), Authorize, RequiredModule("Expenses"), RequirePermission(Permissions.Expense.Update)]
     public async Task<IActionResult> UpdateDraft(Guid id, [FromBody] UpdateExpenseDraftCommand cmd, CancellationToken ct)
     {
         cmd.Id = id;
@@ -88,7 +92,7 @@ public class ExpensesController : ControllerBase
         catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
     }
 
-    [HttpPost("{id}/lines"), Authorize]
+    [HttpPost("{id}/lines"), Authorize, RequiredModule("Expenses"), RequirePermission(Permissions.Expense.Manage)]
     public async Task<IActionResult> AddLine(Guid id, [FromBody] AddExpenseLineCommand cmd, CancellationToken ct)
     {
         cmd.ExpenseDocumentId = id;
@@ -100,7 +104,7 @@ public class ExpensesController : ControllerBase
         catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
     }
 
-    [HttpPut("{id}/lines/{lineId}"), Authorize]
+    [HttpPut("{id}/lines/{lineId}"), Authorize, RequiredModule("Expenses"), RequirePermission(Permissions.Expense.Manage)]
     public async Task<IActionResult> UpdateLine(Guid id, Guid lineId, [FromBody] UpdateExpenseLineCommand cmd, CancellationToken ct)
     {
         cmd.ExpenseDocumentId = id; cmd.LineId = lineId;
@@ -112,7 +116,7 @@ public class ExpensesController : ControllerBase
         catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
     }
 
-    [HttpDelete("{id}/lines/{lineId}"), Authorize]
+    [HttpDelete("{id}/lines/{lineId}"), Authorize, RequiredModule("Expenses"), RequirePermission(Permissions.Expense.Manage)]
     public async Task<IActionResult> DeleteLine(Guid id, Guid lineId, CancellationToken ct)
     {
         try
@@ -123,7 +127,7 @@ public class ExpensesController : ControllerBase
         catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
     }
 
-    [HttpPost("{id}/approve"), Authorize]
+    [HttpPost("{id}/approve"), Authorize, RequiredModule("Expenses"), RequirePermission(Permissions.Expense.Approve)]
     public async Task<IActionResult> Approve(Guid id, CancellationToken ct)
     {
         try
@@ -135,7 +139,7 @@ public class ExpensesController : ControllerBase
         catch (KeyNotFoundException) { return NotFound(); }
     }
 
-    [HttpGet("stats"), Authorize]
+    [HttpGet("stats"), Authorize, RequiredModule("Expenses"), RequirePermission(Permissions.Expense.Read)]
     public async Task<IActionResult> GetStats(CancellationToken ct)
         => Ok(await _mediator.Send(new GetExpenseStatsQuery(), ct));
 

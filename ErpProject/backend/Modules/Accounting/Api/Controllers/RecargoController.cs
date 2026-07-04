@@ -1,11 +1,15 @@
+using Erp.Application.Common.Attributes;
 using Erp.Modules.Accounting.Application.Features.Recargo;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Erp.Modules.Accounting.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/accounting/recargo")]
+[Authorize]
+[RequiredModule("Accounting")]
 public class RecargoController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -16,10 +20,12 @@ public class RecargoController : ControllerBase
     /// Lista todos los recargos de equivalencia de la empresa para un periodo dado.
     /// </summary>
     [HttpGet]
+    [RequirePermission(Permissions.Recargo.Read)]
     public async Task<IActionResult> GetAll([FromQuery] int year, [FromQuery] int q, CancellationToken ct)
         => Ok(await _mediator.Send(new GetRecargosQuery(year, q), ct));
 
     [HttpPost]
+    [RequirePermission(Permissions.Recargo.Create)]
     public async Task<IActionResult> Create([FromBody] CreateRecargoRequest request, CancellationToken ct)
     {
         var result = await _mediator.Send(new CreateRecargoCommand(
@@ -31,6 +37,7 @@ public class RecargoController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [RequirePermission(Permissions.Recargo.Read)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         try
@@ -47,6 +54,7 @@ public class RecargoController : ControllerBase
     /// Genera la sección de recargo de equivalencia del Modelo 303 para un periodo.
     /// </summary>
     [HttpPost("{id:guid}/modelo303")]
+    [RequirePermission(Permissions.Recargo.Manage)]
     public async Task<IActionResult> GenerateModelo303(Guid id, CancellationToken ct)
     {
         try

@@ -83,6 +83,9 @@ public class Invoice : AuditableEntity
 
     // Accounting link
     public Guid? JournalEntryId { get; set; }
-    
+
+    /// <summary>Token único para el portal de visualización del cliente (ADR-0018 #39). Se genera al crear.</summary>
+    public string PublicViewToken { get; set; } = Guid.NewGuid().ToString("N");
+
     public ICollection<InvoiceLine> InvoiceLines { get; set; } = new List<InvoiceLine>();
 }

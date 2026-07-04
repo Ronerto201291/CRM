@@ -13,7 +13,12 @@ namespace Erp.Modules.Crm.Application.Features.Crm.Handlers;
 public class GetSuppliersHandler : IRequestHandler<GetSuppliersQuery, PaginatedSuppliersResult>
 {
     private readonly ICrmDbContext _ctx;
-    public GetSuppliersHandler(ICrmDbContext ctx) => _ctx = ctx;
+    private readonly IPortalUrlProvider _portalUrlProvider;
+    public GetSuppliersHandler(ICrmDbContext ctx, IPortalUrlProvider portalUrlProvider)
+    {
+        _ctx = ctx;
+        _portalUrlProvider = portalUrlProvider;
+    }
 
     public async Task<PaginatedSuppliersResult> Handle(GetSuppliersQuery request, CancellationToken ct)
     {
@@ -26,16 +31,21 @@ public class GetSuppliersHandler : IRequestHandler<GetSuppliersQuery, PaginatedS
 
         var totalCount = await query.CountAsync(ct);
 
-        var items = await query
+        var raw = await query
             .OrderBy(s => s.Name)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(s => new SupplierDto
-            {
-                Id = s.Id, Name = s.Name, TaxId = s.TaxId, Email = s.Email,
-                Phone = s.Phone, Address = s.Address, IsActive = s.IsActive, CreatedAt = s.CreatedAt
-            })
+            .Select(s => new { s.Id, s.Name, s.TaxId, s.Email, s.Phone, s.Address, s.IsActive, s.CreatedAt, s.PublicUploadEnabled, s.PublicUploadToken })
             .ToListAsync(ct);
+
+        var portalBaseUrl = _portalUrlProvider.PortalBaseUrl.TrimEnd('/');
+        var items = raw.Select(s => new SupplierDto
+        {
+            Id = s.Id, Name = s.Name, TaxId = s.TaxId, Email = s.Email,
+            Phone = s.Phone, Address = s.Address, IsActive = s.IsActive, CreatedAt = s.CreatedAt,
+            PublicUploadEnabled = s.PublicUploadEnabled,
+            PublicUploadUrl = s.PublicUploadEnabled ? $"{portalBaseUrl}/proveedor/{s.PublicUploadToken}" : null,
+        }).ToList();
 
         return new PaginatedSuppliersResult(items, totalCount, page, pageSize);
     }
@@ -44,7 +54,12 @@ public class GetSuppliersHandler : IRequestHandler<GetSuppliersQuery, PaginatedS
 public class GetSupplierByIdHandler : IRequestHandler<GetSupplierByIdQuery, SupplierDetailDto?>
 {
     private readonly ICrmDbContext _ctx;
-    public GetSupplierByIdHandler(ICrmDbContext ctx) => _ctx = ctx;
+    private readonly IPortalUrlProvider _portalUrlProvider;
+    public GetSupplierByIdHandler(ICrmDbContext ctx, IPortalUrlProvider portalUrlProvider)
+    {
+        _ctx = ctx;
+        _portalUrlProvider = portalUrlProvider;
+    }
 
     public async Task<SupplierDetailDto?> Handle(GetSupplierByIdQuery request, CancellationToken ct)
     {
@@ -62,11 +77,14 @@ public class GetSupplierByIdHandler : IRequestHandler<GetSupplierByIdQuery, Supp
             })
             .ToListAsync(ct);
 
+        var portalBaseUrl = _portalUrlProvider.PortalBaseUrl.TrimEnd('/');
         return new SupplierDetailDto
         {
             Id = supplier.Id, Name = supplier.Name, TaxId = supplier.TaxId,
             Email = supplier.Email, Phone = supplier.Phone, Address = supplier.Address,
             BankAccount = supplier.BankAccount, IsActive = supplier.IsActive, CreatedAt = supplier.CreatedAt,
+            PublicUploadEnabled = supplier.PublicUploadEnabled,
+            PublicUploadUrl = supplier.PublicUploadEnabled ? $"{portalBaseUrl}/proveedor/{supplier.PublicUploadToken}" : null,
             Activities = activities, Expenses = new()
         };
     }
@@ -77,10 +95,11 @@ public class CreateSupplierHandler : IRequestHandler<CreateSupplierCommand, Supp
     private readonly ICrmDbContext _ctx;
     private readonly ITenantContext _tenant;
     private readonly IPublisher _publisher;
+    private readonly IPortalUrlProvider _portalUrlProvider;
 
-    public CreateSupplierHandler(ICrmDbContext ctx, ITenantContext tenant, IPublisher publisher)
+    public CreateSupplierHandler(ICrmDbContext ctx, ITenantContext tenant, IPublisher publisher, IPortalUrlProvider portalUrlProvider)
     {
-        _ctx = ctx; _tenant = tenant; _publisher = publisher;
+        _ctx = ctx; _tenant = tenant; _publisher = publisher; _portalUrlProvider = portalUrlProvider;
     }
 
     public async Task<SupplierDto> Handle(CreateSupplierCommand request, CancellationToken ct)
@@ -109,11 +128,14 @@ public class CreateSupplierHandler : IRequestHandler<CreateSupplierCommand, Supp
             Name = supplier.Name, TaxId = supplier.TaxId,
         }, ct);
 
+        var portalBaseUrl = _portalUrlProvider.PortalBaseUrl.TrimEnd('/');
         return new SupplierDto
         {
             Id = supplier.Id, Name = supplier.Name, TaxId = supplier.TaxId,
             Email = supplier.Email, Phone = supplier.Phone, Address = supplier.Address,
-            IsActive = supplier.IsActive, CreatedAt = supplier.CreatedAt
+            IsActive = supplier.IsActive, CreatedAt = supplier.CreatedAt,
+            PublicUploadEnabled = supplier.PublicUploadEnabled,
+            PublicUploadUrl = supplier.PublicUploadEnabled ? $"{portalBaseUrl}/proveedor/{supplier.PublicUploadToken}" : null,
         };
     }
 }
@@ -121,8 +143,13 @@ public class CreateSupplierHandler : IRequestHandler<CreateSupplierCommand, Supp
 public class UpdateSupplierHandler : IRequestHandler<UpdateSupplierCommand, SupplierDto?>
 {
     private readonly ICrmDbContext _ctx;
+    private readonly IPortalUrlProvider _portalUrlProvider;
 
-    public UpdateSupplierHandler(ICrmDbContext ctx) => _ctx = ctx;
+    public UpdateSupplierHandler(ICrmDbContext ctx, IPortalUrlProvider portalUrlProvider)
+    {
+        _ctx = ctx;
+        _portalUrlProvider = portalUrlProvider;
+    }
 
     public async Task<SupplierDto?> Handle(UpdateSupplierCommand request, CancellationToken ct)
     {
@@ -133,6 +160,7 @@ public class UpdateSupplierHandler : IRequestHandler<UpdateSupplierCommand, Supp
         supplier.Name = request.Name; supplier.TaxId = request.TaxId;
         supplier.Email = request.Email; supplier.Phone = request.Phone;
         supplier.Address = request.Address; supplier.BankAccount = request.BankAccount;
+        supplier.PublicUploadEnabled = request.PublicUploadEnabled;
 
         _ctx.ActivityLogs.Add(new ActivityLog
         {
@@ -143,11 +171,14 @@ public class UpdateSupplierHandler : IRequestHandler<UpdateSupplierCommand, Supp
 
         await _ctx.SaveChangesAsync(ct);
 
+        var portalBaseUrl = _portalUrlProvider.PortalBaseUrl.TrimEnd('/');
         return new SupplierDto
         {
             Id = supplier.Id, Name = supplier.Name, TaxId = supplier.TaxId,
             Email = supplier.Email, Phone = supplier.Phone, Address = supplier.Address,
-            IsActive = supplier.IsActive, CreatedAt = supplier.CreatedAt
+            IsActive = supplier.IsActive, CreatedAt = supplier.CreatedAt,
+            PublicUploadEnabled = supplier.PublicUploadEnabled,
+            PublicUploadUrl = supplier.PublicUploadEnabled ? $"{portalBaseUrl}/proveedor/{supplier.PublicUploadToken}" : null,
         };
     }
 }

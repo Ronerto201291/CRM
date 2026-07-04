@@ -80,6 +80,36 @@ de considerar terminada una implementación en un módulo:
   reléelo antes de modificarlo. El objetivo es que la deuda técnica sea
   monótonamente decreciente: cada corrección debe quedar protegida, no
   solo hecha una vez.
+- **Toda funcionalidad nueva lleva test que corra en CI, sin excepción**:
+  ningún handler, entidad, endpoint o componente nuevo se da por terminado
+  sin al menos un test que lo cubra en `backend/tests/` (`Erp.Tests` para
+  unit, `Erp.IntegrationTests` para flujos con BBDD real,
+  `Erp.ArchitectureTests` si añade una regla estructural) y que
+  `dotnet test ErpProject/backend/Erp.slnx` lo ejecute en verde en el mismo
+  cambio — no en un PR aparte "de tests" posterior. Igual para frontend en
+  cuanto exista runner (ver huecos conocidos). Esto aplica también a bugs
+  corregidos: el test que prueba la corrección es lo que impide que el bug
+  vuelva (refuerza la regla de no regresión de arriba). No añadir un
+  test que solo repita lo que el propio código ya afirma (ver el caso de
+  `SpanishTaxIdValidatorTests.FindValidCif`, ADR-0018 ítem 0f) — el test
+  tiene que verificar contra un caso conocido/externo, no contra el mismo
+  código que pretende probar.
+- **Migraciones de EF Core generadas en paralelo por dos sesiones pueden
+  quedar desordenadas entre sí**: `dotnet ef migrations add` genera el
+  timestamp del nombre de archivo a partir de la hora local del momento en
+  que se ejecuta, no de un orden lógico de dependencias. Si dos cambios en
+  paralelo tocan el mismo tipo de entidad (uno añade una columna vía código
+  +migración, otro genera su propia migración sin haber tirado antes esa
+  migración ajena), la migración de quien la generó antes puede acabar
+  con un `AlterColumn`/referencia a una columna que otra migración —con
+  timestamp posterior— es la que de verdad la crea; en una base de datos
+  nueva esto revienta con "column ... does not exist" (pasó de verdad:
+  `AddDocumentTable` vs `AddMatchingToleranceAmountToCompany`). Antes de
+  hacer `git push` de cualquier migración nueva: `git fetch`/`pull` primero
+  para tener las migraciones más recientes de la otra sesión, y verificar
+  el orden con `dotnet ef migrations script --idempotent` (no necesita una
+  BBDD real) buscando que cada columna se cree antes de que otra migración
+  la altere.
 
 ## Comandos básicos
 

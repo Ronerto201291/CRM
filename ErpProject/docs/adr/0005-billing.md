@@ -37,6 +37,10 @@ snapshot de cliente (`ClientType`: Registered/Lead/Manual +
 (`Api/Controllers/InvoicesController.cs`) — solo `IMediator` — y `CreateInvoiceHandler`/
 `LockInvoiceHandler` (`BillingHandlers.cs`) como piezas centrales. El límite de plan
 (`IPlanLimitService`) se comprueba en `CreateInvoiceHandler` (`PlanLimitExceededException` → HTTP 402).
+Cada `Invoice` tiene también un `PublicViewToken` único (mismo patrón que
+`Quote.AcceptanceToken`) que habilita un portal de solo lectura sin login
+(`PublicInvoiceViewController`, `/api/v1/public/invoice-view/{token}`,
+ADR-0018 #39).
 
 **Corregido (paginación, backlog #8):** `GET /api/invoices` y
 `GET /api/quotes` devuelven `Paginated*Result` (`{ items, totalCount, page,
@@ -93,12 +97,23 @@ pageSize }`) con header `X-Total-Count`; parámetros `page` (default 1) y
   causa) o mediante `CreateCreditNoteCommand`/`CreateCreditNoteHandler`, que
   clona automáticamente las líneas de la factura original en negativo bajo
   la serie `"R"`.
-- **Cobro**: `POST /api/invoices/{id}/pay` → `MarkPaidCommand` marca
-  `Status = "Paid"` (idempotente si ya estaba pagada) y publica
-  `PaymentReceivedEvent` — consumido por Accounting (asiento 572/430) y por
+- **Cobro**: `POST /api/invoices/{id}/pay` → `MarkPaidCommand` valida
+  `PaymentMethod` contra `PaymentMethods` (`cash\|bank\|card\|bizum\|transfer`,
+  guard clause inline en `MarkPaidHandler` — Billing no registra
+  `AddValidatorsFromAssembly`, un validador FluentValidation aquí no se
+  ejecutaría), marca `Status = "Paid"` (idempotente si ya estaba pagada) y
+  publica `PaymentReceivedEvent` — consumido por Accounting (asiento
+  570/572/5721/5722 según método de pago, ver ADR-0006 y ADR-0018 #42b) y por
   CRM (`PaymentReceivedActivityHandler`, ver ADR-0004). También hay un
   `PaymentReceivedOutboxHandler` en Billing que releva el mismo evento a la
   tabla `Outbox` para consumidores externos.
+- **Facturación recurrente de servicios (ADR-0018 #42f)**:
+  `GenerateRecurringServiceInvoiceHandler`
+  (`Modules/Billing/Application/Handlers/`) consume
+  `ClientServiceDueForBillingEvent` (publicado por Crm) y envía
+  `CreateInvoiceCommand` — no es un flujo nuevo de facturación, reutiliza el
+  mismo command que usa el frontend; ver ADR-0004 y Relación con otros
+  módulos más abajo.
 - **FacturaE 3.2.2**: `FacturaEController`
   (`/api/v1/billing/facturae/{invoiceId}`) despacha `GenerateFacturaEQuery` →
   `IFacturaEService` genera el XML bajo demanda (requiere factura bloqueada).
@@ -142,9 +157,17 @@ Esquema `billing`. Migraciones relevantes (orden cronológico):
 5. `AddInvoiceFiscalSnapshot` — columnas de snapshot emisor/destinatario.
 6. `Phase0InvoiceCompliance` — campos de cumplimiento adicionales
    (Veri*Factu, VIES, rectificativas).
+7. `AddInvoicePublicViewToken` — `PublicViewToken` para el portal de
+   visualización (ADR-0018 #39); backfill SQL de tokens únicos por fila
+   antes de crear el índice único (el `AddColumn` de EF por sí solo pone el
+   mismo valor por defecto a todas las facturas existentes). Arrastró de
+   forma incidental `VerifactuRealtimeSubmission`/`VerifactuSubmittedAt`
+   (columnas) y `VerifactuSubmissionLogs` (tabla), que ya existían en el
+   modelo C# pero nunca se habían migrado.
 
-Índices únicos: `(CompanyId, Number)` en `Invoice`, `(CompanyId, Number)` en
-`Quote`, `AcceptanceToken` único en `Quote`. `Quote.TaxBreakdown` es
+Índices únicos: `(CompanyId, Number)` en `Invoice`, `PublicViewToken` único
+en `Invoice`, `(CompanyId, Number)` en `Quote`, `AcceptanceToken` único en
+`Quote`. `Quote.TaxBreakdown` es
 `jsonb`. Referencias cruzadas a otros módulos (`Quote.ClientId` → CRM,
 `QuoteLine.ProductId` → Inventory) son "soft references" — columnas sin FK
 de EF, resueltas en la capa de aplicación, tal como se documenta
@@ -178,6 +201,15 @@ Creación y bloqueo de una factura, con propagación a Accounting:
   (sin dependencia directa de `ICrmDbContext`) al crear facturas; CRM
   consume `QuoteAcceptedEvent` (conversión de Lead a Client) y
   `PaymentReceivedEvent` (timeline de actividad) publicados por Billing.
+  Además, Billing **consume** `ClientServiceDueForBillingEvent` — publicado
+  por `ContractedServiceBillingJob` en Crm (ADR-0018 #42f) cuando vence un
+  `ClientContractedService` — vía `GenerateRecurringServiceInvoiceHandler`
+  (`Modules/Billing/Application/Handlers/`), que arma y envía el
+  `CreateInvoiceCommand` real (cero lógica de facturación duplicada: reutiliza
+  la numeración/hash chain/IVA existentes) y publica de vuelta
+  `RecurringServiceInvoiceGeneratedEvent` para que Crm avance el contrato. El
+  asiento contable no necesita ningún código nuevo: la factura generada sigue
+  el mismo camino (`PaymentReceivedEvent` → Accounting) que cualquier otra.
 - **Fiscal/SII/Veri*Factu** (ADR-0013): la huella y el envío a AEAT se
   calculan en `LockInvoiceHandler`, pero el envío real ocurre en un job
   Hangfire (`VerifactuSubmissionJob`) fuera del ciclo de request.
@@ -185,6 +217,39 @@ Creación y bloqueo de una factura, con propagación a Accounting:
   (`/api/v1/public/invoices`) delega en `GetPublicInvoicesQuery` /
   `GetPublicInvoiceByIdQuery` (lectura vía `X-Api-Key`), y `PublicQuotesController`
   expone el portal de aceptación de presupuestos sin autenticación (por `AcceptanceToken`).
+- **Portal de visualización y pago de factura** (ADR-0018 #39): `Invoice.PublicViewToken`
+  (mismo patrón que `Quote.AcceptanceToken`) + `PublicInvoiceViewController`
+  (`/api/v1/public/invoice-view/{token}`, `[AllowAnonymous]`) — no confundir
+  con `PublicInvoicesController` de arriba, que es integración por API key
+  para todo el ledger del tenant, no un visor de una factura concreta.
+  `InvoiceDto.PublicViewUrl` se expone al staff (`InvoiceDetailClient.tsx`,
+  botón "Copiar enlace") para poder compartirlo. El mismo controller expone
+  `POST {token}/checkout`, que despacha `CreateInvoiceCheckoutSessionCommand`
+  (valida `IsLocked` + `Status != "Paid"` con `IgnoreQueryFilters()`, misma
+  razón que `GetInvoiceByTokenHandler`: el visitante no tiene tenant resuelto)
+  y delega en `IInvoicePaymentGateway.CreateInvoiceCheckoutSessionAsync`
+  (implementado por `StripeService`, core) para crear una sesión Stripe
+  Checkout en `Mode = "payment"` por el importe exacto de la factura —
+  sin reutilizar el flujo de suscripción SaaS (`ISubscriptionBillingService`,
+  ADR-0014), que es un producto Stripe distinto (Price ID fijo, no importe
+  variable). El webhook (`StripeService.HandleCheckoutCompleted`) distingue
+  ambos casos por la metadata de la sesión (`invoiceId` vs `companyId`); si
+  es un pago de factura, publica `StripeInvoiceCheckoutCompletedEvent`
+  (`Erp.Application.Common.Events`) en vez de llamar directamente a
+  `MarkPaidCommand` — así `Erp.Infrastructure` (core) no necesita una
+  referencia de proyecto a `Erp.Modules.Billing.Application`, evitando repetir
+  la violación de dirección de dependencias ya señalada en ADR-0018 §Clean
+  Architecture. `MarkInvoicePaidFromStripeHandler` (Billing.Application)
+  consume ese evento y reenvía a `MarkPaidCommand` con
+  `PaymentMethod = "card"` — cero lógica de "marcar pagada" duplicada,
+  reutiliza el handler idempotente ya existente (`MarkPaidHandler`, que
+  también necesitó pasar a `IgnoreQueryFilters()` por el mismo motivo de
+  tenant-less webhook). Frontend público (`factura/[token]/page.tsx`):
+  botón "Pagar ahora" (solo si `isLocked && status !== 'Paid'`) que hace
+  `POST .../checkout` y redirige a `checkoutUrl`; banners de éxito/cancelado
+  vía `?pago=exito|cancelado` en la URL de retorno de Stripe. Con esto se
+  cierra la pieza de pago de ADR-0018 #39 — pendiente solo que el proveedor
+  suba su propia factura.
 - **Inventory**: `InvoiceApprovedEvent.Lines` incluye `ProductId`/
   `Quantity`/`UnitPrice` pensado para integración de stock (el DTO existe en
   `DomainEvents.cs` con comentario explícito "Inventory integration"),

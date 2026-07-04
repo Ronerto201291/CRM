@@ -1,3 +1,4 @@
+using Erp.Application.Common.Attributes;
 using Erp.Modules.Treasury.Application.Features.Currencies;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -8,6 +9,7 @@ namespace Erp.Modules.Treasury.Api.Controllers;
 [ApiController]
 [Route("api/v1/treasury/currencies")]
 [Authorize]
+[RequiredModule("Treasury")]
 public class CurrenciesController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -15,10 +17,12 @@ public class CurrenciesController : ControllerBase
     public CurrenciesController(IMediator mediator) => _mediator = mediator;
 
     [HttpGet]
+    [RequirePermission(Permissions.Currency.Read)]
     public async Task<IActionResult> GetAll(CancellationToken ct)
         => Ok(await _mediator.Send(new GetCurrenciesQuery(), ct));
 
     [HttpPost]
+    [RequirePermission(Permissions.Currency.Create)]
     public async Task<IActionResult> Create([FromBody] CreateCurrencyDto dto, CancellationToken ct)
     {
         try
@@ -33,6 +37,7 @@ public class CurrenciesController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [RequirePermission(Permissions.Currency.Update)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateCurrencyRateDto dto, CancellationToken ct)
     {
         try
@@ -46,6 +51,7 @@ public class CurrenciesController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [RequirePermission(Permissions.Currency.Delete)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
         var deleted = await _mediator.Send(new DeleteCurrencyCommand(id), ct);
@@ -53,6 +59,7 @@ public class CurrenciesController : ControllerBase
     }
 
     [HttpGet("rates")]
+    [RequirePermission(Permissions.Currency.Read)]
     public async Task<IActionResult> GetRates(CancellationToken ct)
     {
         var rates = await _mediator.Send(new GetCurrencyRatesQuery(), ct);
@@ -60,6 +67,7 @@ public class CurrenciesController : ControllerBase
     }
 
     [HttpPost("exchange")]
+    [RequirePermission(Permissions.Currency.Manage)]
     public async Task<IActionResult> ExchangeCurrency([FromBody] ExchangeCurrencyDto dto, CancellationToken ct)
     {
         try

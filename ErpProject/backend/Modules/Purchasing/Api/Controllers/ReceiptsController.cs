@@ -1,3 +1,4 @@
+using Erp.Application.Common.Attributes;
 using Erp.Modules.Purchasing.Application.Features.Receipts.Commands;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -10,6 +11,7 @@ namespace Erp.Modules.Purchasing.Api.Controllers;
 [Route("api/v{version:apiVersion}/purchasing/receipts")]
 [ApiVersion("1.0")]
 [Authorize]
+[RequiredModule("Purchasing")]
 public class ReceiptsController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -17,6 +19,7 @@ public class ReceiptsController : ControllerBase
     public ReceiptsController(IMediator mediator) => _mediator = mediator;
 
     [HttpPost]
+    [RequirePermission(Permissions.Receipt.Create)]
     public async Task<IActionResult> Create([FromBody] CreateGoodsReceiptCommand cmd)
     {
         var id = await _mediator.Send(cmd);
@@ -24,5 +27,6 @@ public class ReceiptsController : ControllerBase
     }
 
     [HttpGet("{id}")]
+    [RequirePermission(Permissions.Receipt.Read)]
     public IActionResult Get(Guid id) => Ok(new { id });
 }

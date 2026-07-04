@@ -1,4 +1,4 @@
-using Erp.Modules.Crm.Application.Features.Crm.Commands;
+﻿using Erp.Modules.Crm.Application.Features.Crm.Commands;
 using Erp.Modules.Crm.Application.Features.Crm.Handlers;
 using Erp.Modules.Crm.Application.Features.Crm.Queries;
 using Erp.Modules.Crm.Domain.Entities;
@@ -117,7 +117,7 @@ public class CreateSupplierHandlerTests
             .Options;
 
         await using var ctx = new CrmDbContext(options, tenant);
-        var handler = new CreateSupplierHandler(ctx, tenant, new FakePublisher());
+        var handler = new CreateSupplierHandler(ctx, tenant, new FakePublisher(), new FakePortalUrlProvider());
 
         var result = await handler.Handle(new CreateSupplierCommand
         {
@@ -155,7 +155,7 @@ public class GetSuppliersHandlerTests
         });
         await ctx.SaveChangesAsync();
 
-        var handler = new GetSuppliersHandler(ctx);
+        var handler = new GetSuppliersHandler(ctx, new FakePortalUrlProvider());
         var result = await handler.Handle(new GetSuppliersQuery { Page = 1, PageSize = 10 }, CancellationToken.None);
 
         Assert.Equal(1, result.TotalCount);

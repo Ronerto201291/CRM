@@ -1,5 +1,7 @@
+using Erp.Application.Common.Attributes;
 using Erp.Modules.Inventory.Application.Features.Inventory.Queries;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Asp.Versioning;
@@ -9,6 +11,8 @@ namespace Erp.Modules.Inventory.Api.Controllers
     [ApiController]
     [Route("api/v{version:apiVersion}/inventory/valuation")]
     [ApiVersion("1.0")]
+    [Authorize]
+    [RequiredModule("Inventory")]
     public class ValuationController : ControllerBase
     {
         private readonly IMediator _mediator;
@@ -21,6 +25,7 @@ namespace Erp.Modules.Inventory.Api.Controllers
         }
 
         [HttpGet]
+        [RequirePermission(Permissions.Valuation.Read)]
         public async Task<IActionResult> Calculate([FromQuery] string? method, CancellationToken ct)
         {
             var valuationMethod = method ?? _config["Inventory:ValuationMethod"] ?? "PMP";

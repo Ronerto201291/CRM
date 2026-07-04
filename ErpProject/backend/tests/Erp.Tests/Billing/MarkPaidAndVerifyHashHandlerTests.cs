@@ -1,4 +1,4 @@
-using Erp.Modules.Billing.Application.Features.Billing.Commands;
+﻿using Erp.Modules.Billing.Application.Features.Billing.Commands;
 using Erp.Modules.Billing.Application.Features.Billing.Handlers;
 using Erp.Modules.Billing.Application.Features.Billing.Queries;
 using Erp.Modules.Billing.Application.Services;
@@ -10,7 +10,7 @@ using Xunit;
 
 namespace Erp.Tests.Billing;
 
-public class MarkPaidHandlerTests
+public class MarkPaidAndVerifyHashHandlerTests
 {
     [Fact]
     public async Task Handle_MarksLockedInvoiceAsPaid()
@@ -45,7 +45,7 @@ public class MarkPaidHandlerTests
         await ctx.SaveChangesAsync();
 
         var handler = new MarkPaidHandler(ctx, new FakePublisher());
-        var ok = await handler.Handle(new MarkPaidCommand { Id = invoiceId, PaymentMethod = "Transferencia" }, CancellationToken.None);
+        var ok = await handler.Handle(new MarkPaidCommand { Id = invoiceId, PaymentMethod = "bank" }, CancellationToken.None);
 
         Assert.True(ok);
         var paid = await ctx.Invoices.SingleAsync();
@@ -190,3 +190,4 @@ public class VerifyHashChainHandlerTests
         Assert.Equal(0, result.Total);
     }
 }
+

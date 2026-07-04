@@ -107,7 +107,8 @@ public record GenerateCashFlowForecastCommand(int Year, int Month)
 
 public record BankAccountDto(
     Guid Id, string Name, string Iban, string? BIC, string BankName,
-    decimal CurrentBalance, string CurrencyCode, bool IsActive, string? Notes);
+    decimal CurrentBalance, string CurrencyCode, bool IsActive, string? Notes,
+    string? AccountingAccountCode);
 
 public record BankMovementDto(
     Guid Id, Guid BankAccountId, DateTime Date, string Reference,

@@ -1,4 +1,4 @@
-using Erp.Modules.Accounting.Application.Commands;
+﻿using Erp.Modules.Accounting.Application.Commands;
 using Erp.Modules.Accounting.Application.Features.Export;
 using Erp.Modules.Accounting.Application.Handlers;
 using Erp.Modules.Accounting.Application.Queries;
@@ -93,7 +93,7 @@ public class Phase12CrmHandlerTests
         });
         await ctx.SaveChangesAsync();
 
-        var result = await new UpdateSupplierHandler(ctx).Handle(new UpdateSupplierCommand
+        var result = await new UpdateSupplierHandler(ctx, new FakePortalUrlProvider()).Handle(new UpdateSupplierCommand
         {
             Id = supplierId,
             Name = "Proveedor actualizado",
@@ -125,7 +125,7 @@ public class Phase12CrmHandlerTests
         await ctx.SaveChangesAsync();
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            new UpdateSupplierHandler(ctx).Handle(new UpdateSupplierCommand
+            new UpdateSupplierHandler(ctx, new FakePortalUrlProvider()).Handle(new UpdateSupplierCommand
             {
                 Id = supplierId, Name = "X", TaxId = "B12345674",
             }, CancellationToken.None));
@@ -347,7 +347,7 @@ public class Phase12AccountingQueryHandlerTests
         ctx.Provisions.Add(new Provision
         {
             Id = provisionId, CompanyId = companyId,
-            Code = "490", Description = "Provisión test", Amount = 1500m,
+            Code = "490", Description = "ProvisiÃ³n test", Amount = 1500m,
             DueDate = DateTime.UtcNow.AddMonths(3), Status = "Active",
             CreatedAt = DateTime.UtcNow,
         });
@@ -377,10 +377,10 @@ public class Phase12AccountingQueryHandlerTests
         await ctx.SaveChangesAsync();
 
         await new UpdateProvisionHandler(ctx).Handle(new UpdateProvisionCommand(
-            provisionId, "Después", 2000m, DateTime.UtcNow.AddMonths(1)), CancellationToken.None);
+            provisionId, "DespuÃ©s", 2000m, DateTime.UtcNow.AddMonths(1)), CancellationToken.None);
 
         var updated = await ctx.Provisions.FindAsync(provisionId);
-        Assert.Equal("Después", updated!.Description);
+        Assert.Equal("DespuÃ©s", updated!.Description);
         Assert.Equal(2000m, updated.Amount);
     }
 
@@ -635,11 +635,11 @@ public class Phase12ExpenseHandlerTests
         var ok = await new UpdateExpenseLineHandler(ctx).Handle(new UpdateExpenseLineCommand
         {
             ExpenseDocumentId = docId, LineId = lineId,
-            Description = "Después", Quantity = 2, UnitPrice = 50m, LineTotal = 100m,
+            Description = "DespuÃ©s", Quantity = 2, UnitPrice = 50m, LineTotal = 100m,
         }, CancellationToken.None);
 
         Assert.True(ok);
-        Assert.Equal("Después", (await ctx.ExpenseDocumentLines.FindAsync(lineId))!.Description);
+        Assert.Equal("DespuÃ©s", (await ctx.ExpenseDocumentLines.FindAsync(lineId))!.Description);
     }
 
     [Fact]

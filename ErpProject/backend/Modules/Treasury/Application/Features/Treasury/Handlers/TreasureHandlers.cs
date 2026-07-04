@@ -48,7 +48,7 @@ public class CreateBankAccountHandler : IRequestHandler<CreateBankAccountCommand
 
     private static BankAccountDto ToDto(BankAccount b) => new(
         b.Id, b.Name, b.Iban, b.BIC, b.BankName,
-        b.CurrentBalance, b.CurrencyCode, b.IsActive, b.Notes);
+        b.CurrentBalance, b.CurrencyCode, b.IsActive, b.Notes, b.AccountingAccountCode);
 }
 
 public class GetBankAccountHandler : IRequestHandler<GetBankAccountQuery, BankAccountDto?>
@@ -72,7 +72,8 @@ public class GetBankAccountHandler : IRequestHandler<GetBankAccountQuery, BankAc
             .FirstOrDefaultAsync(ct);
         return account == null ? null : new BankAccountDto(
             account.Id, account.Name, account.Iban, account.BIC, account.BankName,
-            account.CurrentBalance, account.CurrencyCode, account.IsActive, account.Notes);
+            account.CurrentBalance, account.CurrencyCode, account.IsActive, account.Notes,
+            account.AccountingAccountCode);
     }
 }
 
@@ -107,7 +108,7 @@ public class GetBankAccountsHandler : IRequestHandler<GetBankAccountsQuery, List
 
         return accounts.Select(a => new BankAccountDto(
             a.Id, a.Name, a.Iban, a.BIC, a.BankName,
-            a.CurrentBalance, a.CurrencyCode, a.IsActive, a.Notes)).ToList();
+            a.CurrentBalance, a.CurrencyCode, a.IsActive, a.Notes, a.AccountingAccountCode)).ToList();
     }
 }
 

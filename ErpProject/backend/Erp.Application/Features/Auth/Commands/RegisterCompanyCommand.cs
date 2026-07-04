@@ -1,3 +1,4 @@
+using Erp.Application.Common.Events;
 using Erp.Application.Common.Interfaces;
 using Erp.Domain.Entities.Core;
 using Erp.Domain.Entities.Licensing;
@@ -114,6 +115,10 @@ public class RegisterCompanyHandler : IRequestHandler<RegisterCompanyCommand, Re
         });
 
         await _ctx.SaveChangesAsync(ct);
+
+        // Sembrar plan contable PGC (Accounting escucha este evento) — sin esto
+        // ninguna factura de esta empresa podría cobrarse (ver ADR-0018 #42b/#0g).
+        await _mediator.Publish(new CompanyCreatedEvent { CompanyId = company.Id }, ct);
 
         // Send email confirmation (fire-and-forget: registration succeeds even if email fails)
         _ = Task.Run(() => _mediator.Send(new SendEmailConfirmationCommand(user.Id), CancellationToken.None));

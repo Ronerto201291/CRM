@@ -3,6 +3,7 @@ import { useEffect, useState, useMemo } from 'react';
 import PageContainer from '@/components/PageContainer';
 import EmptyState from '@/components/EmptyState';
 import LoadingPlaceholder from '@/components/LoadingPlaceholder';
+import AccessibleModal from '@/components/AccessibleModal';
 
 export interface FiscalEvent {
     id: string;
@@ -241,13 +242,20 @@ export default function FiscalClient({ initialEvents, initialYear }: FiscalClien
             )}
 
             {/* ── MODAL: Marcar como presentado ── */}
-            {showSubmitModal && (
-                <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowSubmitModal(null); }}>
-                    <div className="modal-box" style={{ maxWidth: '440px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                            <h2 style={{ fontSize: '18px', fontWeight: 700 }}>Marcar como Presentado</h2>
-                            <button onClick={() => setShowSubmitModal(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '20px', color: 'var(--text-muted)' }}>✕</button>
-                        </div>
+            <AccessibleModal
+                open={!!showSubmitModal}
+                onClose={() => setShowSubmitModal(null)}
+                title="Marcar como Presentado"
+                maxWidth="440px"
+                footer={(
+                    <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
+                        <button className="btn btn-secondary" onClick={() => setShowSubmitModal(null)}>Cancelar</button>
+                        <button className="btn btn-primary" onClick={submitEvent} disabled={saving}>{saving ? 'Guardando...' : '✓ Confirmar presentación'}</button>
+                    </div>
+                )}
+            >
+                {showSubmitModal && (
+                    <>
                         <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
                             <strong>{showSubmitModal.modelName}</strong> — Vence el {fmtDate(showSubmitModal.deadlineDate)}
                         </p>
@@ -255,79 +263,74 @@ export default function FiscalClient({ initialEvents, initialYear }: FiscalClien
                             <label className="erp-label">Nº REFERENCIA AEAT (opcional)</label>
                             <input className="erp-input" value={submitRef} onChange={e => setSubmitRef(e.target.value)} placeholder="NRGP o referencia del modelo" />
                         </div>
-                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
-                            <button className="btn btn-secondary" onClick={() => setShowSubmitModal(null)}>Cancelar</button>
-                            <button className="btn btn-primary" onClick={submitEvent} disabled={saving}>{saving ? 'Guardando...' : '✓ Confirmar presentación'}</button>
-                        </div>
-                    </div>
-                </div>
-            )}
+                    </>
+                )}
+            </AccessibleModal>
 
             {/* ── MODAL: Nuevo evento manual ── */}
-            {showModal && (
-                <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowModal(false); }}>
-                    <div className="modal-box" style={{ maxWidth: '520px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                            <h2 style={{ fontSize: '18px', fontWeight: 700 }}>Nuevo Evento Fiscal Manual</h2>
-                            <button onClick={() => setShowModal(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '20px', color: 'var(--text-muted)' }}>✕</button>
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
-                            <div className="form-group">
-                                <label className="erp-label">MODELO *</label>
-                                <select className="erp-input" value={form.modelCode} onChange={e => setForm({ ...form, modelCode: e.target.value, modelName: MODEL_INFO[e.target.value]?.desc || form.modelName })}>
-                                    {Object.entries(MODEL_INFO).map(([code, info]) => <option key={code} value={code}>{code} — {info.desc}</option>)}
-                                    <option value="OTRO">Otro</option>
-                                </select>
-                            </div>
-                            <div className="form-group">
-                                <label className="erp-label">AÑO *</label>
-                                <select className="erp-input" value={form.year} onChange={e => setForm({ ...form, year: parseInt(e.target.value) })}>
-                                    {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
-                                </select>
-                            </div>
-                            <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                                <label className="erp-label">DESCRIPCIÓN *</label>
-                                <input className="erp-input" value={form.modelName} onChange={e => setForm({ ...form, modelName: e.target.value })} placeholder="IVA trimestral T1 2026" />
-                            </div>
-                            <div className="form-group">
-                                <label className="erp-label">TRIMESTRE</label>
-                                <select className="erp-input" value={form.quarter} onChange={e => setForm({ ...form, quarter: e.target.value, month: '' })}>
-                                    <option value="">—</option>
-                                    <option value="1">T1</option><option value="2">T2</option>
-                                    <option value="3">T3</option><option value="4">T4</option>
-                                </select>
-                            </div>
-                            <div className="form-group">
-                                <label className="erp-label">MES</label>
-                                <select className="erp-input" value={form.month} onChange={e => setForm({ ...form, month: e.target.value, quarter: '' })}>
-                                    <option value="">—</option>
-                                    {MONTHS.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
-                                </select>
-                            </div>
-                            <div className="form-group">
-                                <label className="erp-label">FECHA LÍMITE *</label>
-                                <input className="erp-input" type="date" value={form.deadlineDate} onChange={e => setForm({ ...form, deadlineDate: e.target.value })} />
-                            </div>
-                            <div className="form-group">
-                                <label className="erp-label">FECHA RECORDATORIO *</label>
-                                <input className="erp-input" type="date" value={form.reminderDate} onChange={e => setForm({ ...form, reminderDate: e.target.value })} />
-                            </div>
-                            <div className="form-group">
-                                <label className="erp-label">IMPORTE ESTIMADO</label>
-                                <input className="erp-input" type="number" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} placeholder="0.00" />
-                            </div>
-                            <div className="form-group">
-                                <label className="erp-label">NOTAS</label>
-                                <input className="erp-input" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Observaciones" />
-                            </div>
-                        </div>
-                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                            <button className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancelar</button>
-                            <button className="btn btn-primary" onClick={createEvent} disabled={saving}>{saving ? 'Guardando...' : '✓ Crear Evento'}</button>
-                        </div>
+            <AccessibleModal
+                open={showModal}
+                onClose={() => setShowModal(false)}
+                title="Nuevo Evento Fiscal Manual"
+                maxWidth="520px"
+                footer={(
+                    <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                        <button className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancelar</button>
+                        <button className="btn btn-primary" onClick={createEvent} disabled={saving}>{saving ? 'Guardando...' : '✓ Crear Evento'}</button>
+                    </div>
+                )}
+            >
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
+                    <div className="form-group">
+                        <label className="erp-label">MODELO *</label>
+                        <select className="erp-input" value={form.modelCode} onChange={e => setForm({ ...form, modelCode: e.target.value, modelName: MODEL_INFO[e.target.value]?.desc || form.modelName })}>
+                            {Object.entries(MODEL_INFO).map(([code, info]) => <option key={code} value={code}>{code} — {info.desc}</option>)}
+                            <option value="OTRO">Otro</option>
+                        </select>
+                    </div>
+                    <div className="form-group">
+                        <label className="erp-label">AÑO *</label>
+                        <select className="erp-input" value={form.year} onChange={e => setForm({ ...form, year: parseInt(e.target.value) })}>
+                            {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+                        </select>
+                    </div>
+                    <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                        <label className="erp-label">DESCRIPCIÓN *</label>
+                        <input className="erp-input" value={form.modelName} onChange={e => setForm({ ...form, modelName: e.target.value })} placeholder="IVA trimestral T1 2026" />
+                    </div>
+                    <div className="form-group">
+                        <label className="erp-label">TRIMESTRE</label>
+                        <select className="erp-input" value={form.quarter} onChange={e => setForm({ ...form, quarter: e.target.value, month: '' })}>
+                            <option value="">—</option>
+                            <option value="1">T1</option><option value="2">T2</option>
+                            <option value="3">T3</option><option value="4">T4</option>
+                        </select>
+                    </div>
+                    <div className="form-group">
+                        <label className="erp-label">MES</label>
+                        <select className="erp-input" value={form.month} onChange={e => setForm({ ...form, month: e.target.value, quarter: '' })}>
+                            <option value="">—</option>
+                            {MONTHS.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
+                        </select>
+                    </div>
+                    <div className="form-group">
+                        <label className="erp-label">FECHA LÍMITE *</label>
+                        <input className="erp-input" type="date" value={form.deadlineDate} onChange={e => setForm({ ...form, deadlineDate: e.target.value })} />
+                    </div>
+                    <div className="form-group">
+                        <label className="erp-label">FECHA RECORDATORIO *</label>
+                        <input className="erp-input" type="date" value={form.reminderDate} onChange={e => setForm({ ...form, reminderDate: e.target.value })} />
+                    </div>
+                    <div className="form-group">
+                        <label className="erp-label">IMPORTE ESTIMADO</label>
+                        <input className="erp-input" type="number" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} placeholder="0.00" />
+                    </div>
+                    <div className="form-group">
+                        <label className="erp-label">NOTAS</label>
+                        <input className="erp-input" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Observaciones" />
                     </div>
                 </div>
-            )}
+            </AccessibleModal>
         </PageContainer>
     );
 }

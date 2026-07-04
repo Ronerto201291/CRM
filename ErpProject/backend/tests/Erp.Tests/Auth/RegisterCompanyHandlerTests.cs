@@ -1,3 +1,4 @@
+using Erp.Application.Common.Events;
 using Erp.Application.Common.Interfaces;
 using Erp.Application.Features.Auth.Commands;
 using Erp.Domain.Entities.Core;
@@ -20,7 +21,8 @@ public class RegisterCompanyHandlerTests
             .Options;
 
         await using var ctx = new ErpDbContext(options, tenant);
-        var handler = new RegisterCompanyHandler(ctx, new FakeJwtProvider(), new NoOpMediator());
+        var mediator = new NoOpMediator();
+        var handler = new RegisterCompanyHandler(ctx, new FakeJwtProvider(), mediator);
 
         var result = await handler.Handle(new RegisterCompanyCommand
         {
@@ -49,6 +51,9 @@ public class RegisterCompanyHandlerTests
             .FirstOrDefaultAsync(uc => uc.UserId == user!.Id && uc.CompanyId == company!.Id);
         Assert.NotNull(membership);
         Assert.True(membership!.IsDefault);
+
+        var published = Assert.IsType<CompanyCreatedEvent>(Assert.Single(mediator.Published));
+        Assert.Equal(company!.Id, published.CompanyId);
     }
 
     [Fact]
@@ -91,6 +96,8 @@ public class RegisterCompanyHandlerTests
 
     private sealed class NoOpMediator : IMediator
     {
+        public List<object> Published { get; } = [];
+
         public Task<TResponse> Send<TResponse>(IRequest<TResponse> request, CancellationToken cancellationToken = default)
             => Task.FromResult<TResponse>(default!);
 
@@ -107,9 +114,15 @@ public class RegisterCompanyHandlerTests
             => AsyncEnumerable.Empty<object?>();
 
         public Task Publish(object notification, CancellationToken cancellationToken = default)
-            => Task.CompletedTask;
+        {
+            Published.Add(notification);
+            return Task.CompletedTask;
+        }
 
         public Task Publish<TNotification>(TNotification notification, CancellationToken cancellationToken = default) where TNotification : INotification
-            => Task.CompletedTask;
+        {
+            Published.Add(notification!);
+            return Task.CompletedTask;
+        }
     }
 }

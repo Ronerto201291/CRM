@@ -14,6 +14,7 @@ public class ProductsController : ControllerBase
     public ProductsController(IMediator mediator) => _mediator = mediator;
 
     [HttpGet]
+    [RequirePermission(Permissions.Product.Read)]
     public async Task<IActionResult> GetAll(
         [FromQuery] string? search,
         [FromQuery] bool? active,
@@ -35,6 +36,7 @@ public class ProductsController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [RequirePermission(Permissions.Product.Read)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetProductByIdQuery { Id = id }, ct);
@@ -42,6 +44,7 @@ public class ProductsController : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission(Permissions.Product.Create)]
     public async Task<IActionResult> Create([FromBody] CreateProductCommand cmd, CancellationToken ct)
     {
         var result = await _mediator.Send(cmd, ct);
@@ -49,6 +52,7 @@ public class ProductsController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [RequirePermission(Permissions.Product.Update)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateProductCommand cmd, CancellationToken ct)
     {
         cmd.Id = id;
@@ -57,6 +61,7 @@ public class ProductsController : ControllerBase
     }
 
     [HttpPatch("{id:guid}/activate")]
+    [RequirePermission(Permissions.Product.Manage)]
     public async Task<IActionResult> SetActive(Guid id, [FromBody] bool active, CancellationToken ct)
     {
         var ok = await _mediator.Send(new SetProductActiveCommand { Id = id, IsActive = active }, ct);
@@ -64,6 +69,7 @@ public class ProductsController : ControllerBase
     }
 
     [HttpGet("{id:guid}/movements")]
+    [RequirePermission(Permissions.Product.Read)]
     public async Task<IActionResult> GetMovements(
         Guid id, [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
         => Ok(await _mediator.Send(new GetProductMovementsQuery { ProductId = id, Page = page, PageSize = pageSize }, ct));

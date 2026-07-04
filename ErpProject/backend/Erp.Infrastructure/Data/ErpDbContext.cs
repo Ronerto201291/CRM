@@ -45,6 +45,7 @@ public class ErpDbContext : DbContext, IApplicationDbContext, ILicensingDbContex
     public DbSet<UserPermission> UserPermissions { get; set; } = null!;
     public DbSet<UserCompany> UserCompanies { get; set; } = null!;
     public DbSet<RefreshToken> RefreshTokens { get; set; } = null!;
+    public DbSet<Document> Documents { get; set; } = null!;
 
     // Core Modules
     public DbSet<TenantModule> TenantModules { get; set; } = null!;
@@ -177,6 +178,8 @@ public class ErpDbContext : DbContext, IApplicationDbContext, ILicensingDbContex
         modelBuilder.Entity<TenantModule>().HasQueryFilter(e => e.CompanyId == _tenantContext.TenantId);
         modelBuilder.Entity<TenantInvitation>().HasQueryFilter(e => e.CompanyId == _tenantContext.TenantId);
         modelBuilder.Entity<FiscalEvent>().HasQueryFilter(e => e.CompanyId == _tenantContext.TenantId);
+        modelBuilder.Entity<Document>().HasQueryFilter(e => e.CompanyId == _tenantContext.TenantId);
+        modelBuilder.Entity<Document>().HasIndex(d => new { d.CompanyId, d.EntityType, d.EntityId });
 
         // JSONB columns
         modelBuilder.Entity<Subscription>().Property(e => e.ActiveModules).HasColumnType("jsonb");

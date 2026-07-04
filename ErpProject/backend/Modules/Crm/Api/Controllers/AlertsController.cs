@@ -1,3 +1,4 @@
+using Erp.Application.Common.Attributes;
 using Erp.Modules.Crm.Application.Features.Alerts;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -8,6 +9,7 @@ namespace Erp.Modules.Crm.Api.Controllers;
 [ApiController]
 [Route("api/crm/alerts")]
 [Authorize]
+[RequiredModule("CRM")]
 public class AlertsController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -15,14 +17,17 @@ public class AlertsController : ControllerBase
     public AlertsController(IMediator mediator) => _mediator = mediator;
 
     [HttpGet]
+    [RequirePermission(Permissions.Alert.Read)]
     public async Task<IActionResult> GetAll(CancellationToken ct)
         => Ok(await _mediator.Send(new GetAlertsQuery(), ct));
 
     [HttpGet("pending")]
+    [RequirePermission(Permissions.Alert.Read)]
     public async Task<IActionResult> GetPending(CancellationToken ct)
         => Ok(await _mediator.Send(new GetPendingAlertsQuery(), ct));
 
     [HttpPost]
+    [RequirePermission(Permissions.Alert.Create)]
     public async Task<IActionResult> Create([FromBody] CreateAlertRequest req, CancellationToken ct)
     {
         try
@@ -35,6 +40,7 @@ public class AlertsController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [RequirePermission(Permissions.Alert.Update)]
     public async Task<IActionResult> Update(Guid id, [FromBody] CreateAlertRequest req, CancellationToken ct)
     {
         try
@@ -46,6 +52,7 @@ public class AlertsController : ControllerBase
     }
 
     [HttpPatch("{id:guid}/acknowledge")]
+    [RequirePermission(Permissions.Alert.Manage)]
     public async Task<IActionResult> Acknowledge(Guid id, CancellationToken ct)
     {
         try
@@ -57,6 +64,7 @@ public class AlertsController : ControllerBase
     }
 
     [HttpPatch("{id:guid}/snooze")]
+    [RequirePermission(Permissions.Alert.Manage)]
     public async Task<IActionResult> Snooze(Guid id, [FromBody] SnoozeRequest req, CancellationToken ct)
     {
         try
@@ -68,6 +76,7 @@ public class AlertsController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [RequirePermission(Permissions.Alert.Delete)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
         try

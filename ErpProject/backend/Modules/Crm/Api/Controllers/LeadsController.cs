@@ -1,3 +1,4 @@
+using Erp.Application.Common.Attributes;
 using Erp.Application.DTOs;
 using Erp.Modules.Crm.Application.Features.Crm.Commands;
 using Erp.Modules.Crm.Application.Features.Crm.Queries;
@@ -7,7 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Erp.Modules.Crm.Api.Controllers;
 
-[ApiController, Route("api/[controller]"), Authorize]
+[ApiController, Route("api/[controller]"), Authorize, RequiredModule("CRM")]
 public class LeadsController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -15,6 +16,7 @@ public class LeadsController : ControllerBase
     public LeadsController(IMediator mediator) => _mediator = mediator;
 
     [HttpGet]
+    [RequirePermission(Permissions.Lead.Read)]
     public async Task<IActionResult> GetAll(
         [FromQuery] string? search,
         [FromQuery] string? status,
@@ -34,6 +36,7 @@ public class LeadsController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [RequirePermission(Permissions.Lead.Read)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var lead = await _mediator.Send(new GetLeadByIdQuery { Id = id }, ct);
@@ -41,6 +44,7 @@ public class LeadsController : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission(Permissions.Lead.Create)]
     public async Task<IActionResult> Create([FromBody] CreateLeadCommand cmd, CancellationToken ct)
     {
         var lead = await _mediator.Send(cmd, ct);
@@ -48,6 +52,7 @@ public class LeadsController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [RequirePermission(Permissions.Lead.Update)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateLeadCommand cmd, CancellationToken ct)
     {
         cmd.Id = id;
@@ -56,6 +61,7 @@ public class LeadsController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [RequirePermission(Permissions.Lead.Delete)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
         var ok = await _mediator.Send(new DeleteLeadCommand { Id = id }, ct);
@@ -63,6 +69,7 @@ public class LeadsController : ControllerBase
     }
 
     [HttpPost("{id:guid}/convert-to-client")]
+    [RequirePermission(Permissions.Lead.Convert)]
     public async Task<IActionResult> ConvertToClient(Guid id, CancellationToken ct)
     {
         try

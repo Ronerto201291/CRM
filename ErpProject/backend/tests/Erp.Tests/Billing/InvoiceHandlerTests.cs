@@ -1,4 +1,4 @@
-using Erp.Application.Common;
+﻿using Erp.Application.Common;
 using Erp.Application.Common.Interfaces;
 using Erp.Modules.Billing.Application.Features.Billing.Commands;
 using Erp.Modules.Billing.Application.Features.Billing.Handlers;
@@ -46,7 +46,7 @@ public class GetInvoiceByIdHandlerTests
         });
         await ctx.SaveChangesAsync();
 
-        var handler = new GetInvoiceByIdHandler(ctx);
+        var handler = new GetInvoiceByIdHandler(ctx, new FakePortalUrlProvider());
         var result = await handler.Handle(new GetInvoiceByIdQuery { Id = invoiceId }, CancellationToken.None);
 
         Assert.NotNull(result);
@@ -64,7 +64,7 @@ public class GetInvoiceByIdHandlerTests
             .Options;
 
         await using var ctx = new BillingDbContext(options, tenant);
-        var handler = new GetInvoiceByIdHandler(ctx);
+        var handler = new GetInvoiceByIdHandler(ctx, new FakePortalUrlProvider());
         var result = await handler.Handle(new GetInvoiceByIdQuery { Id = Guid.NewGuid() }, CancellationToken.None);
 
         Assert.Null(result);
@@ -96,7 +96,8 @@ public class CreateInvoiceHandlerTests
             appCtx,
             new FakeClientInfoService(),
             new FakeViesService(),
-            new FakePlanLimitService(new LimitCheckResult(false, "Límite mensual alcanzado", 100, 100)));
+            new FakePlanLimitService(new LimitCheckResult(false, "Límite mensual alcanzado", 100, 100)),
+            new FakePortalUrlProvider());
 
         await Assert.ThrowsAsync<PlanLimitExceededException>(() => handler.Handle(
             new CreateInvoiceCommand
@@ -130,10 +131,12 @@ public class CreateInvoiceHandlerTests
             appCtx,
             new FakeClientInfoService(),
             new FakeViesService(),
-            new FakePlanLimitService());
+            new FakePlanLimitService(),
+            new FakePortalUrlProvider());
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => handler.Handle(
             new CreateInvoiceCommand { DueDate = DateTime.UtcNow.AddDays(30) },
             CancellationToken.None));
     }
 }
+

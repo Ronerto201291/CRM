@@ -52,8 +52,10 @@ var isIntegrationTest = env.IsEnvironment("IntegrationTests");
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddControllers(options =>
 {
-    // ABAC filter runs AFTER ModuleAuthorizationFilter (module-level RBAC).
-    // Provides action-level granularity within a module.
+    // Module licensing filter runs first (coarse: is the module enabled for this
+    // tenant's plan?), then ABAC (fine: does this user have the permission?).
+    // Both are no-ops on endpoints without the corresponding attribute.
+    options.Filters.AddService<Erp.Infrastructure.Security.ModuleAuthorizationFilter>();
     options.Filters.AddService<Erp.Infrastructure.Security.AbacAuthorizationFilter>();
 })
     .AddErpModuleControllers(Erp.Modules.Accounting.Api.AccountingErpModule.Instance)
@@ -164,11 +166,8 @@ builder.Services.AddScoped<Erp.Application.Common.Interfaces.ITenantContext, Ten
 builder.Services.AddAuthorizationBuilder()
     .AddPolicy("ModuleRequired", policy => policy.RequireAuthenticatedUser());
 
-builder.Services.AddScoped<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, 
+builder.Services.AddScoped<Microsoft.AspNetCore.Authorization.IAuthorizationHandler,
     Erp.Infrastructure.Security.ModuleAuthorizationHandler>();
-
-builder.Services.AddScoped<Microsoft.AspNetCore.Mvc.Filters.IAsyncAuthorizationFilter,
-    Erp.Infrastructure.Security.ModuleAuthorizationFilter>();
 
 builder.Services.AddInfrastructureServices();
 
@@ -370,6 +369,11 @@ for (int attempt = 1; attempt <= 10; attempt++)
             job => job.ExecuteAsync(),
             "0 1 * * *");
 
+        RecurringJob.AddOrUpdate<Erp.Modules.Crm.Infrastructure.Services.ContractedServiceBillingJob>(
+            "contracted-service-billing",
+            job => job.ExecuteAsync(),
+            "0 2 * * *"); // Diario a las 2:00 — servicios contratados (ADR-0018 #42f)
+
         RecurringJob.AddOrUpdate<Erp.Infrastructure.Services.FiscalReminderJob>(
             "fiscal-reminder",
             job => job.ExecuteAsync(),
@@ -487,89 +491,14 @@ using (var scope = application.Services.CreateScope())
                 });
             }
 
-            // Seed Plan General Contable español (cuentas mínimas PGC 2007)
-            var pgcAccounts = new[]
-            {
-                // Grupo 1 – Financiación básica
-                ("100", "Capital social", "Patrimonio"),
-                ("118", "Aportaciones de socios", "Patrimonio"),
-                ("129", "Resultado del ejercicio", "Patrimonio"),
-                // Grupo 2 – Activo no corriente
-                ("210", "Terrenos y bienes naturales", "Activo"),
-                ("211", "Construcciones", "Activo"),
-                ("213", "Maquinaria", "Activo"),
-                ("216", "Mobiliario", "Activo"),
-                ("217", "Equipos para procesos de información", "Activo"),
-                ("218", "Elementos de transporte", "Activo"),
-                ("280", "Amortización acumulada inmovilizado material", "Activo"),
-                // Grupo 3 – Existencias
-                ("300", "Mercaderías", "Activo"),
-                ("310", "Materias primas", "Activo"),
-                ("350", "Productos terminados", "Activo"),
-                // Grupo 4 – Acreedores y deudores comerciales
-                ("400", "Proveedores", "Pasivo"),
-                ("410", "Acreedores por prestaciones de servicios", "Pasivo"),
-                ("430", "Clientes", "Activo"),
-                ("440", "Deudores", "Activo"),
-                ("460", "Anticipos de remuneraciones", "Activo"),
-                ("470", "Hacienda Pública deudora por IVA", "Activo"),
-                ("4700", "Hacienda Pública deudora por IRPF", "Activo"),
-                ("472", "Hacienda Pública, IVA soportado", "Activo"),
-                ("473", "Hacienda Pública, retenciones y pagos a cuenta", "Activo"),
-                ("475", "Hacienda Pública, acreedora por IVA", "Pasivo"),
-                ("4751", "Hacienda Pública acreedora por retenciones practicadas", "Pasivo"),
-                ("477", "Hacienda Pública, IVA repercutido", "Pasivo"),
-                ("476", "Organismos de la Seguridad Social acreedores", "Pasivo"),
-                // Grupo 5 – Cuentas financieras
-                ("520", "Deudas a corto plazo con entidades de crédito", "Pasivo"),
-                ("570", "Caja, euros", "Activo"),
-                ("572", "Bancos e instituciones de crédito c/c vista, euros", "Activo"),
-                // Grupo 6 – Compras y gastos
-                ("600", "Compras de mercaderías", "Gasto"),
-                ("601", "Compras de materias primas", "Gasto"),
-                ("621", "Arrendamientos y cánones", "Gasto"),
-                ("622", "Reparaciones y conservación", "Gasto"),
-                ("623", "Servicios de profesionales independientes", "Gasto"),
-                ("624", "Transportes", "Gasto"),
-                ("625", "Primas de seguros", "Gasto"),
-                ("626", "Servicios bancarios y similares", "Gasto"),
-                ("627", "Publicidad, propaganda y relaciones públicas", "Gasto"),
-                ("628", "Suministros", "Gasto"),
-                ("629", "Otros servicios", "Gasto"),
-                ("640", "Sueldos y salarios", "Gasto"),
-                ("642", "Seguridad Social a cargo de la empresa", "Gasto"),
-                ("681", "Amortización del inmovilizado material", "Gasto"),
-                // Grupo 7 – Ventas e ingresos
-                ("700", "Ventas de mercaderías", "Ingreso"),
-                ("701", "Ventas de productos terminados", "Ingreso"),
-                ("705", "Prestaciones de servicios", "Ingreso"),
-                ("708", "Devoluciones de ventas y operaciones similares", "Ingreso"),
-                ("751", "Subvenciones a la explotación", "Ingreso"),
-                ("760", "Ingresos de participaciones en instrumentos de patrimonio", "Ingreso"),
-                ("770", "Beneficios procedentes del inmovilizado material", "Ingreso"),
-            };
-            var existingAccountCodes = accountingDb.Accounts
-                .IgnoreQueryFilters()
-                .Where(a => a.CompanyId == company.Id)
-                .Select(a => a.Code)
-                .ToHashSet();
-            foreach (var (code, name, type) in pgcAccounts)
-            {
-                if (existingAccountCodes.Contains(code))
-                    continue;
-                accountingDb.Accounts.Add(new Erp.Modules.Accounting.Domain.Entities.Account
-                {
-                    Id = Guid.NewGuid(),
-                    CompanyId = company.Id,
-                    Code = code,
-                    Name = name,
-                    Type = type
-                });
-            }
-            accountingDb.SaveChanges();
+            // Seed Plan General Contable español — vía CompanyCreatedEvent/SeedChartOfAccountsHandler,
+            // misma fuente de verdad que usan RegisterCompanyHandler/AddCompanyFromAccountHandler
+            // para cualquier empresa real (ver ADR-0018 #42b/#0g). Ya es idempotente.
+            await scope.ServiceProvider.GetRequiredService<MediatR.IMediator>()
+                .Publish(new Erp.Application.Common.Events.CompanyCreatedEvent { CompanyId = company.Id });
 
             // Seed TenantModules — todos desactivados por defecto excepto Core
-            var moduleNames = new[] { "Inventory", "OCR", "PublicApi", "Expenses", "Accounting", "CRM", "Billing" };
+            var moduleNames = new[] { "Inventory", "OCR", "PublicApi", "Expenses", "Accounting", "CRM", "Billing", "Treasury", "Payroll", "Purchasing", "Sales" };
             var existingModules = dbContext.TenantModules
                 .IgnoreQueryFilters()
                 .Where(tm => tm.CompanyId == company.Id)
@@ -589,7 +518,7 @@ using (var scope = application.Services.CreateScope())
             }
 
             dbContext.SaveChanges();
-            Log.Information("Seed completado: Company, 3 Roles, Admin user, PGC ({Count} cuentas), TenantModules.", pgcAccounts.Length);
+            Log.Information("Seed completado: Company, 3 Roles, Admin user, PGC, TenantModules.");
             }
         }
     }

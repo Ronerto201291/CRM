@@ -21,6 +21,7 @@ public interface IApplicationDbContext
     DbSet<UserCompany> UserCompanies { get; }
     DbSet<RefreshToken> RefreshTokens { get; }
     DbSet<TenantInvitation> TenantInvitations { get; }
+    DbSet<Document> Documents { get; }
 
     // Tax
     DbSet<TaxReport> TaxReports { get; }

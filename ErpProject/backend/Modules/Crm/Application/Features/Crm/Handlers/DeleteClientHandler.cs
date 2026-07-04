@@ -15,6 +15,12 @@ public class DeleteClientHandler : IRequestHandler<DeleteClientCommand, bool>
     {
         var client = await _context.Clients.FirstOrDefaultAsync(c => c.Id == request.Id, ct);
         if (client == null) return false;
+
+        var hasContractedServices = await _context.ClientContractedServices
+            .AnyAsync(cs => cs.ClientId == request.Id, ct);
+        if (hasContractedServices)
+            throw new InvalidOperationException("No se puede eliminar un cliente con servicios contratados. Cancela primero sus contratos.");
+
         _context.Clients.Remove(client);
         await _context.SaveChangesAsync(ct);
         return true;

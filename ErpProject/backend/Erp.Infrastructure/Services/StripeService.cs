@@ -1,6 +1,8 @@
+using Erp.Application.Common.Events;
 using Erp.Application.Common.Interfaces;
 using Erp.Domain.Entities.Core;
 using Erp.Domain.Entities.Licensing;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -10,28 +12,74 @@ using Stripe.Checkout;
 namespace Erp.Infrastructure.Services;
 
 /// <summary>
-/// Stripe integration for SaaS subscription billing.
-/// Handles checkout sessions, portal sessions, and webhook events.
-/// Keys and Price IDs are read from StripeOptions (never hardcoded).
+/// Stripe integration for SaaS subscription billing, plus one-off invoice payments
+/// (ADR-0018 #39, IInvoicePaymentGateway). Handles checkout sessions, portal sessions,
+/// and webhook events. Keys and Price IDs are read from StripeOptions (never hardcoded).
 /// </summary>
-public class StripeService : ISubscriptionBillingService
+public class StripeService : ISubscriptionBillingService, IInvoicePaymentGateway
 {
     private readonly IApplicationDbContext _ctx;
     private readonly ILicensingDbContext _licensing;
     private readonly ILogger<StripeService> _logger;
     private readonly StripeOptions _options;
+    private readonly IPublisher _publisher;
 
     public StripeService(
         IApplicationDbContext ctx,
         ILicensingDbContext licensing,
         ILogger<StripeService> logger,
-        IOptions<StripeOptions> options)
+        IOptions<StripeOptions> options,
+        IPublisher publisher)
     {
         _ctx     = ctx;
         _licensing = licensing;
         _logger  = logger;
         _options = options.Value;
+        _publisher = publisher;
         StripeConfiguration.ApiKey = _options.SecretKey;
+    }
+
+    /// <summary>
+    /// Creates a Stripe Checkout Session (mode "payment", not "subscription") for the exact
+    /// amount of a single tenant-issued Invoice. Unlike CreateCheckoutSessionAsync above,
+    /// this has no Stripe Customer/subscription concept — it's a one-off charge initiated
+    /// anonymously from the public invoice portal (ADR-0018 #39).
+    /// </summary>
+    public async Task<string> CreateInvoiceCheckoutSessionAsync(
+        Guid invoiceId, string invoiceNumber, decimal amount, string currency,
+        string successUrl, string cancelUrl, CancellationToken ct = default)
+    {
+        var options = new SessionCreateOptions
+        {
+            PaymentMethodTypes = new List<string> { "card" },
+            LineItems = new List<SessionLineItemOptions>
+            {
+                new()
+                {
+                    PriceData = new SessionLineItemPriceDataOptions
+                    {
+                        Currency = currency,
+                        UnitAmount = (long)Math.Round(amount * 100m, MidpointRounding.AwayFromZero),
+                        ProductData = new SessionLineItemPriceDataProductDataOptions
+                        {
+                            Name = $"Factura {invoiceNumber}",
+                        },
+                    },
+                    Quantity = 1,
+                },
+            },
+            Mode = "payment",
+            SuccessUrl = successUrl,
+            CancelUrl = cancelUrl,
+            Metadata = new Dictionary<string, string>
+            {
+                ["invoiceId"] = invoiceId.ToString(),
+            },
+        };
+
+        var sessionService = new SessionService();
+        var session = await sessionService.CreateAsync(options, cancellationToken: ct);
+        return session.Url;
     }
 
     /// <summary>
@@ -194,6 +242,18 @@ public class StripeService : ISubscriptionBillingService
 
     private async Task HandleCheckoutCompleted(Session session, CancellationToken ct)
     {
+        // One-off invoice payment (ADR-0018 #39) — distinct metadata shape from the
+        // subscription checkout below, so branch on it first and return early. Published
+        // as a domain event instead of calling Billing's MarkPaidCommand directly, since
+        // Erp.Infrastructure must not depend on Erp.Modules.Billing.Application.
+        if (session.Metadata.TryGetValue("invoiceId", out var invoiceIdStr)
+            && Guid.TryParse(invoiceIdStr, out var invoiceId))
+        {
+            await _publisher.Publish(new StripeInvoiceCheckoutCompletedEvent { InvoiceId = invoiceId }, ct);
+            _logger.LogInformation("Invoice checkout completed for invoice {InvoiceId}", invoiceId);
+            return;
+        }
+
         if (!session.Metadata.TryGetValue("companyId", out var companyIdStr)) return;
         if (!session.Metadata.TryGetValue("planName", out var planName)) return;
         if (!Guid.TryParse(companyIdStr, out var companyId)) return;

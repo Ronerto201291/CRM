@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Text;
 using System.Text.Json;
 using Erp.Domain.Entities.Core;
@@ -149,7 +149,8 @@ public class StripeWebhookHandlerTests
             {
                 SecretKey = "sk_test_dummy",
                 WebhookSecret = WebhookSecret,
-            }));
+            }),
+            new FakePublisher());
     }
 
     private static ErpDbContext CreateContext(string dbName)

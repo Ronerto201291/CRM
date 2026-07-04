@@ -2,6 +2,8 @@
 
 import React, { useState, useCallback } from "react";
 import PageContainer from "@/components/PageContainer";
+import { useCachedApi } from "@/hooks/useCachedApi";
+import { parseListResponse } from "@/lib/parseListResponse";
 
 interface SalesInvoice {
     id: string;
@@ -26,20 +28,19 @@ export default function SalesInvoicesClient({ initialInvoices }: SalesInvoicesCl
     const [invoices, setInvoices] = useState<SalesInvoice[]>(initialInvoices);
     const [loading, setLoading] = useState(false);
     const [search, setSearch] = useState("");
+    const { fetchCached, invalidateCached } = useCachedApi();
 
     const load = useCallback(async () => {
         setLoading(true);
         try {
             const q = search ? `?search=${encodeURIComponent(search)}&pageSize=500` : "?pageSize=500";
-            const res = await fetch(`/api/proxy/v1/sales/invoices${q}`);
-            if (res.ok) {
-                const data = await res.json();
-                setInvoices(Array.isArray(data) ? data : (data.items ?? []));
-            }
+            invalidateCached("v1/sales/invoices");
+            const data = await fetchCached<unknown>(`v1/sales/invoices${q}`);
+            if (data) setInvoices(parseListResponse<SalesInvoice>(data));
         } finally {
             setLoading(false);
         }
-    }, [search]);
+    }, [search, fetchCached, invalidateCached]);
 
     const filtered = invoices;
 

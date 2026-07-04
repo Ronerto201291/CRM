@@ -9,12 +9,22 @@
 #  - nginx con SSL (puertos 80+443, certificados Let's Encrypt)
 #  - backend/frontend solo accesibles vía nginx (sin puertos 8081/3000)
 #  - certificados SII en /opt/erp/certs (ruta del servidor)
+#  - postgres sin puerto publicado (backend lo alcanza por la red interna
+#    de Docker; publicarlo a 0.0.0.0:5432 en un servidor con IP pública
+#    expondría la base de datos a internet con solo la contraseña)
 
 services:
+  postgres:
+    ports: !override []
+
   backend:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      Postgres__RlsEnabled: ${Postgres__RlsEnabled:-false}
+      # Falla hacia el lado seguro: si la variable no llega por el motivo que
+      # sea, RLS se queda activo (antes el fallback era :-false, lo contrario
+      # de lo deseable para una segunda capa de defensa contra fuga de datos
+      # entre tenants).
+      Postgres__RlsEnabled: ${Postgres__RlsEnabled:-true}
       Stripe__SecretKey: ${Stripe__SecretKey}
       Stripe__WebhookSecret: ${Stripe__WebhookSecret}
       Stripe__PublishableKey: ${Stripe__PublishableKey:-}

@@ -1,3 +1,4 @@
+using Erp.Application.Common.Attributes;
 using Erp.Modules.Treasury.Application.Features.Guarantees;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -8,6 +9,7 @@ namespace Erp.Modules.Treasury.Api.Controllers;
 [ApiController]
 [Route("api/v1/treasury/guarantees")]
 [Authorize]
+[RequiredModule("Treasury")]
 public class GuaranteesController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -15,10 +17,12 @@ public class GuaranteesController : ControllerBase
     public GuaranteesController(IMediator mediator) => _mediator = mediator;
 
     [HttpGet]
+    [RequirePermission(Permissions.Guarantee.Read)]
     public async Task<IActionResult> GetAll([FromQuery] string? status, CancellationToken ct)
         => Ok(await _mediator.Send(new GetGuaranteesQuery(status), ct));
 
     [HttpPost]
+    [RequirePermission(Permissions.Guarantee.Create)]
     public async Task<IActionResult> Create([FromBody] CreateGuaranteeDto dto, CancellationToken ct)
     {
         var result = await _mediator.Send(new CreateGuaranteeCommand(
@@ -28,6 +32,7 @@ public class GuaranteesController : ControllerBase
     }
 
     [HttpPatch("{id:guid}/claim")]
+    [RequirePermission(Permissions.Guarantee.Manage)]
     public async Task<IActionResult> ClaimGuarantee(Guid id, [FromBody] ClaimGuaranteeDto dto, CancellationToken ct)
     {
         try
@@ -38,6 +43,7 @@ public class GuaranteesController : ControllerBase
     }
 
     [HttpPatch("{id:guid}/release")]
+    [RequirePermission(Permissions.Guarantee.Manage)]
     public async Task<IActionResult> ReleaseGuarantee(Guid id, CancellationToken ct)
     {
         try
@@ -48,10 +54,12 @@ public class GuaranteesController : ControllerBase
     }
 
     [HttpGet("collateral")]
+    [RequirePermission(Permissions.Guarantee.Read)]
     public async Task<IActionResult> GetCollateral(CancellationToken ct)
         => Ok(await _mediator.Send(new GetCollateralQuery(), ct));
 
     [HttpPost("collateral")]
+    [RequirePermission(Permissions.Guarantee.Create)]
     public async Task<IActionResult> CreateCollateral([FromBody] CreateCollateralDto dto, CancellationToken ct)
     {
         var result = await _mediator.Send(new CreateCollateralCommand(
@@ -60,10 +68,12 @@ public class GuaranteesController : ControllerBase
     }
 
     [HttpGet("bank-guarantees")]
+    [RequirePermission(Permissions.Guarantee.Read)]
     public async Task<IActionResult> GetBankGuarantees([FromQuery] string? status, CancellationToken ct)
         => Ok(await _mediator.Send(new GetBankGuaranteesQuery(status), ct));
 
     [HttpPost("bank-guarantees")]
+    [RequirePermission(Permissions.Guarantee.Create)]
     public async Task<IActionResult> CreateBankGuarantee([FromBody] CreateBankGuaranteeDto dto, CancellationToken ct)
     {
         var result = await _mediator.Send(new CreateBankGuaranteeCommand(

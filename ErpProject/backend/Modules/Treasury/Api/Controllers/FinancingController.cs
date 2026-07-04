@@ -1,3 +1,4 @@
+using Erp.Application.Common.Attributes;
 using Erp.Modules.Treasury.Application.Features.Financing;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -8,6 +9,7 @@ namespace Erp.Modules.Treasury.Api.Controllers;
 [ApiController]
 [Route("api/v1/treasury/financing")]
 [Authorize]
+[RequiredModule("Treasury")]
 public class FinancingController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -15,10 +17,12 @@ public class FinancingController : ControllerBase
     public FinancingController(IMediator mediator) => _mediator = mediator;
 
     [HttpGet("confirming")]
+    [RequirePermission(Permissions.Financing.Read)]
     public async Task<IActionResult> GetConfirming([FromQuery] string? status, CancellationToken ct)
         => Ok(await _mediator.Send(new GetConfirmingQuery(status), ct));
 
     [HttpPost("confirming")]
+    [RequirePermission(Permissions.Financing.Create)]
     public async Task<IActionResult> CreateConfirming([FromBody] CreateConfirmingDto dto, CancellationToken ct)
     {
         var result = await _mediator.Send(new CreateConfirmingCommand(
@@ -28,6 +32,7 @@ public class FinancingController : ControllerBase
     }
 
     [HttpPatch("confirming/{id:guid}/pay")]
+    [RequirePermission(Permissions.Financing.Manage)]
     public async Task<IActionResult> PayConfirming(Guid id, CancellationToken ct)
     {
         try
@@ -38,10 +43,12 @@ public class FinancingController : ControllerBase
     }
 
     [HttpGet("factoring")]
+    [RequirePermission(Permissions.Financing.Read)]
     public async Task<IActionResult> GetFactoring([FromQuery] string? status, CancellationToken ct)
         => Ok(await _mediator.Send(new GetFactoringQuery(status), ct));
 
     [HttpPost("factoring")]
+    [RequirePermission(Permissions.Financing.Create)]
     public async Task<IActionResult> CreateFactoring([FromBody] CreateFactoringDto dto, CancellationToken ct)
     {
         var result = await _mediator.Send(new CreateFactoringCommand(
@@ -52,6 +59,7 @@ public class FinancingController : ControllerBase
     }
 
     [HttpPatch("factoring/{id:guid}/pay")]
+    [RequirePermission(Permissions.Financing.Manage)]
     public async Task<IActionResult> PayFactoring(Guid id, CancellationToken ct)
     {
         try
@@ -62,10 +70,12 @@ public class FinancingController : ControllerBase
     }
 
     [HttpGet("credit-lines")]
+    [RequirePermission(Permissions.Financing.Read)]
     public async Task<IActionResult> GetCreditLines(CancellationToken ct)
         => Ok(await _mediator.Send(new GetCreditLinesQuery(), ct));
 
     [HttpPost("credit-lines")]
+    [RequirePermission(Permissions.Financing.Create)]
     public async Task<IActionResult> CreateCreditLine([FromBody] CreateCreditLineDto dto, CancellationToken ct)
     {
         var result = await _mediator.Send(new CreateCreditLineCommand(

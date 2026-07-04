@@ -1,6 +1,8 @@
 'use client';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import PageContainer from '@/components/PageContainer';
+import { useCachedApi } from '@/hooks/useCachedApi';
+import { parseListResponse } from '@/lib/parseListResponse';
 
 interface SupplierInvoice {
     id: string;
@@ -30,21 +32,23 @@ export default function PurchasingInvoicesClient({ initialInvoices }: Purchasing
     const [invoices, setInvoices] = useState<SupplierInvoice[]>(initialInvoices);
     const [loading, setLoading] = useState(false);
     const [filter, setFilter] = useState('all');
+    const { fetchCached, invalidateCached } = useCachedApi();
 
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const res = await fetch('/api/proxy/purchasing/invoices');
-            if (res.ok) {
-                const data = await res.json();
-                setInvoices(Array.isArray(data) ? data : (data.items ?? []));
-            }
+            invalidateCached('purchasing/invoices');
+            const data = await fetchCached<unknown>('purchasing/invoices');
+            if (data) setInvoices(parseListResponse<SupplierInvoice>(data));
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [fetchCached, invalidateCached]);
 
-    const filtered = filter === 'all' ? invoices : invoices.filter(i => i.status === filter);
+    const filtered = useMemo(
+        () => (filter === 'all' ? invoices : invoices.filter(i => i.status === filter)),
+        [invoices, filter]
+    );
     const fmt = (n: number) => `€ ${(n || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}`;
 
     return (

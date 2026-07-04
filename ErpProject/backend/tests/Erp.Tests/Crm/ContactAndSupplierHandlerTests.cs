@@ -1,4 +1,4 @@
-using Erp.Application.Common.Interfaces;
+﻿using Erp.Application.Common.Interfaces;
 using Erp.Application.DTOs;
 using Erp.Modules.Crm.Application.Features.Crm.Commands;
 using Erp.Modules.Crm.Application.Features.Crm.Handlers;
@@ -173,7 +173,7 @@ public class ContactHandlerTests
         Assert.True(ok);
         var contact = await ctx.Contacts.SingleAsync();
         Assert.True(contact.IsAnonymized);
-        Assert.Equal("CONTACTO ANÓNIMO", contact.Name);
+        Assert.Equal("CONTACTO AN\u00D3NIMO", contact.Name);
         Assert.Empty(contact.Email);
     }
 
@@ -203,7 +203,7 @@ public class SupplierQueryHandlerTests
         });
         await ctx.SaveChangesAsync();
 
-        var handler = new GetSuppliersHandler(ctx);
+        var handler = new GetSuppliersHandler(ctx, new FakePortalUrlProvider());
         var result = await handler.Handle(new GetSuppliersQuery(), CancellationToken.None);
 
         Assert.Equal(1, result.TotalCount);
@@ -226,7 +226,7 @@ public class SupplierQueryHandlerTests
         });
         await ctx.SaveChangesAsync();
 
-        var handler = new GetSupplierByIdHandler(ctx);
+        var handler = new GetSupplierByIdHandler(ctx, new FakePortalUrlProvider());
         var detail = await handler.Handle(new GetSupplierByIdQuery { Id = supplierId }, CancellationToken.None);
 
         Assert.NotNull(detail);
@@ -241,7 +241,7 @@ public class SupplierQueryHandlerTests
         tenant.SetTenant(companyId, "Empresa test");
 
         await using var ctx = CreateContext(tenant);
-        var handler = new CreateSupplierHandler(ctx, tenant, new FakePublisher());
+        var handler = new CreateSupplierHandler(ctx, tenant, new FakePublisher(), new FakePortalUrlProvider());
 
         var result = await handler.Handle(new CreateSupplierCommand
         {
@@ -276,7 +276,7 @@ public class SupplierQueryHandlerTests
         Assert.True(ok);
         var supplier = await ctx.Suppliers.SingleAsync();
         Assert.True(supplier.IsAnonymized);
-        Assert.Equal("PROVEEDOR ANÓNIMO", supplier.Name);
+        Assert.Equal("PROVEEDOR AN\u00D3NIMO", supplier.Name);
         Assert.Equal("B12345674", supplier.TaxId);
     }
 

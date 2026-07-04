@@ -15,6 +15,7 @@ public class TreasuryDbContext : ModuleDbContextBase, ITreasuryDbContext
     public DbSet<BankAccount> BankAccounts { get; set; } = null!;
     public DbSet<BankMovement> BankMovements { get; set; } = null!;
     public DbSet<CashEffect> CashEffects { get; set; } = null!;
+    public DbSet<CashSession> CashSessions { get; set; } = null!;
     public DbSet<ReconciliationBatch> ReconciliationBatches { get; set; } = null!;
     public DbSet<CashFlowForecast> CashFlowForecasts { get; set; } = null!;
     public DbSet<PaymentOrder> PaymentOrders { get; set; } = null!;
@@ -42,6 +43,7 @@ public class TreasuryDbContext : ModuleDbContextBase, ITreasuryDbContext
         modelBuilder.Entity<BankAccount>().HasQueryFilter(e => e.CompanyId == TenantContext.TenantId);
         modelBuilder.Entity<BankMovement>().HasQueryFilter(e => e.CompanyId == TenantContext.TenantId);
         modelBuilder.Entity<CashEffect>().HasQueryFilter(e => e.CompanyId == TenantContext.TenantId);
+        modelBuilder.Entity<CashSession>().HasQueryFilter(e => e.CompanyId == TenantContext.TenantId);
         modelBuilder.Entity<ReconciliationBatch>().HasQueryFilter(e => e.CompanyId == TenantContext.TenantId);
         modelBuilder.Entity<CashFlowForecast>().HasQueryFilter(e => e.CompanyId == TenantContext.TenantId);
         modelBuilder.Entity<PaymentOrder>().HasQueryFilter(e => e.CompanyId == TenantContext.TenantId);
@@ -84,6 +86,14 @@ public class TreasuryDbContext : ModuleDbContextBase, ITreasuryDbContext
         {
             e.HasIndex(c => new { c.CompanyId, c.DueDate });
             e.Property(c => c.Amount).HasPrecision(18, 4);
+        });
+        modelBuilder.Entity<CashSession>(e =>
+        {
+            e.HasIndex(c => new { c.CompanyId, c.Status });
+            e.Property(c => c.OpeningBalance).HasPrecision(18, 4);
+            e.Property(c => c.ExpectedClosingBalance).HasPrecision(18, 4);
+            e.Property(c => c.CountedClosingBalance).HasPrecision(18, 4);
+            e.Property(c => c.Difference).HasPrecision(18, 4);
         });
         modelBuilder.Entity<CashFlowForecast>(e =>
         {

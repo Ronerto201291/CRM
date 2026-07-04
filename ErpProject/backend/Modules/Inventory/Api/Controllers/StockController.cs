@@ -14,6 +14,7 @@ public class StockController : ControllerBase
     public StockController(IMediator mediator) => _mediator = mediator;
 
     [HttpGet]
+    [RequirePermission(Permissions.Stock.Read)]
     public async Task<IActionResult> GetStock(
         [FromQuery] Guid? warehouseId, [FromQuery] Guid? productId,
         [FromQuery] bool? belowReorderPoint, CancellationToken ct)
@@ -23,6 +24,7 @@ public class StockController : ControllerBase
         }, ct));
 
     [HttpGet("{productId:guid}/warehouses")]
+    [RequirePermission(Permissions.Stock.Read)]
     public async Task<IActionResult> GetByProduct(Guid productId, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetStockByProductQuery { ProductId = productId }, ct);
@@ -30,10 +32,12 @@ public class StockController : ControllerBase
     }
 
     [HttpGet("valuation")]
+    [RequirePermission(Permissions.Stock.Read)]
     public async Task<IActionResult> GetValuation([FromQuery] Guid? warehouseId, CancellationToken ct)
         => Ok(await _mediator.Send(new GetStockValuationQuery { WarehouseId = warehouseId }, ct));
 
     [HttpGet("/api/inventory/movements")]
+    [RequirePermission(Permissions.Stock.Read)]
     public async Task<IActionResult> GetMovements(
         [FromQuery] Guid? productId, [FromQuery] Guid? warehouseId,
         [FromQuery] string? movementType, [FromQuery] DateTime? from, [FromQuery] DateTime? to,
@@ -49,6 +53,7 @@ public class StockController : ControllerBase
     }
 
     [HttpPost("adjustment")]
+    [RequirePermission(Permissions.Stock.Manage)]
     public async Task<IActionResult> Adjust([FromBody] AdjustStockCommand cmd, CancellationToken ct)
         => Ok(await _mediator.Send(cmd, ct));
 }

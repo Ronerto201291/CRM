@@ -33,6 +33,16 @@ expone, entre otros, `Accounts`, `JournalEntries`, `JournalEntryLines`,
 `InitialCreate`, `AddFiscalPeriod`, `AddAmortizationsAndDeferredEntries`,
 `Phase2ContabilityAndAnalytics`, `Phase3VatAndFiscality`.
 
+**Plan contable (`Accounts`) — ADR-0018 #0g:** se siembra vía
+`SeedChartOfAccountsHandler` (`Application/Handlers/`), un
+`INotificationHandler<CompanyCreatedEvent>` que reacciona a la creación de
+cualquier empresa (Auth, ADR-0002) sembrando el PGC mínimo (~50 cuentas,
+incluye "570"/"572"/"430" y "5721"/"5722" para TPV/Bizum, ver #42b más
+abajo). Es idempotente (`AnyAsync` antes de sembrar). Sustituye al antiguo
+`PgcSeeder.cs`, que existía pero no lo invocaba nadie — hallazgo real
+verificado y corregido, no una limpieza cosmética: sin esto, ninguna
+empresa registrada por el flujo normal podía cobrar una factura.
+
 Los 16 controladores de `Api/Controllers/` se agrupan así:
 
 **Libro diario, cierre y exportación fiscal (implementación real vía MediatR/EF Core):**
@@ -150,9 +160,11 @@ dominio, sin intervención manual):
 4. Antes de guardar, valida que `Σ Debe == Σ Haber` (tolerancia 0,01 €) y
    lanza `InvalidOperationException("Asiento descuadrado...")` si no cuadra.
 5. Al cobrar la factura, `MarkPaidHandler` publica `PaymentReceivedEvent`, que
-   `PaymentReceivedEventHandler` convierte en un segundo asiento: Debe
-   572/570 (Banco/Caja según método de pago) y Haber 430 (Clientes), también
-   con control de idempotencia (`SourceType="Payment"`).
+   `PaymentReceivedEventHandler` convierte en un segundo asiento: Debe según
+   `PaymentMethod` (`"cash"`→570 Caja, `"card"`→5721 TPV pendiente de
+   liquidar, `"bizum"`→5722 Bizum pendiente de liquidar, `"bank"`/`"transfer"`
+   →572 Bancos — ADR-0018 #42b) y Haber 430 (Clientes), también con control
+   de idempotencia (`SourceType="Payment"`).
 6. El usuario ve el asiento inmediatamente en `GET /api/accounting/journal`
    desde `frontend/src/app/accounting/page.tsx`, y puede exportarlo en el
    Libro Diario CSV vía `AccountingExportController`.
@@ -169,9 +181,15 @@ dominio, sin intervención manual):
   (`Application/Handlers/ExpenseApprovedEventHandler.cs`) genera asientos de
   gasto de forma análoga a `InvoiceApprovedEventHandler`.
 - **Treasury (ADR-0012):** `BankReconciliationService` de Treasury lee
-  `JournalEntryLines` de Accounting (cuenta 572) para conciliar movimientos
-  bancarios contra apuntes contables — dependencia cruzada de solo lectura en
-  sentido Treasury → Accounting.
+  `JournalEntryLines` de Accounting (cuenta 572) vía el puerto compartido
+  `IBankReconciliationLedgerQuery` (`Erp.Application.Common.Interfaces`,
+  implementado por `BankReconciliationLedgerQuery` aquí) para conciliar
+  movimientos bancarios contra apuntes contables, sin que Treasury referencie
+  el ensamblado de Accounting. En la otra dirección, Accounting **consume**
+  `CashSessionClosedEvent` (publicado por Treasury al cerrar un arqueo de
+  caja con diferencia, ADR-0018 #42b) vía `PostCashDifferenceHandler`, que
+  registra el ajuste (Debe 570/Haber 778 si sobra; Debe 668/Haber 570 si
+  falta) — Treasury nunca crea el asiento directamente.
 - **Fiscal/SII/VeriFactu (ADR-0013):** los modelos AEAT (303, 390, 347, etc.)
   generados aquí son insumo para la presentación telemática que documenta
   ADR-0013; la validación VIES real está disponible en dos rutas equivalentes:

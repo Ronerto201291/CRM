@@ -35,13 +35,15 @@ El backend se organiza en cuatro proyectos "núcleo" en `backend/`:
 
 - `Erp.Api` — host único de ASP.NET Core, `Program.cs`, controllers
   transversales (Auth, Users, Company, Permissions, ApiKeys, AuditLogs,
-  Fiscal, Sii, Tax, Reports, TenantModules, Subscriptions).
+  Fiscal, Sii, Tax, Reports, TenantModules, Subscriptions, Documents).
 - `Erp.Application` — plumbing CQRS común (`Erp.Application.Common`),
   interfaces compartidas (`IApplicationDbContext`, `ITenantContext`,
-  `IJwtProvider`, etc.), y features transversales (Auth, Users).
+  `IJwtProvider`, etc.), y features transversales (Auth, Users, Documents).
 - `Erp.Domain` — entidades base (`AuditableEntity`, `BaseEntity`),
-  entidades "core" (`User`, `Role`, `Company`, `Permission`...) y la entidad
-  `OutboxMessage`.
+  entidades "core" (`User`, `Role`, `Company`, `Permission`...), la entidad
+  `OutboxMessage` y `Document` (biblioteca de documentos, ADR-0018 #42d —
+  enlace genérico `EntityType`/`EntityId` a entidades de otros módulos en
+  vez de una FK real, para no violar la dirección de dependencias).
 - `Erp.Infrastructure` — `ErpDbContext` (el DbContext "core"), seguridad,
   tenancy, interceptores, jobs en background.
 

@@ -1,3 +1,4 @@
+using Erp.Application.Common.Attributes;
 using Erp.Modules.Treasury.Application.Features.Consolidation;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -8,6 +9,7 @@ namespace Erp.Modules.Treasury.Api.Controllers;
 [ApiController]
 [Route("api/v1/treasury/consolidation")]
 [Authorize]
+[RequiredModule("Treasury")]
 public class ConsolidationController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -15,10 +17,12 @@ public class ConsolidationController : ControllerBase
     public ConsolidationController(IMediator mediator) => _mediator = mediator;
 
     [HttpGet]
+    [RequirePermission(Permissions.Consolidation.Read)]
     public async Task<IActionResult> GetAll(CancellationToken ct)
         => Ok(await _mediator.Send(new GetConsolidationGroupsQuery(), ct));
 
     [HttpPost]
+    [RequirePermission(Permissions.Consolidation.Create)]
     public async Task<IActionResult> CreateGroup([FromBody] CreateGroupDto dto, CancellationToken ct)
     {
         var result = await _mediator.Send(new CreateConsolidationGroupCommand(
@@ -27,10 +31,12 @@ public class ConsolidationController : ControllerBase
     }
 
     [HttpGet("{groupId:guid}/subsidiaries")]
+    [RequirePermission(Permissions.Consolidation.Read)]
     public async Task<IActionResult> GetSubsidiaries(Guid groupId, CancellationToken ct)
         => Ok(await _mediator.Send(new GetSubsidiariesQuery(groupId), ct));
 
     [HttpPost("{groupId:guid}/subsidiaries")]
+    [RequirePermission(Permissions.Consolidation.Manage)]
     public async Task<IActionResult> AddSubsidiary(Guid groupId, [FromBody] AddSubsidiaryDto dto, CancellationToken ct)
     {
         var result = await _mediator.Send(new AddSubsidiaryCommand(
@@ -41,10 +47,12 @@ public class ConsolidationController : ControllerBase
     }
 
     [HttpGet("{groupId:guid}/financial-statements")]
+    [RequirePermission(Permissions.Consolidation.Read)]
     public async Task<IActionResult> GetFinancialStatements(Guid groupId, CancellationToken ct)
         => Ok(await _mediator.Send(new GetConsolidatedStatementsQuery(groupId), ct));
 
     [HttpPost("{groupId:guid}/consolidate")]
+    [RequirePermission(Permissions.Consolidation.Manage)]
     public async Task<IActionResult> ConsolidateGroup(Guid groupId, CancellationToken ct)
     {
         try
@@ -55,10 +63,12 @@ public class ConsolidationController : ControllerBase
     }
 
     [HttpGet("{groupId:guid}/intercompany-transactions")]
+    [RequirePermission(Permissions.Consolidation.Read)]
     public async Task<IActionResult> GetIntercompanyTransactions(Guid groupId, CancellationToken ct)
         => Ok(await _mediator.Send(new GetIntercompanyTransactionsQuery(groupId), ct));
 
     [HttpPost("{groupId:guid}/eliminate-intercompany")]
+    [RequirePermission(Permissions.Consolidation.Manage)]
     public async Task<IActionResult> EliminateIntercompanyTransactions(Guid groupId, CancellationToken ct)
         => Ok(await _mediator.Send(new EliminateIntercompanyCommand(groupId), ct));
 }

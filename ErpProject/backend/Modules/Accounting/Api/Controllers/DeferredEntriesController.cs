@@ -1,3 +1,4 @@
+using Erp.Application.Common.Attributes;
 using Erp.Modules.Accounting.Application.Commands;
 using Erp.Modules.Accounting.Application.Queries;
 using MediatR;
@@ -17,6 +18,7 @@ namespace Erp.Modules.Accounting.Api.Controllers;
 [ApiController]
 [Route("api/deferred-entries")]
 [Authorize]
+[RequiredModule("Accounting")]
 public class DeferredEntriesController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -24,10 +26,12 @@ public class DeferredEntriesController : ControllerBase
     public DeferredEntriesController(IMediator mediator) => _mediator = mediator;
 
     [HttpGet]
+    [RequirePermission(Permissions.DeferredEntry.Read)]
     public async Task<IActionResult> GetAll([FromQuery] string? status, CancellationToken ct)
         => Ok(await _mediator.Send(new GetDeferredEntriesQuery(status), ct));
 
     [HttpGet("{id:guid}")]
+    [RequirePermission(Permissions.DeferredEntry.Read)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var dto = await _mediator.Send(new GetDeferredEntryQuery(id), ct);
@@ -39,6 +43,7 @@ public class DeferredEntriesController : ControllerBase
     /// EntryType: "PrepaidExpense" (480) | "DeferredRevenue" (485)
     /// </summary>
     [HttpPost]
+    [RequirePermission(Permissions.DeferredEntry.Create)]
     public async Task<IActionResult> Create([FromBody] CreateDeferredEntryRequest req, CancellationToken ct)
     {
         try
@@ -59,6 +64,7 @@ public class DeferredEntriesController : ControllerBase
     /// Útil para procesar meses pasados o forzar el reconocimiento antes del job.
     /// </summary>
     [HttpPost("{id:guid}/recognize")]
+    [RequirePermission(Permissions.DeferredEntry.Manage)]
     public async Task<IActionResult> Recognize(
         Guid id, [FromBody] RecognizeMonthRequest req, CancellationToken ct)
     {

@@ -1,4 +1,4 @@
-using Erp.Application.Common.Interfaces;
+﻿using Erp.Application.Common.Interfaces;
 using Erp.Modules.Billing.Application.Interfaces;
 using MediatR;
 
@@ -50,31 +50,6 @@ public sealed class FakeInvoicePdfService : IInvoicePdfService
     public byte[] Generate(InvoicePdfData data) => [0x25, 0x50, 0x44, 0x46, 0x2D]; // %PDF-
 }
 
-public sealed class FakePortalUrlProvider : IPortalUrlProvider
-{
-    public string PortalBaseUrl { get; init; } = "https://portal.test.local";
-}
-
-public sealed class FakeFileStorageService : IFileStorageService
-{
-    public List<(string Bucket, string Key)> Uploads { get; } = [];
-
-    public Task<string> UploadAsync(string bucketName, string objectKey, Stream content, string contentType, CancellationToken ct = default)
-    {
-        Uploads.Add((bucketName, objectKey));
-        return Task.FromResult(objectKey);
-    }
-
-    public Task<Stream> DownloadAsync(string bucketName, string objectKey, CancellationToken ct = default)
-        => Task.FromResult<Stream>(new MemoryStream());
-
-    public Task<string> GetSignedUrlAsync(string bucketName, string objectKey, TimeSpan expiry)
-        => Task.FromResult($"https://storage.test/{bucketName}/{objectKey}");
-
-    public Task DeleteAsync(string bucketName, string objectKey, CancellationToken ct = default)
-        => Task.CompletedTask;
-}
-
 public sealed class ConfigurableFakeMediator : IMediator
 {
     private readonly Dictionary<Type, Delegate> _handlers = new();
@@ -110,3 +85,4 @@ public sealed class ConfigurableFakeMediator : IMediator
         where TNotification : INotification
         => _fallback.Publish(notification, cancellationToken);
 }
+

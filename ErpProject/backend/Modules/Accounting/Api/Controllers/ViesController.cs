@@ -1,3 +1,4 @@
+using Erp.Application.Common.Attributes;
 using Erp.Modules.Accounting.Application.Features.Vat;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -8,6 +9,7 @@ namespace Erp.Modules.Accounting.Api.Controllers;
 [ApiController]
 [Route("api/v1/accounting/vies")]
 [Authorize]
+[RequiredModule("Accounting")]
 public class ViesController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -19,6 +21,7 @@ public class ViesController : ControllerBase
     /// Misma validación VIES real que TaxController, con registro en IntraEuOperations.
     /// </summary>
     [HttpPost("validate")]
+    [RequirePermission(Permissions.Vies.Manage)]
     public async Task<IActionResult> ValidateVat([FromBody] ValidateViesRequest request, CancellationToken ct)
     {
         try
@@ -40,6 +43,7 @@ public class ViesController : ControllerBase
     /// GET /api/v1/accounting/vies/validate?countryCode=FR&amp;vatNumber=12345678901
     /// </summary>
     [HttpGet("validate")]
+    [RequirePermission(Permissions.Vies.Read)]
     public async Task<IActionResult> ValidateGet(
         [FromQuery] string countryCode,
         [FromQuery] string vatNumber,

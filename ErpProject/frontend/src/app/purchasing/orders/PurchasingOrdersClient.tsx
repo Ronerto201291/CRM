@@ -1,8 +1,9 @@
 'use client';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import PageContainer from '@/components/PageContainer';
 import { parseListResponse } from '@/lib/parseListResponse';
+import { useCachedApi } from '@/hooks/useCachedApi';
 
 export interface PurchaseOrder {
     id: string;
@@ -31,18 +32,23 @@ export default function PurchasingOrdersClient({ initialOrders }: PurchasingOrde
     const [orders, setOrders] = useState<PurchaseOrder[]>(initialOrders);
     const [loading, setLoading] = useState(false);
     const [filter, setFilter] = useState('all');
+    const { fetchCached, invalidateCached } = useCachedApi();
 
     const refresh = async () => {
         setLoading(true);
         try {
-            const res = await fetch('/api/proxy/purchasing/orders');
-            if (res.ok) setOrders(parseListResponse<PurchaseOrder>(await res.json()));
+            invalidateCached('purchasing/orders');
+            const data = await fetchCached<unknown>('purchasing/orders');
+            if (data) setOrders(parseListResponse<PurchaseOrder>(data));
         } finally {
             setLoading(false);
         }
     };
 
-    const filtered = filter === 'all' ? orders : orders.filter(o => o.status === filter);
+    const filtered = useMemo(
+        () => (filter === 'all' ? orders : orders.filter(o => o.status === filter)),
+        [orders, filter]
+    );
     const fmt = (n: number) => `€ ${(n || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}`;
 
     return (

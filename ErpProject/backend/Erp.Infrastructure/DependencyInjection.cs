@@ -54,6 +54,7 @@ public static class DependencyInjection
         services.AddScoped<ITotpService, TotpService>();
         services.AddScoped<StripeService>();
         services.AddScoped<ISubscriptionBillingService>(sp => sp.GetRequiredService<StripeService>());
+        services.AddScoped<IInvoicePaymentGateway>(sp => sp.GetRequiredService<StripeService>());
 
         // ABAC: Permission service (Redis-cached, role+user resolution)
         services.AddScoped<IPermissionService, PermissionService>();
@@ -64,6 +65,13 @@ public static class DependencyInjection
 
         // ABAC: MVC filter (scoped so it can inject IPermissionService)
         services.AddScoped<AbacAuthorizationFilter>();
+
+        // Module licensing: MVC filter (scoped so it can inject IAuthorizationService).
+        // Registered as concrete type (not just IAsyncAuthorizationFilter) so
+        // options.Filters.AddService<ModuleAuthorizationFilter>() can resolve it —
+        // see ADR-0018 #42c: this registration was previously missing, making
+        // [RequiredModule] a dead attribute despite being applied to some controllers.
+        services.AddScoped<ModuleAuthorizationFilter>();
 
         // SII: XML generation, XAdES-BES signing, AEAT SOAP submission
         services.AddScoped<SiiXmlGenerator>();

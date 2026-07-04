@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import PageContainer from '@/components/PageContainer';
+import AccessibleModal from '@/components/AccessibleModal';
 import FormLabel from '@/components/FormLabel';
 import { parseListResponse } from '@/lib/parseListResponse';
 import { useCachedApi } from '@/hooks/useCachedApi';
@@ -296,57 +297,63 @@ export default function InventoryClient({
             )}
 
             {/* New Product Modal */}
-            {showModal && (
-                <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowModal(false); }}>
-                    <div className="modal-box" style={{ maxWidth: '460px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                            <h2 style={{ fontSize: '18px', fontWeight: 700 }}>Nuevo Producto</h2>
-                            <button onClick={() => setShowModal(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '20px', color: 'var(--text-muted)' }}>✕</button>
-                        </div>
-                        {formError && (
-                            <div className="mb-3 p-2 bg-red-50 text-red-700 border border-red-200 rounded text-sm">{formError}</div>
-                        )}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
-                            <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                                <FormLabel htmlFor="prod-name" required>Nombre</FormLabel>
-                                <input id="prod-name" className="erp-input" placeholder="Nombre del producto" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
-                            </div>
-                            <div className="form-group">
-                                <FormLabel htmlFor="prod-sku">SKU / referencia</FormLabel>
-                                <input id="prod-sku" className="erp-input" placeholder="REF-001" value={form.sku} onChange={e => setForm({ ...form, sku: e.target.value })} />
-                            </div>
-                            <div className="form-group">
-                                <FormLabel htmlFor="prod-price">Precio unitario (€)</FormLabel>
-                                <input id="prod-price" type="number" className="erp-input" min="0" step="0.01" value={form.price} onChange={e => setForm({ ...form, price: +e.target.value })} />
-                            </div>
-                            <div className="form-group">
-                                <label className="erp-label">TIPO DE IVA</label>
-                                <select className="erp-input" value={form.taxRate} onChange={e => setForm({ ...form, taxRate: +e.target.value })}>
-                                    <option value={21}>IVA General 21%</option>
-                                    <option value={10}>IVA Reducido 10%</option>
-                                    <option value={4}>IVA Superreducido 4%</option>
-                                    <option value={0}>Exento de IVA</option>
-                                </select>
-                            </div>
-                            <div className="form-group"><label className="erp-label">PUNTO DE REORDEN</label><input type="number" className="erp-input" min="0" value={form.reorderPoint} onChange={e => setForm({ ...form, reorderPoint: +e.target.value })} /></div>
-                            <div className="form-group" style={{ gridColumn: 'span 2' }}><label className="erp-label">CANTIDAD DE REORDEN</label><input type="number" className="erp-input" min="0" value={form.reorderQty} onChange={e => setForm({ ...form, reorderQty: +e.target.value })} /></div>
-                        </div>
-                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                            <button className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancelar</button>
-                            <button className="btn btn-primary" onClick={handleSave} disabled={!form.name}>✓ Crear Producto</button>
-                        </div>
+            <AccessibleModal
+                open={showModal}
+                onClose={() => setShowModal(false)}
+                title="Nuevo Producto"
+                maxWidth="460px"
+                footer={(
+                    <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                        <button className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancelar</button>
+                        <button className="btn btn-primary" onClick={handleSave} disabled={!form.name}>✓ Crear Producto</button>
                     </div>
+                )}
+            >
+                {formError && (
+                    <div className="mb-3 p-2 bg-red-50 text-red-700 border border-red-200 rounded text-sm">{formError}</div>
+                )}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
+                    <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                        <FormLabel htmlFor="prod-name" required>Nombre</FormLabel>
+                        <input id="prod-name" className="erp-input" placeholder="Nombre del producto" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+                    </div>
+                    <div className="form-group">
+                        <FormLabel htmlFor="prod-sku">SKU / referencia</FormLabel>
+                        <input id="prod-sku" className="erp-input" placeholder="REF-001" value={form.sku} onChange={e => setForm({ ...form, sku: e.target.value })} />
+                    </div>
+                    <div className="form-group">
+                        <FormLabel htmlFor="prod-price">Precio unitario (€)</FormLabel>
+                        <input id="prod-price" type="number" className="erp-input" min="0" step="0.01" value={form.price} onChange={e => setForm({ ...form, price: +e.target.value })} />
+                    </div>
+                    <div className="form-group">
+                        <label className="erp-label">TIPO DE IVA</label>
+                        <select className="erp-input" value={form.taxRate} onChange={e => setForm({ ...form, taxRate: +e.target.value })}>
+                            <option value={21}>IVA General 21%</option>
+                            <option value={10}>IVA Reducido 10%</option>
+                            <option value={4}>IVA Superreducido 4%</option>
+                            <option value={0}>Exento de IVA</option>
+                        </select>
+                    </div>
+                    <div className="form-group"><label className="erp-label">PUNTO DE REORDEN</label><input type="number" className="erp-input" min="0" value={form.reorderPoint} onChange={e => setForm({ ...form, reorderPoint: +e.target.value })} /></div>
+                    <div className="form-group" style={{ gridColumn: 'span 2' }}><label className="erp-label">CANTIDAD DE REORDEN</label><input type="number" className="erp-input" min="0" value={form.reorderQty} onChange={e => setForm({ ...form, reorderQty: +e.target.value })} /></div>
                 </div>
-            )}
+            </AccessibleModal>
 
             {/* Stock Adjustment Modal */}
-            {showAdjModal && adjProduct && (
-                <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowAdjModal(false); }}>
-                    <div className="modal-box" style={{ maxWidth: '400px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                            <h2 style={{ fontSize: '18px', fontWeight: 700 }}>Ajuste de Stock</h2>
-                            <button onClick={() => setShowAdjModal(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '20px', color: 'var(--text-muted)' }}>✕</button>
-                        </div>
+            <AccessibleModal
+                open={showAdjModal && !!adjProduct}
+                onClose={() => setShowAdjModal(false)}
+                title="Ajuste de Stock"
+                maxWidth="400px"
+                footer={(
+                    <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                        <button className="btn btn-secondary" onClick={() => setShowAdjModal(false)}>Cancelar</button>
+                        <button className="btn btn-primary" onClick={handleAdjust} disabled={!adjForm.warehouseId || adjForm.quantity <= 0}>✓ Aplicar Ajuste</button>
+                    </div>
+                )}
+            >
+                {adjProduct && (
+                    <>
                         <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
                             Producto: <strong>{adjProduct.name}</strong> · Stock actual: <strong>{adjProduct.totalStock}</strong>
                         </p>
@@ -378,13 +385,9 @@ export default function InventoryClient({
                                 <input className="erp-input" placeholder="Ej: Recepción de pedido, merma..." value={adjForm.reason} onChange={e => setAdjForm({ ...adjForm, reason: e.target.value })} />
                             </div>
                         </div>
-                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                            <button className="btn btn-secondary" onClick={() => setShowAdjModal(false)}>Cancelar</button>
-                            <button className="btn btn-primary" onClick={handleAdjust} disabled={!adjForm.warehouseId || adjForm.quantity <= 0}>✓ Aplicar Ajuste</button>
-                        </div>
-                    </div>
-                </div>
-            )}
+                    </>
+                )}
+            </AccessibleModal>
         </PageContainer>
     );
 }

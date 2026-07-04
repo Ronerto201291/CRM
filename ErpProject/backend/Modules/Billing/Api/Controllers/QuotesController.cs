@@ -1,3 +1,4 @@
+using Erp.Application.Common.Attributes;
 using Erp.Modules.Billing.Application.Features.Quotes;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -5,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Erp.Modules.Billing.Api.Controllers;
 
-[ApiController, Route("api/[controller]"), Authorize]
+[ApiController, Route("api/[controller]"), Authorize, RequiredModule("Billing")]
 public class QuotesController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -16,6 +17,7 @@ public class QuotesController : ControllerBase
 
     /// <summary>Lista de presupuestos con filtros opcionales.</summary>
     [HttpGet]
+    [RequirePermission(Permissions.Quote.Read)]
     public async Task<IActionResult> GetAll(
         [FromQuery] string? status,
         [FromQuery] string? clientName,
@@ -42,6 +44,7 @@ public class QuotesController : ControllerBase
 
     /// <summary>Obtiene un presupuesto con líneas e historial de estados.</summary>
     [HttpGet("{id:guid}")]
+    [RequirePermission(Permissions.Quote.Read)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetQuoteQuery { Id = id }, ct);
@@ -52,6 +55,7 @@ public class QuotesController : ControllerBase
 
     /// <summary>Descarga el PDF del presupuesto.</summary>
     [HttpGet("{id:guid}/pdf")]
+    [RequirePermission(Permissions.Quote.Export)]
     [Produces("application/pdf")]
     public async Task<IActionResult> DownloadPdf(Guid id, CancellationToken ct)
     {
@@ -67,6 +71,7 @@ public class QuotesController : ControllerBase
 
     /// <summary>Crea un nuevo presupuesto en estado Draft.</summary>
     [HttpPost]
+    [RequirePermission(Permissions.Quote.Create)]
     public async Task<IActionResult> Create([FromBody] CreateQuoteCommand cmd, CancellationToken ct)
     {
         try
@@ -81,6 +86,7 @@ public class QuotesController : ControllerBase
 
     /// <summary>Edita un presupuesto en estado Draft (recalcula totales).</summary>
     [HttpPut("{id:guid}")]
+    [RequirePermission(Permissions.Quote.Update)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateQuoteCommand cmd, CancellationToken ct)
     {
         cmd.Id = id;
@@ -99,6 +105,7 @@ public class QuotesController : ControllerBase
     /// Genera PDF y lo adjunta. Incluye link al portal de aceptación.
     /// </summary>
     [HttpPost("{id:guid}/send")]
+    [RequirePermission(Permissions.Quote.Manage)]
     public async Task<IActionResult> Send(Guid id, [FromBody] SendQuoteRequest? body, CancellationToken ct)
     {
         try
@@ -125,6 +132,7 @@ public class QuotesController : ControllerBase
 
     /// <summary>Registra la aceptación manualmente (el comercial indica que el cliente aceptó).</summary>
     [HttpPost("{id:guid}/accept")]
+    [RequirePermission(Permissions.Quote.Approve)]
     public async Task<IActionResult> Accept(Guid id, CancellationToken ct)
     {
         try
@@ -139,6 +147,7 @@ public class QuotesController : ControllerBase
 
     /// <summary>Registra el rechazo del presupuesto.</summary>
     [HttpPost("{id:guid}/reject")]
+    [RequirePermission(Permissions.Quote.Approve)]
     public async Task<IActionResult> Reject(Guid id, [FromBody] RejectQuoteRequest? body, CancellationToken ct)
     {
         try
@@ -160,6 +169,7 @@ public class QuotesController : ControllerBase
     /// Requiere que el cliente sea de tipo Registered (con ClientId en CRM).
     /// </summary>
     [HttpPost("{id:guid}/convert")]
+    [RequirePermission(Permissions.Quote.Manage)]
     public async Task<IActionResult> ConvertToInvoice(Guid id, [FromBody] ConvertQuoteRequest body, CancellationToken ct)
     {
         try
@@ -187,6 +197,7 @@ public class QuotesController : ControllerBase
 
     /// <summary>Crea una copia del presupuesto como nuevo Draft.</summary>
     [HttpPost("{id:guid}/duplicate")]
+    [RequirePermission(Permissions.Quote.Manage)]
     public async Task<IActionResult> Duplicate(Guid id, CancellationToken ct)
     {
         try
@@ -205,6 +216,7 @@ public class QuotesController : ControllerBase
     /// Solo permitido desde estados Sent/Accepted/Rejected.
     /// </summary>
     [HttpPost("{id:guid}/new-version")]
+    [RequirePermission(Permissions.Quote.Manage)]
     public async Task<IActionResult> NewVersion(Guid id, CancellationToken ct)
     {
         try

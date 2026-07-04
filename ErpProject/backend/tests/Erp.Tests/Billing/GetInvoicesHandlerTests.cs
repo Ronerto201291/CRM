@@ -1,4 +1,4 @@
-using Erp.Modules.Billing.Application.Features.Billing.Handlers;
+﻿using Erp.Modules.Billing.Application.Features.Billing.Handlers;
 using Erp.Modules.Billing.Application.Features.Billing.Queries;
 using Erp.Modules.Billing.Infrastructure.Data;
 using Erp.Tests.TestSupport;
@@ -21,7 +21,7 @@ public class GetInvoicesHandlerTests
             .Options;
 
         await using var ctx = new BillingDbContext(options, tenant);
-        var handler = new GetInvoicesHandler(ctx);
+        var handler = new GetInvoicesHandler(ctx, new FakePortalUrlProvider());
         var result = await handler.Handle(new GetInvoicesQuery(), CancellationToken.None);
 
         Assert.Empty(result.Items);
