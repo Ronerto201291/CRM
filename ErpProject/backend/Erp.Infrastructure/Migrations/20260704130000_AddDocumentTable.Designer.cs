@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Erp.Infrastructure.Migrations
 {
     [DbContext(typeof(ErpDbContext))]
-    [Migration("20260703234804_AddDocumentTable")]
+    [Migration("20260704130000_AddDocumentTable")]
     partial class AddDocumentTable
     {
         /// <inheritdoc />
