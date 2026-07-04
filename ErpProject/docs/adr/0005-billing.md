@@ -37,6 +37,10 @@ snapshot de cliente (`ClientType`: Registered/Lead/Manual +
 (`Api/Controllers/InvoicesController.cs`) — solo `IMediator` — y `CreateInvoiceHandler`/
 `LockInvoiceHandler` (`BillingHandlers.cs`) como piezas centrales. El límite de plan
 (`IPlanLimitService`) se comprueba en `CreateInvoiceHandler` (`PlanLimitExceededException` → HTTP 402).
+Cada `Invoice` tiene también un `PublicViewToken` único (mismo patrón que
+`Quote.AcceptanceToken`) que habilita un portal de solo lectura sin login
+(`PublicInvoiceViewController`, `/api/v1/public/invoice-view/{token}`,
+ADR-0018 #39).
 
 **Corregido (paginación, backlog #8):** `GET /api/invoices` y
 `GET /api/quotes` devuelven `Paginated*Result` (`{ items, totalCount, page,
@@ -153,9 +157,17 @@ Esquema `billing`. Migraciones relevantes (orden cronológico):
 5. `AddInvoiceFiscalSnapshot` — columnas de snapshot emisor/destinatario.
 6. `Phase0InvoiceCompliance` — campos de cumplimiento adicionales
    (Veri*Factu, VIES, rectificativas).
+7. `AddInvoicePublicViewToken` — `PublicViewToken` para el portal de
+   visualización (ADR-0018 #39); backfill SQL de tokens únicos por fila
+   antes de crear el índice único (el `AddColumn` de EF por sí solo pone el
+   mismo valor por defecto a todas las facturas existentes). Arrastró de
+   forma incidental `VerifactuRealtimeSubmission`/`VerifactuSubmittedAt`
+   (columnas) y `VerifactuSubmissionLogs` (tabla), que ya existían en el
+   modelo C# pero nunca se habían migrado.
 
-Índices únicos: `(CompanyId, Number)` en `Invoice`, `(CompanyId, Number)` en
-`Quote`, `AcceptanceToken` único en `Quote`. `Quote.TaxBreakdown` es
+Índices únicos: `(CompanyId, Number)` en `Invoice`, `PublicViewToken` único
+en `Invoice`, `(CompanyId, Number)` en `Quote`, `AcceptanceToken` único en
+`Quote`. `Quote.TaxBreakdown` es
 `jsonb`. Referencias cruzadas a otros módulos (`Quote.ClientId` → CRM,
 `QuoteLine.ProductId` → Inventory) son "soft references" — columnas sin FK
 de EF, resueltas en la capa de aplicación, tal como se documenta
@@ -205,6 +217,14 @@ Creación y bloqueo de una factura, con propagación a Accounting:
   (`/api/v1/public/invoices`) delega en `GetPublicInvoicesQuery` /
   `GetPublicInvoiceByIdQuery` (lectura vía `X-Api-Key`), y `PublicQuotesController`
   expone el portal de aceptación de presupuestos sin autenticación (por `AcceptanceToken`).
+- **Portal de visualización de factura** (ADR-0018 #39): `Invoice.PublicViewToken`
+  (mismo patrón que `Quote.AcceptanceToken`) + `PublicInvoiceViewController`
+  (`/api/v1/public/invoice-view/{token}`, `[AllowAnonymous]`) — no confundir
+  con `PublicInvoicesController` de arriba, que es integración por API key
+  para todo el ledger del tenant, no un visor de una factura concreta.
+  `InvoiceDto.PublicViewUrl` se expone al staff (`InvoiceDetailClient.tsx`,
+  botón "Copiar enlace") para poder compartirlo; solo lectura, sin pago ni
+  aceptación (eso sigue pendiente, ver ADR-0018 #39).
 - **Inventory**: `InvoiceApprovedEvent.Lines` incluye `ProductId`/
   `Quantity`/`UnitPrice` pensado para integración de stock (el DTO existe en
   `DomainEvents.cs` con comentario explícito "Inventory integration"),

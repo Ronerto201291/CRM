@@ -15,7 +15,7 @@ interface Invoice {
     lockedAt?: string; hash?: string; verifactuQrUrl?: string;
     clientId: string; clientName?: string; clientTaxId?: string; clientAddress?: string;
     companyNif?: string; companyName?: string; companyAddress?: string;
-    journalEntryId?: string;
+    journalEntryId?: string; publicViewUrl?: string;
     invoiceLines: InvoiceLine[];
 }
 
@@ -36,6 +36,7 @@ export default function InvoiceDetailClient({ id, initialInvoice }: InvoiceDetai
     const [invoice, setInvoice] = useState<Invoice | null>(initialInvoice);
     const [loading, setLoading] = useState(false);
     const [printing, setPrinting] = useState(false);
+    const [linkCopied, setLinkCopied] = useState(false);
 
     const load = async () => {
         setLoading(true);
@@ -57,6 +58,13 @@ export default function InvoiceDetailClient({ id, initialInvoice }: InvoiceDetai
     const printPdf = () => {
         setPrinting(true);
         setTimeout(() => { window.print(); setPrinting(false); }, 300);
+    };
+
+    const copyPublicLink = async () => {
+        if (!invoice?.publicViewUrl) return;
+        await navigator.clipboard.writeText(invoice.publicViewUrl);
+        setLinkCopied(true);
+        setTimeout(() => setLinkCopied(false), 2000);
     };
 
     const fmt = (n: number) => `€ ${(n || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}`;
@@ -84,6 +92,11 @@ export default function InvoiceDetailClient({ id, initialInvoice }: InvoiceDetai
                     <button className="btn btn-secondary btn-sm" onClick={printPdf} disabled={printing}>
                         🖨️ {printing ? 'Preparando...' : 'Imprimir / PDF'}
                     </button>
+                    {invoice.publicViewUrl && (
+                        <button className="btn btn-secondary btn-sm" onClick={copyPublicLink}>
+                            🔗 {linkCopied ? 'Enlace copiado' : 'Copiar enlace para el cliente'}
+                        </button>
+                    )}
                 </div>
             </div>
 

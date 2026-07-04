@@ -38,6 +38,10 @@ public class BillingDbContext : ModuleDbContextBase, IBillingDbContext
 
         modelBuilder.Entity<Invoice>().HasIndex(e => e.CompanyId);
 
+        // PublicViewToken index para búsquedas del portal público (ADR-0018 #39)
+        modelBuilder.Entity<Invoice>()
+            .HasIndex(e => e.PublicViewToken).IsUnique();
+
         modelBuilder.Entity<Invoice>()
             .HasOne(i => i.RectifiedInvoice)
             .WithMany()

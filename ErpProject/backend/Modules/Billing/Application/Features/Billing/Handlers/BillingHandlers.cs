@@ -39,6 +39,7 @@ public class CreateInvoiceHandler : IRequestHandler<CreateInvoiceCommand, Invoic
     private readonly IClientInfoService _clientInfo;
     private readonly IViesService _vies;
     private readonly IPlanLimitService _planLimits;
+    private readonly IPortalUrlProvider _portalUrlProvider;
 
     public CreateInvoiceHandler(
         IBillingDbContext ctx,
@@ -46,7 +47,8 @@ public class CreateInvoiceHandler : IRequestHandler<CreateInvoiceCommand, Invoic
         IApplicationDbContext appCtx,
         IClientInfoService clientInfo,
         IViesService vies,
-        IPlanLimitService planLimits)
+        IPlanLimitService planLimits,
+        IPortalUrlProvider portalUrlProvider)
     {
         _ctx        = ctx;
         _tenant     = tenant;
@@ -54,6 +56,7 @@ public class CreateInvoiceHandler : IRequestHandler<CreateInvoiceCommand, Invoic
         _clientInfo = clientInfo;
         _vies       = vies;
         _planLimits = planLimits;
+        _portalUrlProvider = portalUrlProvider;
     }
 
     public async Task<InvoiceDto> Handle(CreateInvoiceCommand req, CancellationToken ct)
@@ -267,6 +270,7 @@ public class CreateInvoiceHandler : IRequestHandler<CreateInvoiceCommand, Invoic
             ClientViesConsultedAtUtc = invoice.ClientViesConsultedAtUtc,
             ClientViesCountryCode = invoice.ClientViesCountryCode,
             ClientViesName = invoice.ClientViesName,
+            PublicViewUrl = $"{_portalUrlProvider.PortalBaseUrl.TrimEnd('/')}/factura/{invoice.PublicViewToken}",
         };
     }
 
@@ -286,13 +290,19 @@ public class CreateInvoiceHandler : IRequestHandler<CreateInvoiceCommand, Invoic
 public class GetInvoicesHandler : IRequestHandler<GetInvoicesQuery, PaginatedInvoicesResult>
 {
     private readonly IBillingDbContext _ctx;
+    private readonly IPortalUrlProvider _portalUrlProvider;
 
-    public GetInvoicesHandler(IBillingDbContext ctx) => _ctx = ctx;
+    public GetInvoicesHandler(IBillingDbContext ctx, IPortalUrlProvider portalUrlProvider)
+    {
+        _ctx = ctx;
+        _portalUrlProvider = portalUrlProvider;
+    }
 
     public async Task<PaginatedInvoicesResult> Handle(GetInvoicesQuery req, CancellationToken ct)
     {
         var page = Math.Max(1, req.Page);
         var pageSize = Math.Clamp(req.PageSize, 1, 500);
+        var portalBaseUrl = _portalUrlProvider.PortalBaseUrl.TrimEnd('/');
 
         var q = _ctx.Invoices.AsQueryable();
         if (!string.IsNullOrWhiteSpace(req.Status))
@@ -326,6 +336,7 @@ public class GetInvoicesHandler : IRequestHandler<GetInvoicesQuery, PaginatedInv
                 ClientViesConsultedAtUtc = i.ClientViesConsultedAtUtc,
                 ClientViesCountryCode = i.ClientViesCountryCode,
                 ClientViesName = i.ClientViesName,
+                PublicViewUrl = portalBaseUrl + "/factura/" + i.PublicViewToken,
             })
             .ToListAsync(ct);
 
@@ -336,11 +347,18 @@ public class GetInvoicesHandler : IRequestHandler<GetInvoicesQuery, PaginatedInv
 public class GetInvoiceByIdHandler : IRequestHandler<GetInvoiceByIdQuery, InvoiceDto?>
 {
     private readonly IBillingDbContext _ctx;
+    private readonly IPortalUrlProvider _portalUrlProvider;
 
-    public GetInvoiceByIdHandler(IBillingDbContext ctx) => _ctx = ctx;
+    public GetInvoiceByIdHandler(IBillingDbContext ctx, IPortalUrlProvider portalUrlProvider)
+    {
+        _ctx = ctx;
+        _portalUrlProvider = portalUrlProvider;
+    }
 
     public async Task<InvoiceDto?> Handle(GetInvoiceByIdQuery req, CancellationToken ct)
-        => await _ctx.Invoices
+    {
+        var portalBaseUrl = _portalUrlProvider.PortalBaseUrl.TrimEnd('/');
+        return await _ctx.Invoices
             .Where(i => i.Id == req.Id)
             .Select(i => new InvoiceDto
             {
@@ -364,8 +382,63 @@ public class GetInvoiceByIdHandler : IRequestHandler<GetInvoiceByIdQuery, Invoic
                 ClientViesConsultedAtUtc = i.ClientViesConsultedAtUtc,
                 ClientViesCountryCode = i.ClientViesCountryCode,
                 ClientViesName = i.ClientViesName,
+                PublicViewUrl = portalBaseUrl + "/factura/" + i.PublicViewToken,
             })
             .FirstOrDefaultAsync(ct);
+    }
+}
+
+/// <summary>Portal público del cliente por token (ADR-0018 #39) — mismo patrón que GetQuoteByTokenHandler.</summary>
+public class GetInvoiceByTokenHandler : IRequestHandler<GetInvoiceByTokenQuery, InvoicePublicDto?>
+{
+    private readonly IBillingDbContext _ctx;
+    private readonly IApplicationDbContext _appDb;
+
+    public GetInvoiceByTokenHandler(IBillingDbContext ctx, IApplicationDbContext appDb)
+    {
+        _ctx = ctx;
+        _appDb = appDb;
+    }
+
+    public async Task<InvoicePublicDto?> Handle(GetInvoiceByTokenQuery req, CancellationToken ct)
+    {
+        var invoice = await _ctx.Invoices
+            .IgnoreQueryFilters()
+            .Include(i => i.InvoiceLines)
+            .FirstOrDefaultAsync(i => i.PublicViewToken == req.Token, ct);
+
+        if (invoice is null) return null;
+
+        var company = await _appDb.Companies
+            .IgnoreQueryFilters()
+            .Where(c => c.Id == invoice.CompanyId)
+            .Select(c => new { c.Name, c.Address })
+            .FirstOrDefaultAsync(ct);
+
+        return new InvoicePublicDto(
+            Number: invoice.Number,
+            Series: invoice.Series,
+            FiscalYear: invoice.FiscalYear,
+            Status: invoice.Status,
+            IsLocked: invoice.IsLocked,
+            CompanyName: company?.Name ?? invoice.CompanyName ?? "",
+            CompanyAddress: company?.Address ?? invoice.CompanyAddress,
+            IssueDate: invoice.IssueDate,
+            DueDate: invoice.DueDate,
+            Subtotal: invoice.Subtotal,
+            TaxAmount: invoice.TaxAmount,
+            IrpfAmount: invoice.IrpfAmount,
+            SurchargeAmount: invoice.SurchargeAmount,
+            Total: invoice.Total,
+            Lines: invoice.InvoiceLines.Select(l => new PublicInvoiceLineDto
+            {
+                Description = l.Description,
+                Quantity = l.Quantity,
+                UnitPrice = l.UnitPrice,
+                TaxRate = l.TaxRate,
+                LineTotal = l.LineTotal,
+            }).ToList());
+    }
 }
 
 public class LockInvoiceHandler : IRequestHandler<LockInvoiceCommand, bool>

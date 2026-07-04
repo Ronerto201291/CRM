@@ -40,6 +40,9 @@ public class InvoiceDto
 
     public Guid? JournalEntryId { get; set; }
 
+    /// <summary>Enlace del portal público de visualización (ADR-0018 #39).</summary>
+    public string? PublicViewUrl { get; set; }
+
     public string? RectificationReasonCode { get; set; }
     public string? RectificationReasonText { get; set; }
     public DateTime? RectificationPeriodFrom { get; set; }
