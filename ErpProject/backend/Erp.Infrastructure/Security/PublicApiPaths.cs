@@ -13,7 +13,7 @@ public static class PublicApiPaths
 
     /// <summary>
     /// Rutas bajo /api/v1 que exigen X-Api-Key (salvo health y los portales públicos por
-    /// token de presupuestos/facturas — ADR-0018 #39).
+    /// token de presupuestos/facturas/subida de facturas de proveedor — ADR-0018 #39).
     /// </summary>
     public static bool RequiresApiKey(PathString path)
     {
@@ -25,6 +25,8 @@ public static class PublicApiPaths
         if (p.StartsWith("/api/v1/public/quotes", StringComparison.OrdinalIgnoreCase))
             return false;
         if (p.StartsWith("/api/v1/public/invoice-view", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (p.StartsWith("/api/v1/public/supplier-uploads", StringComparison.OrdinalIgnoreCase))
             return false;
         return true;
     }

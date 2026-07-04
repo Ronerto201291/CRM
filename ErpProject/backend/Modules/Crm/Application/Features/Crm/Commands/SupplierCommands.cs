@@ -22,6 +22,7 @@ public class UpdateSupplierCommand : IRequest<SupplierDto?>
     public string Phone { get; set; } = string.Empty;
     public string Address { get; set; } = string.Empty;
     public string? BankAccount { get; set; }
+    public bool PublicUploadEnabled { get; set; } = true;
 }
 
 public class AnonymizeSupplierCommand : IRequest<bool>

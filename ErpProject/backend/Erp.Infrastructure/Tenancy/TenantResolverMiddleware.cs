@@ -121,6 +121,7 @@ public class TenantResolverMiddleware
             "/api/v1/health",              // API pública health check
             "/api/v1/public/quotes",       // Portal presupuestos por token
             "/api/v1/public/invoice-view", // Portal facturas por token (ADR-0018 #39)
+            "/api/v1/public/supplier-uploads", // Portal subida factura proveedor (ADR-0018 #39)
             "/health",               // Health checks - no tenant required
             "/metrics",              // Prometheus scrape (ADR-0018 #36)
             "/swagger",              // Swagger UI

@@ -14,6 +14,7 @@ public interface ICrmDbContext
     DbSet<ScheduledAlert> ScheduledAlerts { get; }
     DbSet<ServiceCatalogItem> ServiceCatalogItems { get; }
     DbSet<ClientContractedService> ClientContractedServices { get; }
+    DbSet<SupplierInvoiceUpload> SupplierInvoiceUploads { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

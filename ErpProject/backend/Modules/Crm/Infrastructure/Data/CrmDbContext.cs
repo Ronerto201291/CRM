@@ -22,6 +22,7 @@ public class CrmDbContext : ModuleDbContextBase, ICrmDbContext
     public DbSet<ScheduledAlert> ScheduledAlerts { get; set; } = null!;
     public DbSet<ServiceCatalogItem> ServiceCatalogItems { get; set; } = null!;
     public DbSet<ClientContractedService> ClientContractedServices { get; set; } = null!;
+    public DbSet<SupplierInvoiceUpload> SupplierInvoiceUploads { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -38,16 +39,29 @@ public class CrmDbContext : ModuleDbContextBase, ICrmDbContext
         modelBuilder.Entity<ScheduledAlert>().HasQueryFilter(e => e.CompanyId == TenantContext.TenantId);
         modelBuilder.Entity<ServiceCatalogItem>().HasQueryFilter(e => e.CompanyId == TenantContext.TenantId);
         modelBuilder.Entity<ClientContractedService>().HasQueryFilter(e => e.CompanyId == TenantContext.TenantId);
+        modelBuilder.Entity<SupplierInvoiceUpload>().HasQueryFilter(e => e.CompanyId == TenantContext.TenantId);
 
         // Indexes
         modelBuilder.Entity<Client>().HasIndex(e => e.CompanyId);
         modelBuilder.Entity<Supplier>().HasIndex(e => e.CompanyId);
+        modelBuilder.Entity<Supplier>().HasIndex(e => e.PublicUploadToken).IsUnique();
         modelBuilder.Entity<CrmNote>().HasIndex(e => new { e.EntityType, e.EntityId });
         modelBuilder.Entity<ScheduledAlert>().HasIndex(e => new { e.CompanyId, e.ScheduledAt });
         modelBuilder.Entity<ServiceCatalogItem>().HasIndex(e => e.CompanyId);
         modelBuilder.Entity<ClientContractedService>().HasIndex(e => e.CompanyId);
         modelBuilder.Entity<ClientContractedService>().HasIndex(e => e.ClientId);
         modelBuilder.Entity<ClientContractedService>().HasIndex(e => e.NextBillingDate);
+        modelBuilder.Entity<SupplierInvoiceUpload>().HasIndex(e => e.CompanyId);
+        modelBuilder.Entity<SupplierInvoiceUpload>().HasIndex(e => e.SupplierId);
+
+        // SupplierInvoiceUpload → Supplier (Restrict: un proveedor con facturas subidas
+        // pendientes de revisión no puede dejarse huérfano; los proveedores además nunca
+        // se borran de verdad, solo se anonimizan — ver AnonymizeSupplierHandler)
+        modelBuilder.Entity<SupplierInvoiceUpload>()
+            .HasOne(u => u.Supplier)
+            .WithMany()
+            .HasForeignKey(u => u.SupplierId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         // ClientContractedService → Client (Restrict: un cliente con historial de
         // facturación por contrato no puede dejarse huérfano al borrar el cliente)

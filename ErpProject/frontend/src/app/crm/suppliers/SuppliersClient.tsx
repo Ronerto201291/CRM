@@ -7,10 +7,10 @@ import { useCachedApi } from '@/hooks/useCachedApi';
 export interface Supplier {
     id: string; name: string; taxId: string; email: string; phone: string;
     address: string; isActive: boolean; createdAt: string; bankAccount?: string;
+    publicUploadEnabled: boolean; publicUploadUrl?: string | null;
 }
 interface Activity { id: string; action: string; description: string; timestamp: string; }
-interface SupplierDetail {
-    supplier: Supplier;
+interface SupplierDetail extends Supplier {
     activities: Activity[];
 }
 
@@ -38,6 +38,8 @@ export default function SuppliersClient({ initialSuppliers }: SuppliersClientPro
     const [form, setForm] = useState(EMPTY_FORM);
     const [saving, setSaving] = useState(false);
     const [search, setSearch] = useState('');
+    const [linkCopied, setLinkCopied] = useState(false);
+    const [togglingUpload, setTogglingUpload] = useState(false);
     const { fetchCached, invalidateCached } = useCachedApi();
 
     const refresh = async () => {
@@ -68,6 +70,32 @@ export default function SuppliersClient({ initialSuppliers }: SuppliersClientPro
         if (r.ok) { setShowModal(false); setForm(EMPTY_FORM); refresh(); }
     };
 
+    const copyPublicUploadLink = async (url: string) => {
+        await navigator.clipboard.writeText(url);
+        setLinkCopied(true);
+        setTimeout(() => setLinkCopied(false), 2000);
+    };
+
+    const togglePublicUpload = async (enabled: boolean) => {
+        if (!selected) return;
+        setTogglingUpload(true);
+        const r = await fetch('/api/proxy/suppliers/' + selected.id, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: selected.name, taxId: selected.taxId, email: selected.email,
+                phone: selected.phone, address: selected.address, bankAccount: selected.bankAccount,
+                publicUploadEnabled: enabled,
+            }),
+        });
+        setTogglingUpload(false);
+        if (r.ok) {
+            const updated = await r.json();
+            setSelected({ ...selected, publicUploadEnabled: updated.publicUploadEnabled, publicUploadUrl: updated.publicUploadUrl });
+            refresh();
+        }
+    };
+
     const filtered = suppliers.filter(s =>
         s.name.toLowerCase().includes(search.toLowerCase()) ||
         s.taxId.toLowerCase().includes(search.toLowerCase())
@@ -89,7 +117,7 @@ export default function SuppliersClient({ initialSuppliers }: SuppliersClientPro
         return <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: bg, color }}>{status}</span>;
     };
 
-    const detailTitle = loadingDetail ? 'Cargando...' : (selected?.supplier.name ?? 'Proveedor');
+    const detailTitle = loadingDetail ? 'Cargando...' : (selected?.name ?? 'Proveedor');
 
     return (
         <div style={{ padding: '28px 32px', fontFamily: 'Inter, sans-serif' }}>
@@ -163,13 +191,13 @@ export default function SuppliersClient({ initialSuppliers }: SuppliersClientPro
                     <div style={{ overflowY: 'auto', maxHeight: '65vh', display: 'flex', flexDirection: 'column', gap: '20px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                             <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
-                                Desde {new Date(selected.supplier.createdAt).toLocaleDateString('es-ES')}
+                                Desde {new Date(selected.createdAt).toLocaleDateString('es-ES')}
                             </p>
-                            {statusBadge(selected.supplier.isActive)}
+                            {statusBadge(selected.isActive)}
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                             {(['CIF / NIF', 'Email', 'Teléfono', 'Dirección'] as string[]).map((label, i) => {
-                                const vals = [selected.supplier.taxId, selected.supplier.email || '—', selected.supplier.phone || '—', selected.supplier.address || '—'];
+                                const vals = [selected.taxId, selected.email || '—', selected.phone || '—', selected.address || '—'];
                                 return (
                                     <div key={label}>
                                         <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.05em', marginBottom: '3px' }}>{label.toUpperCase()}</div>
@@ -177,6 +205,26 @@ export default function SuppliersClient({ initialSuppliers }: SuppliersClientPro
                                     </div>
                                 );
                             })}
+                        </div>
+                        <div>
+                            <h3 style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px' }}>Portal de subida de facturas</h3>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--text-primary)', marginBottom: '10px', cursor: 'pointer' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={selected.publicUploadEnabled}
+                                    disabled={togglingUpload}
+                                    onChange={e => togglePublicUpload(e.target.checked)}
+                                />
+                                Permitir que este proveedor suba sus facturas por enlace público
+                            </label>
+                            {selected.publicUploadEnabled && selected.publicUploadUrl && (
+                                <button
+                                    className="btn btn-secondary btn-sm"
+                                    onClick={() => copyPublicUploadLink(selected.publicUploadUrl!)}
+                                >
+                                    {linkCopied ? '✓ Enlace copiado' : '🔗 Copiar enlace para el proveedor'}
+                                </button>
+                            )}
                         </div>
                         <div>
                             <h3 style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px' }}>Actividad reciente</h3>

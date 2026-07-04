@@ -29,6 +29,7 @@ const navGroups = [
         label: 'Compras y Gastos',
         items: [
             { href: '/expenses', label: 'Gastos (OCR)', icon: <IconExpenses /> },
+            { href: '/purchasing/supplier-uploads', label: 'Facturas de Proveedores', icon: <IconExpenses /> },
         ]
     },
     {

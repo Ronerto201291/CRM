@@ -1,6 +1,8 @@
 using Erp.Application.Common.Attributes;
 using Erp.Modules.Crm.Application.Features.Crm.Commands;
 using Erp.Modules.Crm.Application.Features.Crm.Queries;
+using Erp.Modules.Crm.Application.Features.SupplierUploads.Commands;
+using Erp.Modules.Crm.Application.Features.SupplierUploads.Queries;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -64,5 +66,34 @@ public class SuppliersController : ControllerBase
     {
         var result = await _mediator.Send(new AnonymizeSupplierCommand { Id = id }, ct);
         return result ? Ok(new { message = "Datos personales anonimizados correctamente." }) : NotFound();
+    }
+
+    /// <summary>GET /api/suppliers/uploads — listado de facturas subidas por proveedores vía enlace público (ADR-0018 #39).</summary>
+    [HttpGet("uploads")]
+    [RequirePermission(Permissions.Supplier.Read)]
+    public async Task<IActionResult> GetUploads(CancellationToken ct)
+        => Ok(await _mediator.Send(new GetSupplierInvoiceUploadsQuery(), ct));
+
+    [HttpGet("uploads/{id:guid}/download-url")]
+    [RequirePermission(Permissions.Supplier.Read)]
+    public async Task<IActionResult> GetUploadDownloadUrl(Guid id, CancellationToken ct)
+    {
+        try
+        {
+            var url = await _mediator.Send(new GetSupplierInvoiceUploadDownloadUrlQuery { Id = id }, ct);
+            return Ok(new { url });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+    }
+
+    [HttpPost("uploads/{id:guid}/mark-reviewed")]
+    [RequirePermission(Permissions.Supplier.Update)]
+    public async Task<IActionResult> MarkUploadReviewed(Guid id, CancellationToken ct)
+    {
+        var ok = await _mediator.Send(new MarkSupplierInvoiceUploadReviewedCommand { Id = id }, ct);
+        return ok ? Ok(new { message = "Factura marcada como revisada." }) : NotFound();
     }
 }
