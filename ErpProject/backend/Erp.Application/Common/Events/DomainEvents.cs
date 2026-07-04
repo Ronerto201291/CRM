@@ -9,6 +9,18 @@ namespace Erp.Application.Common.Events;
 public interface IDomainEvent : INotification { }
 
 /// <summary>
+/// Fired when a new Company is created (registro inicial o alta adicional
+/// multi-empresa, ver ADR-0002).
+/// → Accounting: siembra el plan contable PGC (ver SeedChartOfAccountsHandler) —
+/// sin este evento una empresa nueva no tiene ninguna cuenta y cualquier cobro
+/// de factura falla (hallazgo real corregido, ver ADR-0018).
+/// </summary>
+public class CompanyCreatedEvent : IDomainEvent
+{
+    public Guid CompanyId { get; set; }
+}
+
+/// <summary>
 /// Fired when an invoice is approved/locked.
 /// → AccountingService generates journal entry (430/700/477/4751)
 /// </summary>

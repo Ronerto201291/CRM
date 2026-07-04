@@ -1,3 +1,4 @@
+using Erp.Application.Common.Events;
 using Erp.Application.Common.Interfaces;
 using Erp.Application.Features.Auth.Commands;
 using Erp.Application.Features.Auth.Queries;
@@ -63,10 +64,12 @@ public class AddCompanyFromAccountHandlerTests
         ctx.Users.Add(user);
         await ctx.SaveChangesAsync();
 
+        var publisher = new FakePublisher();
         var handler = new AddCompanyFromAccountHandler(
             ctx,
             new FakeJwtProvider(),
-            new GetUserCompaniesHandler(ctx));
+            new GetUserCompaniesHandler(ctx),
+            publisher);
 
         var result = await handler.Handle(new AddCompanyFromAccountCommand
         {
@@ -85,6 +88,9 @@ public class AddCompanyFromAccountHandlerTests
         var membership = await ctx.UserCompanies.IgnoreQueryFilters()
             .SingleAsync(uc => uc.UserId == userId && uc.CompanyId == newCompany.Id);
         Assert.NotEqual(Guid.Empty, membership.RoleId);
+
+        var published = Assert.IsType<CompanyCreatedEvent>(Assert.Single(publisher.Published));
+        Assert.Equal(newCompany.Id, published.CompanyId);
     }
 
     [Fact]
@@ -121,7 +127,8 @@ public class AddCompanyFromAccountHandlerTests
         var handler = new AddCompanyFromAccountHandler(
             ctx,
             new FakeJwtProvider(),
-            new GetUserCompaniesHandler(ctx));
+            new GetUserCompaniesHandler(ctx),
+            new FakePublisher());
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => handler.Handle(
             new AddCompanyFromAccountCommand

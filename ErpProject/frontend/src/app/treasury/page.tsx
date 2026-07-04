@@ -4,6 +4,7 @@ import TreasuryClient from './TreasuryClient';
 export interface BankAccount {
     id: string; name: string; iban: string; bic?: string;
     bankName: string; currentBalance: number; currencyCode: string; isActive: boolean; notes?: string;
+    accountingAccountCode?: string;
 }
 
 export default async function TreasuryPage() {

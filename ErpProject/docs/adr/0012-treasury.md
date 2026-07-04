@@ -83,11 +83,17 @@ anterior) — es decir, la conciliación depende directamente del DbContext de
 Accounting (`IAccountingDbContext`), no solo del propio módulo.
 
 ### Frontend
-`frontend/src/app/treasury/page.tsx` — panel principal con pestañas
-`accounts | movements | effects | orders | forecast`, llamando a
-`fetch('/api/proxy/treasury/...')` (patrón de proxy de ADR-0001). Subrutas
-dedicadas: `frontend/src/app/treasury/{consolidation,currencies,financing,
-guarantees}/page.tsx`, cada una consumiendo su controlador homónimo.
+`frontend/src/app/treasury/page.tsx` (RSC) + `TreasuryClient.tsx` — panel
+principal con pestañas `accounts | movements | effects | orders | forecast`,
+llamando a `fetch('/api/proxy/treasury/...')` (patrón de proxy de ADR-0001).
+Subrutas dedicadas: `frontend/src/app/treasury/{consolidation,currencies,
+financing,guarantees}/page.tsx`, cada una consumiendo su controlador
+homónimo. El alta de cuenta bancaria ya expone el campo "Código contable
+PGC" (`accountingAccountCode`, ADR-0018 #42b) — con eso un usuario puede
+crear una cuenta "TPV" o "Bizum" con código `5721`/`5722` (sembrados por
+Accounting, ver ADR-0006) y conciliarla por separado de un banco normal
+(`572`) sin ningún cambio en `BankReconciliationService`, que ya filtraba
+por prefijo de código.
 
 ### Modelo de datos
 `BankAccount` (1) → (N) `BankMovement` y (N) `CashEffect`. Cada

@@ -24,7 +24,7 @@ interface ForecastItem {
     expectedBalance: number; source: string; isActual: boolean; notes?: string;
 }
 
-const EMPTY_ACCOUNT = { name: '', iban: '', bic: '', bankName: '', notes: '' };
+const EMPTY_ACCOUNT = { name: '', iban: '', bic: '', bankName: '', notes: '', accountingAccountCode: '' };
 const EMPTY_EFFECT = { clientName: '', clientTaxId: '', effectNumber: '', issueDate: '', dueDate: '', amount: '', bankAccountId: '' };
 const EMPTY_ORDER = { paymentType: 'Supplier', beneficiaryName: '', beneficiaryTaxId: '', beneficiaryIban: '', description: '', amount: '', scheduledDate: '', bankAccountId: '' };
 
@@ -262,6 +262,7 @@ export default function TreasuryClient({ initialAccounts }: TreasuryClientProps)
                                 <th>Nombre</th>
                                 <th>IBAN</th>
                                 <th>Banco</th>
+                                <th>Cta. contable</th>
                                 <th style={{ textAlign: 'right' }}>Saldo</th>
                                 <th>Estado</th>
                             </tr></thead>
@@ -271,6 +272,7 @@ export default function TreasuryClient({ initialAccounts }: TreasuryClientProps)
                                         <td style={{ fontWeight: 600 }}>{a.name}</td>
                                         <td><code style={{ fontSize: '12px', letterSpacing: '0.05em' }}>{a.iban}</code></td>
                                         <td style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>{a.bankName}</td>
+                                        <td><code style={{ fontSize: '12px' }}>{a.accountingAccountCode || '572'}</code></td>
                                         <td style={{ textAlign: 'right', fontWeight: 700, color: a.currentBalance >= 0 ? 'var(--success)' : 'var(--danger)', fontSize: '15px' }}>{fmt(a.currentBalance)}</td>
                                         <td><span className={`badge ${a.isActive ? 'badge-success' : 'badge-gray'}`}>{a.isActive ? 'Activa' : 'Inactiva'}</span></td>
                                     </tr>
@@ -467,6 +469,10 @@ export default function TreasuryClient({ initialAccounts }: TreasuryClientProps)
                             <div className="form-group">
                                 <label className="erp-label">BIC / SWIFT</label>
                                 <input className="erp-input" value={form.bic} onChange={e => setForm({ ...form, bic: e.target.value })} placeholder="BBVAESMMXXX" />
+                            </div>
+                            <div className="form-group">
+                                <label className="erp-label">CÓDIGO CONTABLE PGC</label>
+                                <input className="erp-input" value={form.accountingAccountCode} onChange={e => setForm({ ...form, accountingAccountCode: e.target.value })} placeholder="572 (banco), 5721 (TPV), 5722 (Bizum)" />
                             </div>
                             <div className="form-group" style={{ gridColumn: 'span 2' }}>
                                 <label className="erp-label">NOTAS</label>

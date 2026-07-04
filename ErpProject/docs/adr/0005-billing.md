@@ -93,9 +93,13 @@ pageSize }`) con header `X-Total-Count`; parámetros `page` (default 1) y
   causa) o mediante `CreateCreditNoteCommand`/`CreateCreditNoteHandler`, que
   clona automáticamente las líneas de la factura original en negativo bajo
   la serie `"R"`.
-- **Cobro**: `POST /api/invoices/{id}/pay` → `MarkPaidCommand` marca
-  `Status = "Paid"` (idempotente si ya estaba pagada) y publica
-  `PaymentReceivedEvent` — consumido por Accounting (asiento 572/430) y por
+- **Cobro**: `POST /api/invoices/{id}/pay` → `MarkPaidCommand` valida
+  `PaymentMethod` contra `PaymentMethods` (`cash\|bank\|card\|bizum\|transfer`,
+  guard clause inline en `MarkPaidHandler` — Billing no registra
+  `AddValidatorsFromAssembly`, un validador FluentValidation aquí no se
+  ejecutaría), marca `Status = "Paid"` (idempotente si ya estaba pagada) y
+  publica `PaymentReceivedEvent` — consumido por Accounting (asiento
+  570/572/5721/5722 según método de pago, ver ADR-0006 y ADR-0018 #42b) y por
   CRM (`PaymentReceivedActivityHandler`, ver ADR-0004). También hay un
   `PaymentReceivedOutboxHandler` en Billing que releva el mismo evento a la
   tabla `Outbox` para consumidores externos.

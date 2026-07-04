@@ -237,6 +237,14 @@ de ejecutar cualquier acción. Ningún módulo de negocio implementa su
 propia lógica de autenticación o resolución de tenant: todos reutilizan
 este pipeline compartido.
 
+**Accounting** (ADR-0006) — `RegisterCompanyHandler` y
+`AddCompanyFromAccountHandler` publican `CompanyCreatedEvent`
+(`Erp.Application.Common.Events`) tras crear la `Company`, consumido por
+`SeedChartOfAccountsHandler` en Accounting para sembrar el plan contable PGC
+(ADR-0018 #0g — hallazgo real corregido: ninguna empresa registrada por el
+flujo normal tenía cuentas, así que cualquier cobro de factura fallaba).
+Ninguno de los dos módulos referencia el ensamblado del otro.
+
 ## Evaluación de calidad arquitectónica
 > Metodología en `ADR-0018`.
 

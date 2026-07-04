@@ -4,6 +4,7 @@ using Erp.Application.Common.Interfaces;
 using Erp.Application.Common.Validation;
 using Erp.Application.DTOs;
 using Erp.Domain.Entities.Audit;
+using Erp.Modules.Billing.Application.Features.Billing;
 using Erp.Modules.Billing.Application.Features.Billing.Commands;
 using Erp.Modules.Billing.Application.Features.Billing.Queries;
 using Erp.Modules.Billing.Application.Interfaces;
@@ -602,6 +603,12 @@ public class MarkPaidHandler : IRequestHandler<MarkPaidCommand, bool>
 
     public async Task<bool> Handle(MarkPaidCommand req, CancellationToken ct)
     {
+        // Guard clause inline (no FluentValidation): Billing no registra
+        // AddValidatorsFromAssembly, así que un validador aquí quedaría
+        // registrado pero nunca se ejecutaría (ADR-0018).
+        if (!PaymentMethods.IsValid(req.PaymentMethod))
+            throw new InvalidOperationException($"Método de pago no válido: {req.PaymentMethod}");
+
         var inv = await _ctx.Invoices.FirstOrDefaultAsync(i => i.Id == req.Id, ct);
         if (inv == null) return false;
 

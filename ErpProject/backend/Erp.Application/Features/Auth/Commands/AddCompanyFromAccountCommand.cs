@@ -1,3 +1,4 @@
+using Erp.Application.Common.Events;
 using Erp.Application.Common.Interfaces;
 using Erp.Application.DTOs;
 using Erp.Application.Features.Auth.Queries;
@@ -25,15 +26,18 @@ public class AddCompanyFromAccountHandler : IRequestHandler<AddCompanyFromAccoun
     private readonly IApplicationDbContext _ctx;
     private readonly IJwtProvider _jwtProvider;
     private readonly IRequestHandler<GetUserCompaniesQuery, IReadOnlyList<CompanyMembershipDto>> _getUserCompanies;
+    private readonly IPublisher _publisher;
 
     public AddCompanyFromAccountHandler(
         IApplicationDbContext ctx,
         IJwtProvider jwtProvider,
-        IRequestHandler<GetUserCompaniesQuery, IReadOnlyList<CompanyMembershipDto>> getUserCompanies)
+        IRequestHandler<GetUserCompaniesQuery, IReadOnlyList<CompanyMembershipDto>> getUserCompanies,
+        IPublisher publisher)
     {
         _ctx = ctx;
         _jwtProvider = jwtProvider;
         _getUserCompanies = getUserCompanies;
+        _publisher = publisher;
     }
 
     public async Task<LoginResponseDto> Handle(AddCompanyFromAccountCommand req, CancellationToken ct)
@@ -87,6 +91,10 @@ public class AddCompanyFromAccountHandler : IRequestHandler<AddCompanyFromAccoun
         });
 
         await _ctx.SaveChangesAsync(ct);
+
+        // Sembrar plan contable PGC (Accounting escucha este evento) — mismo motivo
+        // que en RegisterCompanyHandler, ver ADR-0018 #42b/#0g.
+        await _publisher.Publish(new CompanyCreatedEvent { CompanyId = company.Id }, ct);
 
         var companies = await _getUserCompanies.Handle(new GetUserCompaniesQuery(user.Id), ct);
 
