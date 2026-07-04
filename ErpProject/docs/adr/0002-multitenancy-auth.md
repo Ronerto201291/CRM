@@ -125,6 +125,20 @@ grano fino:
      `Program.cs` con `options.Filters.AddService<AbacAuthorizationFilter>()`)
      y llama a `PermissionService.HasPermissionAsync(resource, action)`,
      devolviendo 403 con `code = "PERMISSION_DENIED"` si falla.
+
+  Ambos filtros se registran hoy con `options.Filters.AddService<...>()`
+  en `Program.cs` **y** como tipo concreto (`services.AddScoped<...>()`)
+  en `Erp.Infrastructure/DependencyInjection.cs` — las dos cosas son
+  necesarias porque `AddService<T>()` resuelve `T` de la misma manera que
+  `GetRequiredService<T>()`. `ModuleAuthorizationFilter` solo tenía la
+  primera parte durante bastante tiempo (registrado únicamente como
+  `IAsyncAuthorizationFilter`, nunca como tipo concreto), así que
+  `[RequiredModule]` no se ejecutaba nunca en ningún endpoint, ni siquiera
+  en los pocos que ya lo declaraban — corregido junto con la aplicación de
+  ambos atributos a los 44 controllers de módulo (ADR-0018 #42c). El
+  catálogo de `Permissions` (`Erp.Application/Common/Attributes/
+  RequirePermissionAttribute.cs`) creció de 7 a ~35 grupos resource:action
+  para cubrir los 9 módulos de negocio.
 - `PermissionsController` (`api/permissions`) expone `GET /` (catálogo),
   `GET /my` (permisos efectivos del usuario actual), `POST /grant`,
   `POST /revoke`, `POST /deny`.
@@ -245,6 +259,19 @@ este pipeline compartido.
 flujo normal tenía cuentas, así que cualquier cobro de factura fallaba).
 Ninguno de los dos módulos referencia el ensamblado del otro.
 
+El mismo `CompanyCreatedEvent` tiene otros dos handlers en el propio
+núcleo (`Erp.Application/Features/Licensing/Handlers/`), no en un módulo:
+`SeedTenantModulesHandler` activa (`TenantModule.IsEnabled = true`) cada
+módulo incluido en el `Plan` de la nueva suscripción, y
+`SeedDefaultRolePermissionsHandler` concede permisos por defecto a los
+roles Admin/Manager/Contable recién creados (Admin: todos; Manager: todos
+salvo `UserManagement:Delete`/`Accounting:Close`; Contable: acceso
+completo a recursos financieros, solo lectura al resto). Sin estos dos
+handlers, `[RequiredModule]`/`[RequirePermission]` habrían bloqueado a
+cualquier empresa dada de alta por `/register` o `/signup` — solo el
+bootstrap de desarrollo en `Program.cs` creaba estas filas antes (ADR-0018
+#42c).
+
 ## Evaluación de calidad arquitectónica
 > Metodología en `ADR-0018`.
 
@@ -252,6 +279,11 @@ Ninguno de los dos módulos referencia el ensamblado del otro.
 - **Fases 2–5:** documentadas en Decisión; Fase 4–5 bloqueadas por modelo suscripción gestoría.
 - **Seguridad:** validación JWT↔tenant reforzada vía `TenantMembershipMiddleware`;
   API pública sigue requiriendo revisión (ADR-0016).
+- **RBAC/ABAC (#42c):** ✅ Corregido — `[RequiredModule]`/`[RequirePermission]`
+  aplicados a los 44 controllers de módulo (antes 3/44 y 0/44 respectivamente,
+  y el filtro de módulo ni siquiera se ejecutaba por un registro DI
+  incompleto). Regresión protegida con
+  `ModuleApiControllers_HaveRequiredModuleAttribute` en `Erp.ArchitectureTests`.
 
 ## Buenas prácticas aplicables
 - Cualquier query directa contra un `DbSet` debe **no** usar
@@ -264,7 +296,17 @@ Ninguno de los dos módulos referencia el ensamblado del otro.
 - Cualquier endpoint nuevo de un módulo de negocio debe decorarse con
   `[RequiredModule("<Nombre>")]` y, si aplica, `[RequirePermission(resource, action)]`
   para heredar automáticamente el RBAC + ABAC ya existente en vez de
-  reinventar comprobaciones de autorización a mano.
+  reinventar comprobaciones de autorización a mano — los 44 controllers
+  de módulo ya lo hacen (ADR-0018 #42c) y
+  `ModuleApiControllers_HaveRequiredModuleAttribute` falla en CI si un
+  controller nuevo se olvida de `[RequiredModule]`. Si el módulo nuevo no
+  tiene todavía una fila `PlanModule` en algún plan, añadirla en la misma
+  migración — de lo contrario ningún tenant podrá usarlo nunca (pasó con
+  Treasury/Payroll/Purchasing/Sales).
+- Si el recurso ABAC que necesitas no existe en `Permissions`
+  (`RequirePermissionAttribute.cs`), añádelo ahí siguiendo la convención
+  documentada (Create/Read/Update/Delete + Approve/Export/Manage) en vez
+  de inventar una cadena `"Resource:Action"` suelta en el controller.
 - Al invalidar permisos de un usuario (grant/revoke/deny), recordar que
   `PermissionService` cachea 5 minutos en Redis
   (`permissions:user:{userId}`); si se requiere invalidación inmediata hay

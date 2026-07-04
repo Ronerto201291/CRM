@@ -1,3 +1,4 @@
+using Erp.Application.Common.Attributes;
 using Erp.Modules.Accounting.Application.Queries;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -6,9 +7,13 @@ using Erp.Modules.Accounting.Application.Features.FinancialStatements;
 
 namespace Erp.Modules.Accounting.Api.Controllers;
 
+/// <summary>All 4 actions generate a read-only report, so the permission check is applied
+/// once at class level (ADR-0018 #42c).</summary>
 [ApiController]
 [Route("api/v1/accounting/financial-statements")]
 [Authorize]
+[RequiredModule("Accounting")]
+[RequirePermission(Permissions.FinancialStatement.Read)]
 public class FinancialStatementsController : ControllerBase
 {
     private readonly IMediator _mediator;

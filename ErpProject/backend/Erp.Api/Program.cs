@@ -51,8 +51,10 @@ var isIntegrationTest = env.IsEnvironment("IntegrationTests");
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddControllers(options =>
 {
-    // ABAC filter runs AFTER ModuleAuthorizationFilter (module-level RBAC).
-    // Provides action-level granularity within a module.
+    // Module licensing filter runs first (coarse: is the module enabled for this
+    // tenant's plan?), then ABAC (fine: does this user have the permission?).
+    // Both are no-ops on endpoints without the corresponding attribute.
+    options.Filters.AddService<Erp.Infrastructure.Security.ModuleAuthorizationFilter>();
     options.Filters.AddService<Erp.Infrastructure.Security.AbacAuthorizationFilter>();
 })
     .AddErpModuleControllers(Erp.Modules.Accounting.Api.AccountingErpModule.Instance)
@@ -163,11 +165,8 @@ builder.Services.AddScoped<Erp.Application.Common.Interfaces.ITenantContext, Ten
 builder.Services.AddAuthorizationBuilder()
     .AddPolicy("ModuleRequired", policy => policy.RequireAuthenticatedUser());
 
-builder.Services.AddScoped<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, 
+builder.Services.AddScoped<Microsoft.AspNetCore.Authorization.IAuthorizationHandler,
     Erp.Infrastructure.Security.ModuleAuthorizationHandler>();
-
-builder.Services.AddScoped<Microsoft.AspNetCore.Mvc.Filters.IAsyncAuthorizationFilter,
-    Erp.Infrastructure.Security.ModuleAuthorizationFilter>();
 
 builder.Services.AddInfrastructureServices();
 builder.Services.AddApplicationServices();
@@ -485,7 +484,7 @@ using (var scope = application.Services.CreateScope())
                 .Publish(new Erp.Application.Common.Events.CompanyCreatedEvent { CompanyId = company.Id });
 
             // Seed TenantModules — todos desactivados por defecto excepto Core
-            var moduleNames = new[] { "Inventory", "OCR", "PublicApi", "Expenses", "Accounting", "CRM", "Billing" };
+            var moduleNames = new[] { "Inventory", "OCR", "PublicApi", "Expenses", "Accounting", "CRM", "Billing", "Treasury", "Payroll", "Purchasing", "Sales" };
             var existingModules = dbContext.TenantModules
                 .IgnoreQueryFilters()
                 .Where(tm => tm.CompanyId == company.Id)

@@ -14,10 +14,12 @@ public class WarehousesController : ControllerBase
     public WarehousesController(IMediator mediator) => _mediator = mediator;
 
     [HttpGet]
+    [RequirePermission(Permissions.Warehouse.Read)]
     public async Task<IActionResult> GetAll([FromQuery] bool? active, CancellationToken ct)
         => Ok(await _mediator.Send(new GetWarehousesQuery { Active = active }, ct));
 
     [HttpGet("{id:guid}")]
+    [RequirePermission(Permissions.Warehouse.Read)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetWarehouseByIdQuery { Id = id }, ct);
@@ -25,6 +27,7 @@ public class WarehousesController : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission(Permissions.Warehouse.Create)]
     public async Task<IActionResult> Create([FromBody] CreateWarehouseCommand cmd, CancellationToken ct)
     {
         var result = await _mediator.Send(cmd, ct);
@@ -32,6 +35,7 @@ public class WarehousesController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [RequirePermission(Permissions.Warehouse.Update)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateWarehouseCommand cmd, CancellationToken ct)
     {
         cmd.Id = id;
@@ -40,6 +44,7 @@ public class WarehousesController : ControllerBase
     }
 
     [HttpPatch("{id:guid}/activate")]
+    [RequirePermission(Permissions.Warehouse.Manage)]
     public async Task<IActionResult> SetActive(Guid id, [FromBody] bool active, CancellationToken ct)
     {
         var ok = await _mediator.Send(new SetWarehouseActiveCommand { Id = id, IsActive = active }, ct);

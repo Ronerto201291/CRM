@@ -1,3 +1,4 @@
+using Erp.Application.Common.Attributes;
 using Erp.Modules.Treasury.Application.Features.Treasury.Commands;
 using Erp.Modules.Treasury.Application.Features.Treasury.Handlers;
 using MediatR;
@@ -9,10 +10,14 @@ namespace Erp.Modules.Treasury.Api.Controllers;
 /// <summary>
 /// Gestión de Tesorería: cuentas bancarias, movimientos, conciliación automática,
 /// efectos comerciales (letras), órdenes de pago y previsión de flujo de caja.
+/// Todos los sub-recursos (efectos, órdenes de pago, previsiones) se autorizan bajo
+/// el permiso BankAccount:* hasta que se justifique un recurso ABAC propio para cada uno
+/// (ver ADR-0018 #42c).
 /// </summary>
 [ApiController]
 [Route("api/treasury")]
 [Authorize]
+[RequiredModule("Treasury")]
 public class TreasuryController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -22,6 +27,7 @@ public class TreasuryController : ControllerBase
     // ─── Bank Accounts ─────────────────────────────────────────────────────────
 
     [HttpGet("bank-accounts")]
+    [RequirePermission(Permissions.BankAccount.Read)]
     public async Task<IActionResult> GetBankAccounts(CancellationToken ct)
     {
         var accounts = await _mediator.Send(new GetBankAccountsQuery(), ct);
@@ -33,6 +39,7 @@ public class TreasuryController : ControllerBase
     }
 
     [HttpGet("bank-accounts/{id:guid}")]
+    [RequirePermission(Permissions.BankAccount.Read)]
     public async Task<IActionResult> GetBankAccount(Guid id, CancellationToken ct)
     {
         var account = await _mediator.Send(new GetBankAccountQuery(id), ct);
@@ -45,6 +52,7 @@ public class TreasuryController : ControllerBase
     }
 
     [HttpPost("bank-accounts")]
+    [RequirePermission(Permissions.BankAccount.Create)]
     public async Task<IActionResult> CreateBankAccount(
         [FromBody] CreateBankAccountRequest req, CancellationToken ct)
     {
@@ -60,6 +68,7 @@ public class TreasuryController : ControllerBase
     // ─── Bank Movements ─────────────────────────────────────────────────────────
 
     [HttpGet("bank-accounts/{id:guid}/movements")]
+    [RequirePermission(Permissions.BankAccount.Read)]
     public async Task<IActionResult> GetMovements(Guid id,
         [FromQuery] bool? unreconciled, [FromQuery] DateTime? from, [FromQuery] DateTime? to,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 50,
@@ -84,6 +93,7 @@ public class TreasuryController : ControllerBase
     }
 
     [HttpPost("bank-accounts/{id:guid}/import")]
+    [RequirePermission(Permissions.BankAccount.Manage)]
     public async Task<IActionResult> ImportStatement(Guid id,
         [FromBody] ImportStatementRequest req, CancellationToken ct)
     {
@@ -92,6 +102,7 @@ public class TreasuryController : ControllerBase
     }
 
     [HttpPost("bank-accounts/{id:guid}/reconcile")]
+    [RequirePermission(Permissions.BankAccount.Manage)]
     public async Task<IActionResult> Reconcile(Guid id, CancellationToken ct)
     {
         var result = await _mediator.Send(new ReconcileBankAccountCommand(id), ct);
@@ -101,6 +112,7 @@ public class TreasuryController : ControllerBase
     // ─── Cash Effects ─────────────────────────────────────────────────────────
 
     [HttpGet("effects")]
+    [RequirePermission(Permissions.BankAccount.Read)]
     public async Task<IActionResult> GetEffects(
         [FromQuery] string? status, [FromQuery] int page = 1, [FromQuery] int pageSize = 50,
         CancellationToken ct = default)
@@ -124,6 +136,7 @@ public class TreasuryController : ControllerBase
     }
 
     [HttpPost("effects")]
+    [RequirePermission(Permissions.BankAccount.Manage)]
     public async Task<IActionResult> CreateEffect(
         [FromBody] CreateCashEffectRequest req, CancellationToken ct)
     {
@@ -139,6 +152,7 @@ public class TreasuryController : ControllerBase
     }
 
     [HttpPatch("effects/{id:guid}/status")]
+    [RequirePermission(Permissions.BankAccount.Manage)]
     public async Task<IActionResult> UpdateEffectStatus(
         Guid id, [FromBody] UpdateEffectStatusRequest req, CancellationToken ct)
     {
@@ -152,6 +166,7 @@ public class TreasuryController : ControllerBase
 
     /// <summary>Genera XML SEPA pain.001 para cobrar el efecto (cliente → empresa).</summary>
     [HttpPost("effects/{id:guid}/sepa")]
+    [RequirePermission(Permissions.BankAccount.Manage)]
     public async Task<IActionResult> GenerateEffectSepa(
         Guid id, [FromBody] GenerateEffectSepaRequest req, CancellationToken ct)
     {
@@ -169,6 +184,7 @@ public class TreasuryController : ControllerBase
 
     /// <summary>Descarga el último XML SEPA generado para el efecto.</summary>
     [HttpGet("effects/{id:guid}/sepa")]
+    [RequirePermission(Permissions.BankAccount.Read)]
     public async Task<IActionResult> DownloadEffectSepa(Guid id, CancellationToken ct)
     {
         var effect = await _mediator.Send(new GetCashEffectByIdQuery(id), ct);
@@ -182,6 +198,7 @@ public class TreasuryController : ControllerBase
 
     /// <summary>Genera XML SEPA pain.008 (adeudo directo) para cobrar el efecto.</summary>
     [HttpPost("effects/{id:guid}/sepa/sdd")]
+    [RequirePermission(Permissions.BankAccount.Manage)]
     public async Task<IActionResult> GenerateEffectSdd(
         Guid id, [FromBody] GenerateEffectSddRequest req, CancellationToken ct)
     {
@@ -201,6 +218,7 @@ public class TreasuryController : ControllerBase
 
     /// <summary>Descarga el último XML SEPA SDD generado para el efecto.</summary>
     [HttpGet("effects/{id:guid}/sepa/sdd")]
+    [RequirePermission(Permissions.BankAccount.Read)]
     public async Task<IActionResult> DownloadEffectSdd(Guid id, CancellationToken ct)
     {
         var effect = await _mediator.Send(new GetCashEffectByIdQuery(id), ct);
@@ -215,6 +233,7 @@ public class TreasuryController : ControllerBase
     // ─── Payment Orders ─────────────────────────────────────────────────────────
 
     [HttpGet("payment-orders")]
+    [RequirePermission(Permissions.BankAccount.Read)]
     public async Task<IActionResult> GetPaymentOrders(
         [FromQuery] string? status, [FromQuery] int page = 1, [FromQuery] int pageSize = 50,
         CancellationToken ct = default)
@@ -238,6 +257,7 @@ public class TreasuryController : ControllerBase
     }
 
     [HttpPost("payment-orders")]
+    [RequirePermission(Permissions.BankAccount.Manage)]
     public async Task<IActionResult> CreatePaymentOrder(
         [FromBody] CreatePaymentOrderRequest req, CancellationToken ct)
     {
@@ -256,6 +276,7 @@ public class TreasuryController : ControllerBase
     // ─── Cash Flow Forecast ────────────────────────────────────────────────────
 
     [HttpGet("forecasts")]
+    [RequirePermission(Permissions.BankAccount.Read)]
     public async Task<IActionResult> GetForecasts(
         [FromQuery] int? year, [FromQuery] int? month, CancellationToken ct)
     {

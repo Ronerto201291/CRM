@@ -1,3 +1,4 @@
+using Erp.Application.Common.Attributes;
 using Erp.Modules.Accounting.Application.Handlers;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -8,6 +9,7 @@ namespace Erp.Modules.Accounting.Api.Controllers;
 [ApiController]
 [Route("api/v1/accounting/cost-centers")]
 [Authorize]
+[RequiredModule("Accounting")]
 public class CostCentersController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -15,10 +17,12 @@ public class CostCentersController : ControllerBase
     public CostCentersController(IMediator mediator) => _mediator = mediator;
 
     [HttpGet]
+    [RequirePermission(Permissions.CostCenter.Read)]
     public async Task<IActionResult> GetAll([FromQuery] bool? onlyActive, CancellationToken ct)
         => Ok(await _mediator.Send(new GetCostCentersQuery(onlyActive), ct));
 
     [HttpGet("{id:guid}")]
+    [RequirePermission(Permissions.CostCenter.Read)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var cc = await _mediator.Send(new GetCostCenterQuery(id), ct);
@@ -26,6 +30,7 @@ public class CostCentersController : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission(Permissions.CostCenter.Create)]
     public async Task<IActionResult> Create([FromBody] CreateCostCenterRequest req, CancellationToken ct)
     {
         try
@@ -37,6 +42,7 @@ public class CostCentersController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [RequirePermission(Permissions.CostCenter.Update)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateCostCenterRequest req, CancellationToken ct)
     {
         try
@@ -48,6 +54,7 @@ public class CostCentersController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [RequirePermission(Permissions.CostCenter.Delete)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
         try

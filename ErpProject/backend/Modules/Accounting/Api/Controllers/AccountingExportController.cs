@@ -1,4 +1,5 @@
-﻿using Erp.Application.Common.Fiscal;
+﻿using Erp.Application.Common.Attributes;
+using Erp.Application.Common.Fiscal;
 using Erp.Modules.Accounting.Application.Features.Export;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -11,10 +12,14 @@ namespace Erp.Modules.Accounting.Api.Controllers;
 ///   GET /api/accounting/export/libro-diario   â€” Libro Diario (daily journal)
 ///   GET /api/accounting/export/modelo303      â€” Modelo 303 (IVA trimestral)
 ///   GET /api/accounting/export/modelo347      â€” Modelo 347 (operaciones con terceros)
+/// Every action here is a read-only export/report, so the permission check is applied once
+/// at class level instead of repeating it on each of the 19 actions (ADR-0018 #42c).
 /// </summary>
 [ApiController]
 [Route("api/accounting/export")]
 [Authorize]
+[RequiredModule("Accounting")]
+[RequirePermission(Permissions.Accounting.Export)]
 public class AccountingExportController : ControllerBase
 {
     private readonly IMediator _mediator;

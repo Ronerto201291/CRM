@@ -1,3 +1,4 @@
+using Erp.Application.Common.Attributes;
 using Erp.Modules.Crm.Application.Features.Crm.Commands;
 using Erp.Modules.Crm.Application.Features.Crm.Queries;
 using MediatR;
@@ -6,13 +7,14 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Erp.Modules.Crm.Api.Controllers;
 
-[ApiController, Route("api/[controller]"), Authorize]
+[ApiController, Route("api/[controller]"), Authorize, RequiredModule("CRM")]
 public class ContactsController : ControllerBase
 {
     private readonly IMediator _mediator;
     public ContactsController(IMediator mediator) => _mediator = mediator;
 
     [HttpGet]
+    [RequirePermission(Permissions.Contact.Read)]
     public async Task<IActionResult> GetAll(
         [FromQuery] Guid? clientId,
         [FromQuery] Guid? supplierId,
@@ -34,6 +36,7 @@ public class ContactsController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [RequirePermission(Permissions.Contact.Read)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetContactByIdQuery { Id = id }, ct);
@@ -41,6 +44,7 @@ public class ContactsController : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission(Permissions.Contact.Create)]
     public async Task<IActionResult> Create([FromBody] CreateContactCommand cmd, CancellationToken ct)
     {
         var result = await _mediator.Send(cmd, ct);
@@ -48,6 +52,7 @@ public class ContactsController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [RequirePermission(Permissions.Contact.Update)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateContactCommand cmd, CancellationToken ct)
     {
         cmd.Id = id;
@@ -55,11 +60,13 @@ public class ContactsController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [RequirePermission(Permissions.Contact.Delete)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
         => await _mediator.Send(new DeleteContactCommand { Id = id }, ct) ? NoContent() : NotFound();
 
     /// <summary>POST /api/contacts/{id}/anonymize — RGPD Art. 17 derecho de supresión.</summary>
     [HttpPost("{id:guid}/anonymize")]
+    [RequirePermission(Permissions.Contact.Anonymize)]
     public async Task<IActionResult> Anonymize(Guid id, CancellationToken ct)
     {
         var result = await _mediator.Send(new AnonymizeContactCommand { Id = id }, ct);

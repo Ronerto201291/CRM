@@ -1,4 +1,5 @@
 using Erp.Application.Common;
+using Erp.Application.Common.Attributes;
 using Erp.Modules.Billing.Application.Features.Billing.Commands;
 using Erp.Modules.Billing.Application.Features.Billing.Queries;
 using MediatR;
@@ -7,7 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Erp.Modules.Billing.Api.Controllers;
 
-[ApiController, Route("api/[controller]"), Authorize]
+[ApiController, Route("api/[controller]"), Authorize, RequiredModule("Billing")]
 public class InvoicesController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -15,6 +16,7 @@ public class InvoicesController : ControllerBase
     public InvoicesController(IMediator mediator) => _mediator = mediator;
 
     [HttpGet]
+    [RequirePermission(Permissions.Invoice.Read)]
     public async Task<IActionResult> GetAll(
         [FromQuery] string? status,
         [FromQuery] int page = 1,
@@ -32,6 +34,7 @@ public class InvoicesController : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission(Permissions.Invoice.Create)]
     public async Task<IActionResult> Create([FromBody] CreateInvoiceCommand cmd, CancellationToken ct)
     {
         try
@@ -45,6 +48,7 @@ public class InvoicesController : ControllerBase
     }
 
     [HttpPost("{id}/lock")]
+    [RequirePermission(Permissions.Invoice.Lock)]
     public async Task<IActionResult> Lock(Guid id, CancellationToken ct)
     {
         try
@@ -62,6 +66,7 @@ public class InvoicesController : ControllerBase
 
     /// <summary>Encola anulación VERI*FACTU en AEAT (factura previamente enviada).</summary>
     [HttpPost("{id}/verifactu/anular")]
+    [RequirePermission(Permissions.Invoice.Manage)]
     public async Task<IActionResult> AnulVerifactu(Guid id, CancellationToken ct)
     {
         try
@@ -78,6 +83,7 @@ public class InvoicesController : ControllerBase
     }
 
     [HttpGet("{id}/verifactu/submissions")]
+    [RequirePermission(Permissions.Invoice.Read)]
     public async Task<IActionResult> GetVerifactuSubmissions(Guid id, CancellationToken ct)
         => Ok(await _mediator.Send(new GetVerifactuSubmissionsQuery(id), ct));
 
@@ -87,6 +93,7 @@ public class InvoicesController : ControllerBase
     /// Body (opcional): { "paymentMethod": "bank" | "cash" | "card" | "transfer" }
     /// </summary>
     [HttpPost("{id}/pay")]
+    [RequirePermission(Permissions.Invoice.Manage)]
     public async Task<IActionResult> Pay(Guid id, [FromBody] PayInvoiceRequest? body, CancellationToken ct)
     {
         var ok = await _mediator.Send(new MarkPaidCommand
@@ -100,6 +107,7 @@ public class InvoicesController : ControllerBase
     }
 
     [HttpGet("verify-chain")]
+    [RequirePermission(Permissions.Invoice.Read)]
     public async Task<IActionResult> VerifyHashChain(
         [FromQuery] string series, [FromQuery] int fiscalYear, CancellationToken ct)
         => Ok(await _mediator.Send(new VerifyHashChainQuery { Series = series, FiscalYear = fiscalYear }, ct));
@@ -110,6 +118,7 @@ public class InvoicesController : ControllerBase
     /// GET /api/invoices/{id}/pdf
     /// </summary>
     [HttpGet("{id}/pdf")]
+    [RequirePermission(Permissions.Invoice.Export)]
     [Produces("application/pdf")]
     [ProducesResponseType(typeof(FileResult), 200)]
     [ProducesResponseType(typeof(object), 400)]
@@ -131,6 +140,7 @@ public class InvoicesController : ControllerBase
     /// POST /api/invoices/{id}/send
     /// </summary>
     [HttpPost("{id}/send")]
+    [RequirePermission(Permissions.Invoice.Manage)]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(typeof(object), 400)]
     [ProducesResponseType(typeof(object), 404)]
@@ -157,6 +167,7 @@ public class InvoicesController : ControllerBase
     /// GET /api/invoices/{id}/facturae
     /// </summary>
     [HttpGet("{id}/facturae")]
+    [RequirePermission(Permissions.Invoice.Export)]
     [Produces("application/xml")]
     [ProducesResponseType(typeof(FileResult), 200)]
     [ProducesResponseType(typeof(object), 400)]

@@ -1,3 +1,4 @@
+using Erp.Application.Common.Attributes;
 using Erp.Application.Common.Fiscal;
 using Erp.Modules.Payroll.Application.Features.Employees;
 using Erp.Modules.Payroll.Application.Features.Exports;
@@ -12,6 +13,7 @@ namespace Erp.Modules.Payroll.Api.Controllers;
 [ApiController]
 [Route("api/payroll")]
 [Authorize]
+[RequiredModule("Payroll")]
 public class PayrollController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -21,10 +23,12 @@ public class PayrollController : ControllerBase
     // ── Employees ───────────────────────────────────────────────────────────
 
     [HttpGet("employees")]
+    [RequirePermission(Permissions.Employee.Read)]
     public async Task<IActionResult> ListEmployees(CancellationToken ct)
         => Ok(await _mediator.Send(new GetEmployeesQuery(), ct));
 
     [HttpPost("employees")]
+    [RequirePermission(Permissions.Employee.Create)]
     public async Task<IActionResult> CreateEmployee([FromBody] CreateEmployeeBody body, CancellationToken ct)
     {
         try
@@ -43,10 +47,12 @@ public class PayrollController : ControllerBase
     // ── Settlements ───────────────────────────────────────────────────────────
 
     [HttpGet("settlements")]
+    [RequirePermission(Permissions.Settlement.Read)]
     public async Task<IActionResult> ListSettlements([FromQuery] int? year, CancellationToken ct)
         => Ok(await _mediator.Send(new GetSettlementsQuery(year), ct));
 
     [HttpPost("settlements")]
+    [RequirePermission(Permissions.Settlement.Create)]
     public async Task<IActionResult> CreateSettlement([FromBody] CreateSettlementBody body, CancellationToken ct)
     {
         try
@@ -59,6 +65,7 @@ public class PayrollController : ControllerBase
     }
 
     [HttpPost("settlements/{id:guid}/lines")]
+    [RequirePermission(Permissions.Settlement.Manage)]
     public async Task<IActionResult> AddLine(Guid id, [FromBody] AddPayrollLineBody body, CancellationToken ct)
     {
         try
@@ -75,6 +82,7 @@ public class PayrollController : ControllerBase
     }
 
     [HttpPost("settlements/{id:guid}/finalize")]
+    [RequirePermission(Permissions.Settlement.Manage)]
     public async Task<IActionResult> Finalize(Guid id, CancellationToken ct)
     {
         try
@@ -87,14 +95,17 @@ public class PayrollController : ControllerBase
     }
 
     [HttpGet("export/tc1")]
+    [RequirePermission(Permissions.Settlement.Export)]
     public async Task<IActionResult> ExportTc1([FromQuery] int year, [FromQuery] int month, CancellationToken ct)
         => await SendPayrollExport(new ExportTc1Query(year, month), ct);
 
     [HttpGet("export/tc2")]
+    [RequirePermission(Permissions.Settlement.Export)]
     public async Task<IActionResult> ExportTc2([FromQuery] int year, [FromQuery] int month, CancellationToken ct)
         => await SendPayrollExport(new ExportTc2Query(year, month), ct);
 
     [HttpGet("export/tc-red-orientativo")]
+    [RequirePermission(Permissions.Settlement.Export)]
     public async Task<IActionResult> ExportTcRedOrientativo([FromQuery] int year, [FromQuery] int month, CancellationToken ct)
         => await SendPayrollExport(new ExportTcRedOrientativoQuery(year, month), ct);
 

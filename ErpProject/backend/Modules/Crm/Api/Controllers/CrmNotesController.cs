@@ -1,3 +1,4 @@
+using Erp.Application.Common.Attributes;
 using Erp.Modules.Crm.Application.Features.Notes;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -8,6 +9,7 @@ namespace Erp.Modules.Crm.Api.Controllers;
 [ApiController]
 [Route("api/crm/notes")]
 [Authorize]
+[RequiredModule("CRM")]
 public class CrmNotesController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -15,10 +17,12 @@ public class CrmNotesController : ControllerBase
     public CrmNotesController(IMediator mediator) => _mediator = mediator;
 
     [HttpGet]
+    [RequirePermission(Permissions.Note.Read)]
     public async Task<IActionResult> GetNotes([FromQuery] string entityType, [FromQuery] Guid entityId, CancellationToken ct)
         => Ok(await _mediator.Send(new GetNotesQuery(entityType, entityId), ct));
 
     [HttpPost]
+    [RequirePermission(Permissions.Note.Create)]
     public async Task<IActionResult> CreateNote([FromBody] CreateNoteRequest req, CancellationToken ct)
     {
         try
@@ -31,6 +35,7 @@ public class CrmNotesController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [RequirePermission(Permissions.Note.Update)]
     public async Task<IActionResult> UpdateNote(Guid id, [FromBody] UpdateNoteRequest req, CancellationToken ct)
     {
         try
@@ -42,6 +47,7 @@ public class CrmNotesController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [RequirePermission(Permissions.Note.Delete)]
     public async Task<IActionResult> DeleteNote(Guid id, CancellationToken ct)
     {
         try

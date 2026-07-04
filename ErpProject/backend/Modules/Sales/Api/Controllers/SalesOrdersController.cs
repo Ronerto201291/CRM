@@ -1,5 +1,7 @@
+using Erp.Application.Common.Attributes;
 using Erp.Modules.Sales.Application.Features.Orders;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Asp.Versioning;
 
@@ -8,6 +10,8 @@ namespace Erp.Modules.Sales.Api.Controllers;
 [ApiController]
 [Route("api/v{version:apiVersion}/sales/orders")]
 [ApiVersion("1.0")]
+[Authorize]
+[RequiredModule("Sales")]
 public class SalesOrdersController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -15,10 +19,12 @@ public class SalesOrdersController : ControllerBase
     public SalesOrdersController(IMediator mediator) => _mediator = mediator;
 
     [HttpGet]
+    [RequirePermission(Permissions.SalesOrder.Read)]
     public async Task<IActionResult> GetAll(CancellationToken ct)
         => Ok(await _mediator.Send(new GetSalesOrdersQuery(), ct));
 
     [HttpGet("{id}")]
+    [RequirePermission(Permissions.SalesOrder.Read)]
     public async Task<IActionResult> Get(Guid id, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetSalesOrderByIdQuery(id), ct);
@@ -26,6 +32,7 @@ public class SalesOrdersController : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission(Permissions.SalesOrder.Create)]
     public async Task<IActionResult> Create([FromBody] CreateSoDto dto, CancellationToken ct)
     {
         var result = await _mediator.Send(new CreateSalesOrderCommand(

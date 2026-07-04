@@ -1,3 +1,4 @@
+using Erp.Application.Common.Attributes;
 using Erp.Modules.Crm.Application.Features.Crm.Commands;
 using Erp.Modules.Crm.Application.Features.Crm.Queries;
 using MediatR;
@@ -6,13 +7,14 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Erp.Modules.Crm.Api.Controllers;
 
-[ApiController, Route("api/[controller]"), Authorize]
+[ApiController, Route("api/[controller]"), Authorize, RequiredModule("CRM")]
 public class SuppliersController : ControllerBase
 {
     private readonly IMediator _mediator;
     public SuppliersController(IMediator mediator) => _mediator = mediator;
 
     [HttpGet]
+    [RequirePermission(Permissions.Supplier.Read)]
     public async Task<IActionResult> GetAll(
         [FromQuery] string? search,
         [FromQuery] int page = 1,
@@ -25,6 +27,7 @@ public class SuppliersController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [RequirePermission(Permissions.Supplier.Read)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetSupplierByIdQuery { Id = id }, ct);
@@ -34,6 +37,7 @@ public class SuppliersController : ControllerBase
     }
 
     [HttpPost]
+    [RequirePermission(Permissions.Supplier.Create)]
     public async Task<IActionResult> Create([FromBody] CreateSupplierCommand cmd, CancellationToken ct)
     {
         var result = await _mediator.Send(cmd, ct);
@@ -41,6 +45,7 @@ public class SuppliersController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [RequirePermission(Permissions.Supplier.Update)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateSupplierCommand cmd, CancellationToken ct)
     {
         cmd.Id = id;
@@ -54,6 +59,7 @@ public class SuppliersController : ControllerBase
 
     /// <summary>POST /api/suppliers/{id}/anonymize — RGPD Art. 17 derecho de supresión.</summary>
     [HttpPost("{id:guid}/anonymize")]
+    [RequirePermission(Permissions.Supplier.Anonymize)]
     public async Task<IActionResult> Anonymize(Guid id, CancellationToken ct)
     {
         var result = await _mediator.Send(new AnonymizeSupplierCommand { Id = id }, ct);

@@ -1,3 +1,4 @@
+using Erp.Application.Common.Attributes;
 using Erp.Modules.Treasury.Application.Features.CashSessions;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -11,24 +12,29 @@ namespace Erp.Modules.Treasury.Api.Controllers;
 [ApiController]
 [Route("api/treasury/cash-sessions")]
 [Authorize]
+[RequiredModule("Treasury")]
 public class CashSessionsController : ControllerBase
 {
     private readonly IMediator _mediator;
     public CashSessionsController(IMediator mediator) => _mediator = mediator;
 
     [HttpGet]
+    [RequirePermission(Permissions.CashSession.Read)]
     public async Task<IActionResult> GetAll(CancellationToken ct)
         => Ok(await _mediator.Send(new GetCashSessionsQuery(), ct));
 
     [HttpGet("open")]
+    [RequirePermission(Permissions.CashSession.Read)]
     public async Task<IActionResult> GetOpen(CancellationToken ct)
         => Ok(await _mediator.Send(new GetOpenCashSessionQuery(), ct));
 
     [HttpPost("open")]
+    [RequirePermission(Permissions.CashSession.Create)]
     public async Task<IActionResult> Open([FromBody] OpenCashSessionRequest body, CancellationToken ct)
         => Created("", await _mediator.Send(new OpenCashSessionCommand(body.OpeningBalance, body.Notes), ct));
 
     [HttpPost("{id}/close")]
+    [RequirePermission(Permissions.CashSession.Manage)]
     public async Task<IActionResult> Close(Guid id, [FromBody] CloseCashSessionRequest body, CancellationToken ct)
         => Ok(await _mediator.Send(new CloseCashSessionCommand(id, body.CountedClosingBalance, body.Notes), ct));
 }

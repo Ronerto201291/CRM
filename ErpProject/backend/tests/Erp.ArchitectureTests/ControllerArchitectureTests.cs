@@ -129,6 +129,51 @@ public class ControllerArchitectureTests
             "Controllers no deben parsear ni filtrar datos inline:\n" + string.Join("\n", violations));
     }
 
+    /// <summary>ADR-0018 #42c — todo controller de módulo de negocio debe declarar
+    /// [RequiredModule] (a nivel de clase o de acción) para que la licencia del plan del
+    /// tenant se aplique. Antes de esta regla el atributo se usaba en 3 de 44 controllers
+    /// sin que nada lo impidiera ni lo detectara.</summary>
+    [Fact]
+    public void ModuleApiControllers_HaveRequiredModuleAttribute()
+    {
+        // Endpoints deliberadamente públicos (enlaces de presupuesto por token, sin JWT/tenant
+        // resuelto) — no tiene sentido exigirles una licencia de módulo.
+        var exempt = new HashSet<string>
+        {
+            "Erp.Modules.Billing.Api.Controllers.PublicInvoicesController",
+            "Erp.Modules.Billing.Api.Controllers.PublicQuotesController",
+        };
+
+        var controllers = AppDomain.CurrentDomain.GetAssemblies()
+            .Where(a => !a.IsDynamic && a.FullName?.StartsWith("Erp.Modules.") == true)
+            .SelectMany(a => SafeGetTypes(a))
+            .Where(t => t.IsClass && !t.IsAbstract && typeof(ControllerBase).IsAssignableFrom(t))
+            .Where(t => (t.Namespace ?? "").Contains(".Api.Controllers"))
+            .Where(t => !exempt.Contains(t.FullName ?? ""))
+            .ToList();
+
+        var violations = controllers
+            .Where(t => !HasRequiredModuleAttribute(t))
+            .Select(t => t.FullName!)
+            .ToList();
+
+        Assert.True(violations.Count == 0,
+            "Controllers de módulo sin [RequiredModule] (ni en la clase ni en ninguna acción):\n"
+            + string.Join("\n", violations));
+    }
+
+    private static bool HasRequiredModuleAttribute(Type controllerType)
+    {
+        if (controllerType.GetCustomAttributes(inherit: true)
+            .Any(a => a.GetType().Name == "RequiredModuleAttribute"))
+            return true;
+
+        return controllerType
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+            .Any(m => m.GetCustomAttributes(inherit: true)
+                .Any(a => a.GetType().Name == "RequiredModuleAttribute"));
+    }
+
     private static string FindRepoRoot()
     {
         var dir = AppContext.BaseDirectory;
