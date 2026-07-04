@@ -1,4 +1,5 @@
 using Asp.Versioning;
+using Erp.Modules.Billing.Application.Features.Billing.Commands;
 using Erp.Modules.Billing.Application.Features.Billing.Queries;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -38,5 +39,30 @@ public class PublicInvoiceViewController : ControllerBase
             return NotFound(new { error = "Factura no encontrada o token inválido." });
 
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Crea una sesión de pago Stripe puntual por el importe exacto de la factura y
+    /// devuelve la URL de checkout hospedada por Stripe (ADR-0018 #39).
+    /// </summary>
+    [HttpPost("{token}/checkout")]
+    public async Task<IActionResult> CreateCheckout(string token, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(token) || token.Length < 20)
+            return BadRequest(new { error = "Token inválido." });
+
+        try
+        {
+            var checkoutUrl = await _mediator.Send(new CreateInvoiceCheckoutSessionCommand { Token = token }, ct);
+            return Ok(new { checkoutUrl });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 }

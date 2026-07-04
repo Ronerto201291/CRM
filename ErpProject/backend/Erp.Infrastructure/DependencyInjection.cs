@@ -54,6 +54,7 @@ public static class DependencyInjection
         services.AddScoped<ITotpService, TotpService>();
         services.AddScoped<StripeService>();
         services.AddScoped<ISubscriptionBillingService>(sp => sp.GetRequiredService<StripeService>());
+        services.AddScoped<IInvoicePaymentGateway>(sp => sp.GetRequiredService<StripeService>());
 
         // ABAC: Permission service (Redis-cached, role+user resolution)
         services.AddScoped<IPermissionService, PermissionService>();

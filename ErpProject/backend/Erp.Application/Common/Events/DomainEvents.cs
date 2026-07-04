@@ -123,6 +123,18 @@ public class PaymentReceivedEvent : IDomainEvent
     public string PaymentMethod { get; set; } = "bank";
 }
 
+/// <summary>
+/// Fired by StripeService (core, no reference to Billing) when a Stripe Checkout
+/// Session for a one-off invoice payment completes (ADR-0018 #39). Published instead of
+/// calling Billing's MarkPaidCommand directly, to avoid Erp.Infrastructure depending on
+/// Erp.Modules.Billing.Application (same pattern as CompanyCreatedEvent/SeedChartOfAccountsHandler).
+/// → Billing: MarkInvoicePaidFromStripeHandler sends MarkPaidCommand (PaymentMethod = "card").
+/// </summary>
+public class StripeInvoiceCheckoutCompletedEvent : IDomainEvent
+{
+    public Guid InvoiceId { get; set; }
+}
+
 // ── CRM Domain Events ─────────────────────────────────────────────────────────
 
 /// <summary>

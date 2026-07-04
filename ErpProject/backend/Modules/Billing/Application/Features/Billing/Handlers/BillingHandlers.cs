@@ -682,7 +682,11 @@ public class MarkPaidHandler : IRequestHandler<MarkPaidCommand, bool>
         if (!PaymentMethods.IsValid(req.PaymentMethod))
             throw new InvalidOperationException($"Método de pago no válido: {req.PaymentMethod}");
 
-        var inv = await _ctx.Invoices.FirstOrDefaultAsync(i => i.Id == req.Id, ct);
+        // IgnoreQueryFilters: this handler is also invoked from the Stripe webhook path
+        // (MarkInvoicePaidFromStripeHandler), which has no resolved tenant at all — the
+        // tenant query filter would otherwise make this lookup always return null there.
+        // Safe because the lookup is by unique Guid Id, not by any tenant-derived list.
+        var inv = await _ctx.Invoices.IgnoreQueryFilters().FirstOrDefaultAsync(i => i.Id == req.Id, ct);
         if (inv == null) return false;
 
         // Idempotency: already paid → skip silently

@@ -81,6 +81,18 @@ centraliza toda la integración con Stripe:
   punto del código que escribe `TenantModule` de forma masiva; el otro
   es el `PUT /api/tenant/modules/{id}` manual del propio tenant.
 
+`StripeService` también implementa **`IInvoicePaymentGateway`**
+(`Erp.Application.Common.Interfaces`, ADR-0018 #39): un segundo caso de uso
+Stripe, independiente del anterior — `CreateInvoiceCheckoutSessionAsync`
+crea una sesión en `Mode = "payment"` con `PriceData` ad-hoc (importe exacto
+de una factura concreta, no un `Price` fijo de `StripeOptions.PriceIds`) para
+el portal público de facturas de Billing (ver ADR-0005). `HandleCheckoutCompleted`
+distingue ambos flujos por la metadata de la sesión (`companyId` → alta de
+suscripción; `invoiceId` → pago de factura puntual) y, en el segundo caso,
+publica `StripeInvoiceCheckoutCompletedEvent` en vez de tocar `Subscription`/
+`TenantModule` — cero código compartido entre ambos casos de uso más allá del
+cliente `Stripe.net` y la verificación de firma del webhook.
+
 **Gate de acceso a módulos — `ModuleAuthorizationHandler`**
 (`backend/Erp.Infrastructure/Security/ModuleAuthorizationHandler.cs`),
 usado junto con el atributo `[RequiredModule("...")]` y el filtro MVC

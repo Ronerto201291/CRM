@@ -4,6 +4,7 @@ using Erp.Application.Common.Interfaces;
 using Erp.Domain.Entities.Core;
 using Erp.Domain.Entities.Licensing;
 using Erp.Infrastructure.Data;
+using Erp.Modules.Billing.Infrastructure.Data;
 using Erp.Modules.Inventory.Infrastructure.Data;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -181,6 +182,7 @@ public class InMemoryErpWebApplicationFactory : WebApplicationFactory<Program>
         {
             ReplaceWithInMemory<ErpDbContext>(services, $"e2e-core-{_dbSuffix}");
             ReplaceWithInMemory<InventoryDbContext>(services, $"e2e-inventory-{_dbSuffix}");
+            ReplaceWithInMemory<BillingDbContext>(services, $"e2e-billing-{_dbSuffix}");
         });
     }
 

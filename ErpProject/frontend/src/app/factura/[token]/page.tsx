@@ -1,6 +1,6 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
-import { useParams } from 'next/navigation';
+import { useEffect, useState, useCallback, Suspense } from 'react';
+import { useParams, useSearchParams } from 'next/navigation';
 
 interface InvoiceLine {
     description: string; quantity: number; unitPrice: number; taxRate: number; lineTotal: number;
@@ -29,10 +29,29 @@ const STATUS_STYLE: Record<string, { label: string; bg: string }> = {
 };
 
 export default function PublicInvoicePage() {
+    return (
+        <Suspense fallback={
+            <div style={{ minHeight: '100vh', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Inter, sans-serif' }}>
+                <div style={{ textAlign: 'center', color: '#6b7a8d' }}>
+                    <div style={{ fontSize: '32px', marginBottom: '12px' }}>⏳</div>
+                    <div>Cargando factura...</div>
+                </div>
+            </div>
+        }>
+            <PublicInvoiceView />
+        </Suspense>
+    );
+}
+
+function PublicInvoiceView() {
     const { token } = useParams<{ token: string }>();
+    const searchParams = useSearchParams();
+    const pago = searchParams.get('pago');
     const [invoice, setInvoice] = useState<PublicInvoice | null>(null);
     const [loading, setLoading] = useState(true);
     const [notFound, setNotFound] = useState(false);
+    const [paying, setPaying] = useState(false);
+    const [payError, setPayError] = useState<string | null>(null);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -47,6 +66,23 @@ export default function PublicInvoicePage() {
     }, [token]);
 
     useEffect(() => { load(); }, [load]);
+
+    const handlePay = async () => {
+        setPaying(true);
+        setPayError(null);
+        try {
+            const r = await fetch(`/api/proxy/v1/public/invoice-view/${token}/checkout`, { method: 'POST' });
+            const data = await r.json();
+            if (r.ok && data.checkoutUrl) {
+                window.location.href = data.checkoutUrl;
+                return;
+            }
+            setPayError(data.error || 'No se pudo iniciar el pago. Inténtalo de nuevo.');
+        } catch {
+            setPayError('No se pudo iniciar el pago. Inténtalo de nuevo.');
+        }
+        setPaying(false);
+    };
 
     if (loading) {
         return (
@@ -90,6 +126,17 @@ export default function PublicInvoicePage() {
                         </div>
                     </div>
                 </div>
+
+                {pago === 'exito' && invoice.status !== 'Paid' && (
+                    <div style={{ background: '#ecfdf5', borderLeft: `4px solid ${SUCCESS}`, padding: '14px 28px', fontSize: '13px', color: '#065f46' }}>
+                        ✓ Pago recibido. Puede tardar unos segundos en reflejarse como pagada — recarga la página si no ves el cambio.
+                    </div>
+                )}
+                {pago === 'cancelado' && (
+                    <div style={{ background: '#fef2f2', borderLeft: `4px solid ${DANGER}`, padding: '14px 28px', fontSize: '13px', color: '#7f1d1d' }}>
+                        Pago cancelado. Puedes intentarlo de nuevo cuando quieras.
+                    </div>
+                )}
 
                 {/* Company info */}
                 <div style={{ background: PRIMARY_BG, padding: '20px 28px', borderBottom: '1px solid #C8D4E0' }}>
@@ -137,6 +184,25 @@ export default function PublicInvoicePage() {
                             <span style={{ color: 'white', fontWeight: 700, fontSize: '14px' }}>TOTAL</span>
                             <span style={{ color: 'white', fontWeight: 800, fontSize: '20px' }}>{fmt(invoice.total)}</span>
                         </div>
+
+                        {invoice.isLocked && invoice.status !== 'Paid' && (
+                            <div style={{ marginTop: '14px' }}>
+                                <button
+                                    onClick={handlePay}
+                                    disabled={paying}
+                                    style={{
+                                        width: '100%', background: SUCCESS, color: 'white', border: 'none', borderRadius: '8px',
+                                        padding: '12px 16px', fontWeight: 700, fontSize: '14px', cursor: paying ? 'default' : 'pointer',
+                                        opacity: paying ? 0.7 : 1,
+                                    }}
+                                >
+                                    {paying ? 'Redirigiendo a Stripe…' : '💳 Pagar ahora'}
+                                </button>
+                                {payError && (
+                                    <div style={{ color: DANGER, fontSize: '12px', marginTop: '8px', textAlign: 'right' }}>{payError}</div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
 

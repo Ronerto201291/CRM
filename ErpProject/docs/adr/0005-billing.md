@@ -217,14 +217,39 @@ Creación y bloqueo de una factura, con propagación a Accounting:
   (`/api/v1/public/invoices`) delega en `GetPublicInvoicesQuery` /
   `GetPublicInvoiceByIdQuery` (lectura vía `X-Api-Key`), y `PublicQuotesController`
   expone el portal de aceptación de presupuestos sin autenticación (por `AcceptanceToken`).
-- **Portal de visualización de factura** (ADR-0018 #39): `Invoice.PublicViewToken`
+- **Portal de visualización y pago de factura** (ADR-0018 #39): `Invoice.PublicViewToken`
   (mismo patrón que `Quote.AcceptanceToken`) + `PublicInvoiceViewController`
   (`/api/v1/public/invoice-view/{token}`, `[AllowAnonymous]`) — no confundir
   con `PublicInvoicesController` de arriba, que es integración por API key
   para todo el ledger del tenant, no un visor de una factura concreta.
   `InvoiceDto.PublicViewUrl` se expone al staff (`InvoiceDetailClient.tsx`,
-  botón "Copiar enlace") para poder compartirlo; solo lectura, sin pago ni
-  aceptación (eso sigue pendiente, ver ADR-0018 #39).
+  botón "Copiar enlace") para poder compartirlo. El mismo controller expone
+  `POST {token}/checkout`, que despacha `CreateInvoiceCheckoutSessionCommand`
+  (valida `IsLocked` + `Status != "Paid"` con `IgnoreQueryFilters()`, misma
+  razón que `GetInvoiceByTokenHandler`: el visitante no tiene tenant resuelto)
+  y delega en `IInvoicePaymentGateway.CreateInvoiceCheckoutSessionAsync`
+  (implementado por `StripeService`, core) para crear una sesión Stripe
+  Checkout en `Mode = "payment"` por el importe exacto de la factura —
+  sin reutilizar el flujo de suscripción SaaS (`ISubscriptionBillingService`,
+  ADR-0014), que es un producto Stripe distinto (Price ID fijo, no importe
+  variable). El webhook (`StripeService.HandleCheckoutCompleted`) distingue
+  ambos casos por la metadata de la sesión (`invoiceId` vs `companyId`); si
+  es un pago de factura, publica `StripeInvoiceCheckoutCompletedEvent`
+  (`Erp.Application.Common.Events`) en vez de llamar directamente a
+  `MarkPaidCommand` — así `Erp.Infrastructure` (core) no necesita una
+  referencia de proyecto a `Erp.Modules.Billing.Application`, evitando repetir
+  la violación de dirección de dependencias ya señalada en ADR-0018 §Clean
+  Architecture. `MarkInvoicePaidFromStripeHandler` (Billing.Application)
+  consume ese evento y reenvía a `MarkPaidCommand` con
+  `PaymentMethod = "card"` — cero lógica de "marcar pagada" duplicada,
+  reutiliza el handler idempotente ya existente (`MarkPaidHandler`, que
+  también necesitó pasar a `IgnoreQueryFilters()` por el mismo motivo de
+  tenant-less webhook). Frontend público (`factura/[token]/page.tsx`):
+  botón "Pagar ahora" (solo si `isLocked && status !== 'Paid'`) que hace
+  `POST .../checkout` y redirige a `checkoutUrl`; banners de éxito/cancelado
+  vía `?pago=exito|cancelado` en la URL de retorno de Stripe. Con esto se
+  cierra la pieza de pago de ADR-0018 #39 — pendiente solo que el proveedor
+  suba su propia factura.
 - **Inventory**: `InvoiceApprovedEvent.Lines` incluye `ProductId`/
   `Quantity`/`UnitPrice` pensado para integración de stock (el DTO existe en
   `DomainEvents.cs` con comentario explícito "Inventory integration"),
