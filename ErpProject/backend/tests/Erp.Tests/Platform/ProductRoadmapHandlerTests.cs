@@ -12,7 +12,7 @@ public class ProductRoadmapHandlerTests
         var items = await handler.Handle(new GetProductRoadmapQuery(), CancellationToken.None);
 
         Assert.True(items.Count >= 10);
-        Assert.Contains(items, i => i.Id == "38" && i.Title.Contains("PSD2"));
-        Assert.Contains(items, i => i.Id == "39" && i.Status == "blocked_external");
+        Assert.Contains(items, i => i.Id == "38" && i.Title.Contains("Multi-moneda"));
+        Assert.Contains(items, i => i.Id == "42e" && i.Status == "implemented");
     }
 }

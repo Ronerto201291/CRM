@@ -128,15 +128,17 @@ export default function PayrollClient({
         load();
     };
 
-    const downloadTc = async (kind: 'tc1' | 'tc2') => {
+    const downloadExport = async (kind: 'tc1' | 'tc2' | 'red') => {
         setActionError(null);
-        const url = `/api/proxy/payroll/export/${kind}?year=${year}&month=${setForm.month}`;
+        const path = kind === 'red' ? 'red' : kind;
+        const url = `/api/proxy/payroll/export/${path}?year=${year}&month=${setForm.month}`;
         const r = await fetch(url);
-        if (!r.ok) { setActionError('Sin datos o liquidación no finalizada'); return; }
+        if (!r.ok) { setActionError('Sin datos, liquidación no finalizada o validación RED fallida'); return; }
         const blob = await r.blob();
+        const ext = kind === 'red' ? 'txt' : 'csv';
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = `${kind.toUpperCase()}_${year}_${String(setForm.month).padStart(2, '0')}.csv`;
+        a.download = `${kind === 'red' ? 'RED' : kind.toUpperCase()}_${year}_${String(setForm.month).padStart(2, '0')}.${ext}`;
         a.click();
         URL.revokeObjectURL(a.href);
     };
@@ -146,7 +148,7 @@ export default function PayrollClient({
             <div className="page-header">
                 <div>
                     <h1 className="page-title">Nóminas (Fase 0)</h1>
-                    <p className="page-subtitle">Trabajadores, liquidaciones mensuales, TC1/TC2 CSV y datos para modelo 111/190</p>
+                    <p className="page-subtitle">Trabajadores, liquidaciones mensuales, TC1/TC2 CSV, export RED y datos para modelo 111/190</p>
                 </div>
             </div>
 
@@ -228,10 +230,13 @@ export default function PayrollClient({
 
             <div className="erp-card" style={{ padding: '20px' }}>
                 <h3 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '12px' }}>Export TGSS (orientativo)</h3>
-                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px' }}>Tras finalizar el mes, descarga CSV para asesoría. No sustituye SILTRA/RED sin validación.</p>
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px' }}>
+                    Tras finalizar el mes, descarga CSV/RED para asesoría. No sustituye SILTRA homologado ni certificado digital TGSS.
+                </p>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => downloadTc('tc1')}>TC1 {year}-{setForm.month}</button>
-                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => downloadTc('tc2')}>TC2 {year}-{setForm.month}</button>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => downloadExport('tc1')}>TC1 {year}-{setForm.month}</button>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => downloadExport('tc2')}>TC2 {year}-{setForm.month}</button>
+                    <button type="button" className="btn btn-primary btn-sm" onClick={() => downloadExport('red')}>RED/SILTRA {year}-{setForm.month}</button>
                 </div>
             </div>
         </PageContainer>

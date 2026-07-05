@@ -1,3 +1,4 @@
+using Erp.Application.Common.Interfaces;
 using Erp.Modules.Treasury.Application.Interfaces;
 using Erp.Modules.Treasury.Application.Validators;
 using FluentValidation;
@@ -37,8 +38,18 @@ public static class DependencyInjection
         var openBankingProvider = configuration["OpenBanking:Provider"] ?? "Mock";
         if (string.Equals(openBankingProvider, "Stub", StringComparison.OrdinalIgnoreCase))
             services.AddScoped<IOpenBankingProvider, StubOpenBankingProvider>();
+        else if (string.Equals(openBankingProvider, "GoCardless", StringComparison.OrdinalIgnoreCase)
+                 || string.Equals(openBankingProvider, "Nordigen", StringComparison.OrdinalIgnoreCase)
+                 || string.Equals(openBankingProvider, "Configurable", StringComparison.OrdinalIgnoreCase))
+        {
+            services.AddHttpClient(nameof(ConfigurableOpenBankingProvider));
+            services.AddHttpClient(nameof(ConfigurableOpenBankingProvider) + "-token");
+            services.AddScoped<IOpenBankingProvider, ConfigurableOpenBankingProvider>();
+        }
         else
             services.AddScoped<IOpenBankingProvider, MockOpenBankingProvider>();
+
+        services.AddScoped<IExchangeRateLookup, ExchangeRateLookupAdapter>();
 
         // Exchange rate provider (ECB) + service
         services.AddHttpClient<EcbExchangeRateProvider>();

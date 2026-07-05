@@ -5,6 +5,7 @@ using Erp.Application.Features.Auth.Queries;
 using Erp.Domain.Entities.Core;
 using Erp.Domain.Entities.Licensing;
 using Erp.Infrastructure.Data;
+using Erp.Infrastructure.Services;
 using Erp.Tests.TestSupport;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -69,7 +70,8 @@ public class AddCompanyFromAccountHandlerTests
             ctx,
             new FakeJwtProvider(),
             new GetUserCompaniesHandler(ctx),
-            publisher);
+            publisher,
+            new CompanyMembershipLimitService(ctx));
 
         var result = await handler.Handle(new AddCompanyFromAccountCommand
         {
@@ -128,7 +130,8 @@ public class AddCompanyFromAccountHandlerTests
             ctx,
             new FakeJwtProvider(),
             new GetUserCompaniesHandler(ctx),
-            new FakePublisher());
+            new FakePublisher(),
+            new CompanyMembershipLimitService(ctx));
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => handler.Handle(
             new AddCompanyFromAccountCommand

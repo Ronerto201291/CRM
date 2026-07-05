@@ -25,6 +25,7 @@ export const invoiceCreateSchema = z.object({
     dueDate: z.string().optional(),
     irpfRate: z.number().min(0).max(100),
     invoiceType: z.string().min(1),
+    currencyCode: z.string().min(3).max(3).optional(),
     lines: z.array(invoiceLineSchema).min(1),
 }).superRefine((data, ctx) => {
     if (data.clientType === 'Registered' && !data.clientId) {

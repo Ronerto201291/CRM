@@ -11,7 +11,10 @@ vi.mock('@/hooks/useCachedApi', () => ({
 
 describe('BillingClient create invoice form', () => {
     beforeEach(() => {
-        vi.stubGlobal('fetch', vi.fn());
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => [{ code: 'EUR', name: 'Euro', exchangeRate: 1 }],
+        }));
         vi.stubGlobal('confirm', vi.fn(() => true));
     });
 

@@ -40,6 +40,7 @@ public class CreateInvoiceHandler : IRequestHandler<CreateInvoiceCommand, Invoic
     private readonly IViesService _vies;
     private readonly IPlanLimitService _planLimits;
     private readonly IPortalUrlProvider _portalUrlProvider;
+    private readonly IExchangeRateLookup _exchangeRates;
 
     public CreateInvoiceHandler(
         IBillingDbContext ctx,
@@ -48,7 +49,8 @@ public class CreateInvoiceHandler : IRequestHandler<CreateInvoiceCommand, Invoic
         IClientInfoService clientInfo,
         IViesService vies,
         IPlanLimitService planLimits,
-        IPortalUrlProvider portalUrlProvider)
+        IPortalUrlProvider portalUrlProvider,
+        IExchangeRateLookup exchangeRates)
     {
         _ctx        = ctx;
         _tenant     = tenant;
@@ -57,6 +59,7 @@ public class CreateInvoiceHandler : IRequestHandler<CreateInvoiceCommand, Invoic
         _vies       = vies;
         _planLimits = planLimits;
         _portalUrlProvider = portalUrlProvider;
+        _exchangeRates = exchangeRates;
     }
 
     public async Task<InvoiceDto> Handle(CreateInvoiceCommand req, CancellationToken ct)
@@ -206,6 +209,11 @@ public class CreateInvoiceHandler : IRequestHandler<CreateInvoiceCommand, Invoic
         invoice.IrpfAmount      = Math.Round(subtotal * (req.IrpfRate / 100m), 2, MidpointRounding.AwayFromZero);
         invoice.Total           = invoice.Subtotal + invoice.TaxAmount + invoice.SurchargeAmount - invoice.IrpfAmount;
 
+        var currencyCode = string.IsNullOrWhiteSpace(req.CurrencyCode) ? "EUR" : req.CurrencyCode.Trim().ToUpperInvariant();
+        invoice.CurrencyCode = currencyCode;
+        invoice.ExchangeRateToEur = await _exchangeRates.GetRateToEurAsync(currencyCode, ct);
+        invoice.TotalEur = await _exchangeRates.ConvertToEurAsync(currencyCode, invoice.Total, ct);
+
         if (string.Equals(invType, "Simplificada", StringComparison.OrdinalIgnoreCase)
             && invoice.Subtotal > SimplificadaMaxBaseImponible)
             throw new InvalidOperationException(
@@ -256,6 +264,9 @@ public class CreateInvoiceHandler : IRequestHandler<CreateInvoiceCommand, Invoic
             Subtotal = invoice.Subtotal, TaxAmount = invoice.TaxAmount,
             IrpfRate = invoice.IrpfRate, IrpfAmount = invoice.IrpfAmount,
             SurchargeAmount = invoice.SurchargeAmount, Total = invoice.Total,
+            CurrencyCode = invoice.CurrencyCode,
+            ExchangeRateToEur = invoice.ExchangeRateToEur,
+            TotalEur = invoice.TotalEur,
             Status = invoice.Status, IsLocked = invoice.IsLocked,
             Lines = lines.Select(x => new InvoiceLineDto
             {
@@ -325,6 +336,7 @@ public class GetInvoicesHandler : IRequestHandler<GetInvoicesQuery, PaginatedInv
                 Subtotal = i.Subtotal, TaxAmount = i.TaxAmount,
                 IrpfRate = i.IrpfRate, IrpfAmount = i.IrpfAmount,
                 SurchargeAmount = i.SurchargeAmount, Total = i.Total,
+                CurrencyCode = i.CurrencyCode, ExchangeRateToEur = i.ExchangeRateToEur, TotalEur = i.TotalEur,
                 Status = i.Status, IsLocked = i.IsLocked, LockedAt = i.LockedAt,
                 Hash = i.Hash, VerifactuHuella = i.VerifactuHuella, VerifactuQrUrl = i.VerifactuQrUrl,
                 JournalEntryId = i.JournalEntryId,
@@ -371,6 +383,7 @@ public class GetInvoiceByIdHandler : IRequestHandler<GetInvoiceByIdQuery, Invoic
                 Subtotal = i.Subtotal, TaxAmount = i.TaxAmount,
                 IrpfRate = i.IrpfRate, IrpfAmount = i.IrpfAmount,
                 SurchargeAmount = i.SurchargeAmount, Total = i.Total,
+                CurrencyCode = i.CurrencyCode, ExchangeRateToEur = i.ExchangeRateToEur, TotalEur = i.TotalEur,
                 Status = i.Status, IsLocked = i.IsLocked, LockedAt = i.LockedAt,
                 Hash = i.Hash, VerifactuHuella = i.VerifactuHuella, VerifactuQrUrl = i.VerifactuQrUrl,
                 JournalEntryId = i.JournalEntryId,
@@ -556,9 +569,12 @@ public class LockInvoiceHandler : IRequestHandler<LockInvoiceCommand, bool>
         await _publisher.Publish(new InvoiceApprovedEvent
         {
             InvoiceId = inv.Id, CompanyId = inv.CompanyId,
-            InvoiceNumber = inv.Number, Subtotal = inv.Subtotal,
-            TaxAmount = inv.TaxAmount, IrpfAmount = inv.IrpfAmount,
-            SurchargeAmount = inv.SurchargeAmount, Total = inv.Total,
+            InvoiceNumber = inv.Number,
+            Subtotal = ToEur(inv.Subtotal),
+            TaxAmount = ToEur(inv.TaxAmount),
+            IrpfAmount = ToEur(inv.IrpfAmount),
+            SurchargeAmount = ToEur(inv.SurchargeAmount),
+            Total = inv.TotalEur > 0 ? inv.TotalEur : ToEur(inv.Total),
             ClientId = inv.ClientId, IssueDate = inv.IssueDate,
             Lines = inv.InvoiceLines.Select(l => new InvoiceLineEventDto
             {
@@ -567,6 +583,13 @@ public class LockInvoiceHandler : IRequestHandler<LockInvoiceCommand, bool>
         }, ct);
 
         return true;
+
+        decimal ToEur(decimal amount)
+        {
+            if (string.Equals(inv.CurrencyCode, "EUR", StringComparison.OrdinalIgnoreCase))
+                return amount;
+            return Math.Round(amount * inv.ExchangeRateToEur, 2, MidpointRounding.AwayFromZero);
+        }
     }
 }
 
@@ -708,7 +731,7 @@ public class MarkPaidHandler : IRequestHandler<MarkPaidCommand, bool>
             CompanyId     = inv.CompanyId,
             ClientId      = inv.ClientId,
             InvoiceNumber = inv.Number,
-            Amount        = inv.Total,
+            Amount        = inv.TotalEur > 0 ? inv.TotalEur : inv.Total,
             PaymentDate   = DateTime.UtcNow,
             PaymentMethod = req.PaymentMethod
         }, ct);

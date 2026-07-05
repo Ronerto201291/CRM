@@ -26,5 +26,7 @@ public interface ITreasuryDbContext
     DbSet<ConsolidationAdjustment> ConsolidationAdjustments { get; }
     DbSet<ConsolidatedFinancialStatement> ConsolidatedFinancialStatements { get; }
     DbSet<IntercompanyTransaction> IntercompanyTransactions { get; }
+    DbSet<PosTerminal> PosTerminals { get; }
+    DbSet<PosPayment> PosPayments { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

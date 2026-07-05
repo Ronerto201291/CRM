@@ -57,6 +57,15 @@ public class Invoice : AuditableEntity
     public string? CompanyName   { get; set; }
     public string? CompanyAddress { get; set; }
 
+    /// <summary>ISO 4217 (EUR por defecto). Importes de la factura en esta divisa.</summary>
+    public string CurrencyCode { get; set; } = "EUR";
+
+    /// <summary>Tipo de cambio a EUR en fecha de emisión (1 unidad de divisa → EUR).</summary>
+    public decimal ExchangeRateToEur { get; set; } = 1m;
+
+    /// <summary>Total convertido a EUR para contabilidad y reporting.</summary>
+    public decimal TotalEur { get; set; }
+
     // Importes
     public decimal Subtotal { get; set; }
     public decimal TaxAmount { get; set; }       // IVA total

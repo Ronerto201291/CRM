@@ -30,6 +30,8 @@ public class CreateInvoiceCommand : IRequest<InvoiceDto>
     public bool ValidateEuVatWithVies { get; set; }
 
     public decimal IrpfRate { get; set; } // 0 or 15 for professionals
+    /// <summary>ISO 4217. Por defecto EUR.</summary>
+    public string CurrencyCode { get; set; } = "EUR";
     public List<CreateInvoiceLineDto> Lines { get; set; } = new();
 }
 

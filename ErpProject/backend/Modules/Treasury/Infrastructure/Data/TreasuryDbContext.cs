@@ -33,6 +33,8 @@ public class TreasuryDbContext : ModuleDbContextBase, ITreasuryDbContext
     public DbSet<ConsolidationAdjustment> ConsolidationAdjustments { get; set; } = null!;
     public DbSet<ConsolidatedFinancialStatement> ConsolidatedFinancialStatements { get; set; } = null!;
     public DbSet<IntercompanyTransaction> IntercompanyTransactions { get; set; } = null!;
+    public DbSet<PosTerminal> PosTerminals { get; set; } = null!;
+    public DbSet<PosPayment> PosPayments { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -61,6 +63,8 @@ public class TreasuryDbContext : ModuleDbContextBase, ITreasuryDbContext
         modelBuilder.Entity<ConsolidationGroup>().HasQueryFilter(e => e.ParentCompanyId == TenantContext.TenantId);
         modelBuilder.Entity<SubsidiaryCompany>().HasQueryFilter(e => e.ParentCompanyId == TenantContext.TenantId);
         modelBuilder.Entity<IntercompanyTransaction>().HasQueryFilter(e => e.ParentCompanyId == TenantContext.TenantId);
+        modelBuilder.Entity<PosTerminal>().HasQueryFilter(e => e.CompanyId == TenantContext.TenantId);
+        modelBuilder.Entity<PosPayment>().HasQueryFilter(e => e.CompanyId == TenantContext.TenantId);
 
         // ConsolidationAdjustment and ConsolidatedFinancialStatement are filtered via ConsolidationGroupId
         // which is already protected by the ConsolidationGroup query filter.

@@ -27,17 +27,20 @@ public class AddCompanyFromAccountHandler : IRequestHandler<AddCompanyFromAccoun
     private readonly IJwtProvider _jwtProvider;
     private readonly IRequestHandler<GetUserCompaniesQuery, IReadOnlyList<CompanyMembershipDto>> _getUserCompanies;
     private readonly IPublisher _publisher;
+    private readonly ICompanyMembershipLimitService _companyLimits;
 
     public AddCompanyFromAccountHandler(
         IApplicationDbContext ctx,
         IJwtProvider jwtProvider,
         IRequestHandler<GetUserCompaniesQuery, IReadOnlyList<CompanyMembershipDto>> getUserCompanies,
-        IPublisher publisher)
+        IPublisher publisher,
+        ICompanyMembershipLimitService companyLimits)
     {
         _ctx = ctx;
         _jwtProvider = jwtProvider;
         _getUserCompanies = getUserCompanies;
         _publisher = publisher;
+        _companyLimits = companyLimits;
     }
 
     public async Task<LoginResponseDto> Handle(AddCompanyFromAccountCommand req, CancellationToken ct)
@@ -50,6 +53,10 @@ public class AddCompanyFromAccountHandler : IRequestHandler<AddCompanyFromAccoun
             .AnyAsync(c => c.TaxId == req.CompanyTaxId, ct);
         if (taxIdExists)
             throw new InvalidOperationException("Ya existe una empresa con ese CIF/NIF.");
+
+        var limit = await _companyLimits.CheckCanAddCompanyAsync(req.UserId, ct);
+        if (!limit.Allowed)
+            throw new InvalidOperationException(limit.Reason ?? "Límite de empresas alcanzado.");
 
         var subscription = new Subscription
         {

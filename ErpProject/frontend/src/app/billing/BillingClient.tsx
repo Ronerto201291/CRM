@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import PageContainer from '@/components/PageContainer';
 import AccessibleModal from '@/components/AccessibleModal';
 import { updateLineAt } from '@/lib/lineForm';
@@ -47,6 +47,7 @@ export default function BillingClient({
         clientType: ClientType; clientId: string;
         clientName: string; clientTaxId: string; clientEmail: string; clientAddress: string;
         series: string; dueDate: string; irpfRate: number; invoiceType: string;
+        currencyCode: string;
         rectifiedInvoiceId: string;
         rectificationReasonCode: string;
         rectificationReasonText: string;
@@ -55,7 +56,7 @@ export default function BillingClient({
     }>({
         clientType: 'Registered', clientId: '',
         clientName: '', clientTaxId: '', clientEmail: '', clientAddress: '',
-        series: 'A', dueDate: '', irpfRate: 0, invoiceType: 'Normal',
+        series: 'A', dueDate: '', irpfRate: 0, invoiceType: 'Normal', currencyCode: 'EUR',
         rectifiedInvoiceId: '', rectificationReasonCode: '', rectificationReasonText: '',
         validateEuVatWithVies: false,
         lines: [emptyLine()],
@@ -63,7 +64,19 @@ export default function BillingClient({
     const [saving, setSaving] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
     const [pageError, setPageError] = useState<string | null>(null);
+    const [currencies, setCurrencies] = useState<{ code: string; name: string; exchangeRate: number }[]>([
+        { code: 'EUR', name: 'Euro', exchangeRate: 1 },
+    ]);
     const { fetchCached, invalidateCached } = useCachedApi();
+
+    useEffect(() => {
+        fetch('/api/proxy/v1/treasury/currencies')
+            .then(r => r.ok ? r.json() : [])
+            .then((data: { code: string; name: string; exchangeRate: number }[]) => {
+                if (Array.isArray(data) && data.length > 0) setCurrencies(data);
+            })
+            .catch(() => undefined);
+    }, []);
 
     const refresh = useCallback(async () => {
         invalidateCached('invoices');
@@ -116,11 +129,14 @@ export default function BillingClient({
     const surcharge   = form.lines.reduce((s, l) => s + round2(round2(l.quantity * l.unitPrice) * (l.surchargeRate / 100)), 0);
     const irpfAmt     = round2(subtotal * (form.irpfRate / 100));
     const total       = round2(subtotal + taxAmount + surcharge - irpfAmt);
+    const fxRate = currencies.find(c => c.code === form.currencyCode)?.exchangeRate ?? 1;
+    const rateToEur = form.currencyCode === 'EUR' ? 1 : (1 / fxRate);
+    const totalEur  = round2(total * rateToEur);
 
     const emptyForm = () => ({
         clientType: 'Registered' as ClientType, clientId: '',
         clientName: '', clientTaxId: '', clientEmail: '', clientAddress: '',
-        series: 'A', dueDate: '', irpfRate: 0, invoiceType: 'Normal',
+        series: 'A', dueDate: '', irpfRate: 0, invoiceType: 'Normal', currencyCode: 'EUR',
         rectifiedInvoiceId: '', rectificationReasonCode: '', rectificationReasonText: '',
         validateEuVatWithVies: false,
         lines: [emptyLine()],
@@ -397,6 +413,17 @@ export default function BillingClient({
                             </div>
                         </div>
 
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+                            <div className="form-group">
+                                <label className="erp-label">DIVISA</label>
+                                <select className="erp-input" value={form.currencyCode} onChange={e => setForm({ ...form, currencyCode: e.target.value })}>
+                                    {currencies.map(c => (
+                                        <option key={c.code} value={c.code}>{c.code} — {c.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
                         {form.invoiceType === 'Rectificativa' && (
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px', padding: '12px', background: 'var(--surface-2)', borderRadius: '8px' }}>
                                 <div className="form-group" style={{ gridColumn: '1 / -1' }}>
@@ -504,8 +531,14 @@ export default function BillingClient({
                                     {form.irpfRate > 0 && <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-secondary)' }}>IRPF ({form.irpfRate}%)</span><span style={{ fontWeight: 600, color: 'var(--danger)' }}>– € {irpfAmt.toFixed(2)}</span></div>}
                                     <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border)', paddingTop: '6px', marginTop: '2px' }}>
                                         <span style={{ fontWeight: 800, fontSize: '15px' }}>Total Factura</span>
-                                        <span style={{ fontWeight: 800, fontSize: '15px', color: 'var(--brand-primary)' }}>€ {total.toFixed(2)}</span>
+                                        <span style={{ fontWeight: 800, fontSize: '15px', color: 'var(--brand-primary)' }}>{form.currencyCode} {total.toFixed(2)}</span>
                                     </div>
+                                    {form.currencyCode !== 'EUR' && (
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-muted)' }}>
+                                            <span>≈ en EUR (tipo Treasury)</span>
+                                            <span>€ {totalEur.toFixed(2)}</span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                             {form.invoiceType === 'Simplificada' && subtotal > 400 && (

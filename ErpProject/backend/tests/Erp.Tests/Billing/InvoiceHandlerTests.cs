@@ -97,7 +97,8 @@ public class CreateInvoiceHandlerTests
             new FakeClientInfoService(),
             new FakeViesService(),
             new FakePlanLimitService(new LimitCheckResult(false, "Límite mensual alcanzado", 100, 100)),
-            new FakePortalUrlProvider());
+            new FakePortalUrlProvider(),
+            new FakeExchangeRateLookup());
 
         await Assert.ThrowsAsync<PlanLimitExceededException>(() => handler.Handle(
             new CreateInvoiceCommand
@@ -132,7 +133,8 @@ public class CreateInvoiceHandlerTests
             new FakeClientInfoService(),
             new FakeViesService(),
             new FakePlanLimitService(),
-            new FakePortalUrlProvider());
+            new FakePortalUrlProvider(),
+            new FakeExchangeRateLookup());
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => handler.Handle(
             new CreateInvoiceCommand { DueDate = DateTime.UtcNow.AddDays(30) },

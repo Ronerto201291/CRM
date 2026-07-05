@@ -42,8 +42,8 @@ PermissionsController,CompanyController}.cs`,
 | **1** | `UserCompany`, `switch-company`, `add-company`, `TenantMembershipMiddleware`, `CompanySwitcher` en frontend | ✅ Implementado |
 | **2** | UI gestoría: dashboard multi-empresa (KPIs agregados, alertas por cliente) | 🟡 Diseño — requiere OK UX |
 | **3** | Roles por membresía (`UserCompany.RoleId`) refinados para operador gestoría vs admin cliente | 🟡 Parcial — modelo existe, UX pendiente |
-| **4** | **Suscripción gestoría:** plan que cubre N `Company` bajo una cuenta (Stripe metadata + límites) | ❌ Bloqueado producto — ¿plan por Company o por gestoría? |
-| **5** | Facturación consolidada SaaS (una factura Stripe por gestoría con desglose por empresa cliente) | ❌ Bloqueado — depende Fase 4 |
+| **4** | **Suscripción gestoría:** plan que cubre N `Company` bajo una cuenta (`Plan.MaxCompanies`, plan Gestoría) | ✅ Implementado jul 2026 — validación `AddCompanyFromAccount`, UI límites en suscripción |
+| **5** | Facturación consolidada SaaS (una factura Stripe por gestoría con desglose por empresa cliente) | ❌ Bloqueado — depende contrato Stripe multi-tenant |
 
 No implementar Fases 4–5 sin decisión de negocio sobre modelo de suscripción.
 Fase 1 es suficiente para operar varias empresas con el mismo login.

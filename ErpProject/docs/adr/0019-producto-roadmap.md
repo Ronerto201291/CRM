@@ -1,50 +1,58 @@
 # ADR-0019: Roadmap producto (#38–#42f)
 
 ## Estado
-Aceptado — diseño y stubs documentados; **no implementar sin OK de producto**.
+Aceptado — **jul 2026**: ítems #38, #41 (parcial), #42a (fase 4), #42e implementados en código; resto documentado.
 
 ## Contexto
-ADR-0018 ítems 38–42f describen capacidades de producto que requieren
-decisiones de negocio, contratos con terceros o homologación regulatoria.
-El código actual no contiene implementaciones parciales accionables para la
-mayoría de ellos (confirmado por barrido jul 2026). Este ADR centraliza el
-diseño propuesto y el endpoint de metadatos `GET /api/platform/product-roadmap`.
+ADR-0018 ítems 38–42f describen capacidades de producto. Este ADR centraliza el diseño y el endpoint `GET /api/platform/product-roadmap`.
 
 ## Decisión
 
-### Endpoint stub (solo metadatos)
+### Endpoint metadatos
 - `PlatformController` → `GetProductRoadmapQuery` (MediatR).
 - Devuelve lista de ítems con `id`, `title`, `status`, `blocker`, `designDoc`.
-- **No** expone endpoints de negocio simulados (PSD2, TPV, etc.).
 
-### Ítems y estado honesto
+### Ítems y estado (jul 2026)
 
-| ID | Tema | Estado código | Bloqueo |
+| ID | Tema | Estado código | Bloqueo externo |
 |---|---|---|---|
-| #38 | Multi-moneda avanzada Billing↔Treasury | No iniciado | Conversión automática y redondeo por divisa |
-| #39 | Portal autoservicio cliente/proveedor | No iniciado | Auth externa + modelo UX |
-| #40 | IA (anomalías, previsión, categorización) | OCR Expenses real; IA no | Proveedor + coste |
-| #41 | Onboarding guiado / import ERP | No iniciado | Plantillas sectoriales |
-| #42 | Notificaciones proactivas | Motor reglas parcial (#27) | Canal email/push + plantillas |
-| #42a | Gestoría multi-empresa Fase 2+ | Fase 1 ✅ (ADR-0002) | Modelo suscripción N empresas |
-| #42b | Conciliación TPV/Bizum/caja | No iniciado | Entidades arqueo + pasarela |
-| #42c | Módulo contratado × permiso usuario | ABAC parcial | Unificar con ModuleAuthorization |
-| #42d | Biblioteca documentos | No iniciado | Entidad `Document` + storage |
-| #42e | Export periódico a gestoría externa | No iniciado | Alcance ZIP/email |
-| #42f | Servicios recurrentes por cliente | No iniciado | Catálogo servicios + job facturación |
+| #38 | Multi-moneda Billing↔Treasury | ✅ Implementado | FacturaE/XML siempre EUR; homologación multi-divisa AEAT |
+| #39 | Portal autoservicio cliente | Parcial (#39 portal factura) | Auth externa + UX |
+| #40 | IA / anomalías | OCR Expenses real; IA no | Proveedor + coste |
+| #41 | TPV físico | ✅ Parcial | `PosTerminal`, cobro card; homologación pasarela/hardware |
+| #42 | Notificaciones proactivas | Motor reglas parcial | Canal email/push |
+| #42a | Gestoría multi-empresa | ✅ Fase 1+4 | Fase 5 facturación Stripe consolidada |
+| #42b | Conciliación TPV/Bizum/caja | ✅ | — |
+| #42c | Módulo × permiso | ✅ | — |
+| #42d | Biblioteca documentos | Parcial | Storage S3 producción |
+| #42e | Export periódico gestoría | ✅ Implementado | SMTP producción; PDFs en ZIP futuro |
+| #42f | Servicios recurrentes | ✅ | — |
 
-### Homologación fiscal (relacionado #39)
-Ver ADR-0013 y `GET /api/fiscal/homologation/status` — preparatorio sin cert AEAT.
+### PSD2 / Open Banking (#28, relacionado)
+- `ConfigurableOpenBankingProvider` (GoCardless/Nordigen) con OAuth `token/new/` cuando hay credenciales.
+- Documentación: `docs/open-banking-psd2.md`.
+- **Bloqueado:** contrato agregador, consentimiento redirect PSD2, homologación banco.
 
-## Relación con otros módulos
-- **#42a:** ADR-0002 (auth multi-empresa).
-- **#38:** ADR-0012 Treasury (tipos de cambio) + ADR-0005 Billing.
-- **#42f:** ADR-0004 CRM + ADR-0005 Billing + ADR-0006 Accounting.
+### Multi-moneda (#38)
+- `Invoice.CurrencyCode`, `ExchangeRateToEur`, `TotalEur`.
+- `IExchangeRateLookup` → Treasury `ExchangeRateService`.
+- Asientos contables y cobros en EUR al bloquear/pagar.
+- Frontend: selector divisa en `BillingClient`.
+
+### Gestoría (#42a fase 4)
+- `Plan.MaxCompanies`; plan **Gestoría** (15 empresas).
+- `ICompanyMembershipLimitService` valida en `AddCompanyFromAccount`.
+- UI: `settings/subscription` muestra empresas usadas / límite.
+
+### Export gestoría (#42e)
+- `ExportAccountantPackageCommand`, `AccountantExportJob` (Hangfire día 3).
+- Settings en `Company`: email, frecuencia.
+- API: `api/accountant-export/*`; UI: `settings/accountant-export`.
 
 ## Evaluación de calidad arquitectónica
-- Roadmap vía MediatR; sin lógica de negocio falsa en controllers.
-- Frontend puede consumir `/api/platform/product-roadmap` para mostrar estado.
+- Controllers delgados MediatR; sin mocks de negocio en producción.
+- Cross-módulo vía eventos (`InvoiceCardPaymentRequestedEvent`) sin referencias incorrectas.
 
 ## Consecuencias
-- Ningún ítem de esta tabla se implementará sin OK explícito de producto/legal.
-- ADR-0018 marca estos ítems como **requiere OK producto** en la sección Cierre backlog.
+- Fase 5 gestoría (una factura Stripe por gestoría) sigue bloqueada por producto.
+- Homologación TPV físico y PSD2 producción requieren terceros.

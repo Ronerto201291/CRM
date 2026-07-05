@@ -14,6 +14,8 @@ public class Plan : BaseEntity
     public decimal YearlyPrice { get; set; }                    // EUR/año (con descuento)
     public int MaxUsers { get; set; } = 1;
     public int MaxInvoicesPerMonth { get; set; } = 50;
+    /// <summary>Máximo de empresas por cuenta (gestoría). 0 = sin límite explícito.</summary>
+    public int MaxCompanies { get; set; } = 1;
     public bool IsActive { get; set; } = true;
     public int SortOrder { get; set; }
 

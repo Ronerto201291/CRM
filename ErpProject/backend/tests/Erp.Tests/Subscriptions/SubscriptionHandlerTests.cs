@@ -2,6 +2,7 @@ using Erp.Application.Features.Subscriptions;
 using Erp.Domain.Entities.Core;
 using Erp.Domain.Entities.Licensing;
 using Erp.Infrastructure.Data;
+using Erp.Infrastructure.Services;
 using Erp.Tests.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -22,7 +23,8 @@ public class SubscriptionHandlerTests
             .Options;
 
         await using var ctx = new ErpDbContext(options, tenant);
-        var handler = new GetCurrentSubscriptionHandler(ctx, tenant);
+        var handler = new GetCurrentSubscriptionHandler(
+            ctx, tenant, new FakeCurrentUserAccessor(), new CompanyMembershipLimitService(ctx));
 
         var result = await handler.Handle(new GetCurrentSubscriptionQuery(), CancellationToken.None);
 
@@ -64,7 +66,8 @@ public class SubscriptionHandlerTests
         });
         await ctx.SaveChangesAsync();
 
-        var handler = new GetCurrentSubscriptionHandler(ctx, tenant);
+        var handler = new GetCurrentSubscriptionHandler(
+            ctx, tenant, new FakeCurrentUserAccessor(), new CompanyMembershipLimitService(ctx));
         var result = await handler.Handle(new GetCurrentSubscriptionQuery(), CancellationToken.None);
 
         Assert.Equal("Pro", result!.Plan);

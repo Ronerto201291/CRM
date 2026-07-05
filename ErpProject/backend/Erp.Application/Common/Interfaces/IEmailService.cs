@@ -48,4 +48,12 @@ public interface IEmailService
 
     /// <summary>Sends a generic HTML email (used for fiscal reminders, alerts, etc.).</summary>
     Task SendAsync(string to, string subject, string htmlBody, CancellationToken ct = default);
+
+    /// <summary>Email genérico con adjuntos (p. ej. paquete ZIP gestoría, ADR-0018 #42e).</summary>
+    Task SendWithAttachmentsAsync(
+        string to,
+        string subject,
+        string htmlBody,
+        IReadOnlyList<EmailAttachment> attachments,
+        CancellationToken ct = default);
 }

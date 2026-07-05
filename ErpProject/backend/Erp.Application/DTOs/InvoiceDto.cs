@@ -31,6 +31,10 @@ public class InvoiceDto
     public decimal SurchargeAmount { get; set; }
     public decimal Total { get; set; }
 
+    public string CurrencyCode { get; set; } = "EUR";
+    public decimal ExchangeRateToEur { get; set; } = 1m;
+    public decimal TotalEur { get; set; }
+
     public string Status { get; set; } = string.Empty;
     public bool IsLocked { get; set; }
     public DateTime? LockedAt { get; set; }

@@ -24,6 +24,14 @@ public class Company : AuditableEntity
     /// <summary>Importe a partir del cual pedidos/gastos requieren aprobación manual (0 = desactivado).</summary>
     public decimal ApprovalThresholdAmount { get; set; } = 0m;
 
+    /// <summary>Email de la gestoría externa para export periódico (ADR-0018 #42e).</summary>
+    public string? AccountantEmail { get; set; }
+
+    /// <summary>disabled | monthly | quarterly</summary>
+    public string AccountantExportFrequency { get; set; } = "disabled";
+
+    public DateTime? AccountantExportLastRunAt { get; set; }
+
     public ICollection<User> Users { get; set; } = new List<User>();
     public ICollection<Role> Roles { get; set; } = new List<Role>();
 }

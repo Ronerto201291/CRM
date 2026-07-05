@@ -64,4 +64,28 @@ describe('PayrollClient', () => {
             );
         });
     });
+
+    it('descarga RED vía GET export/red', async () => {
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            blob: async () => new Blob(['01'], { type: 'text/plain' }),
+        });
+        vi.stubGlobal('fetch', fetchMock);
+        vi.stubGlobal('URL', {
+            createObjectURL: vi.fn(() => 'blob:mock'),
+            revokeObjectURL: vi.fn(),
+        });
+
+        render(
+            <PayrollClient initialEmployees={[]} initialSettlements={[]} initialYear={2026} />,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: /RED\/SILTRA/i }));
+
+        await waitFor(() => {
+            expect(fetchMock).toHaveBeenCalledWith(
+                expect.stringContaining('/api/proxy/payroll/export/red?year=2026'),
+            );
+        });
+    });
 });

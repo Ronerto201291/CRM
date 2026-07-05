@@ -6,8 +6,9 @@ Aceptado — refleja la implementación actual del código en `main`.
 ## Contexto
 El módulo Payroll gestiona trabajadores y liquidaciones mensuales de
 nómina (bases de cotización TGSS, retención IRPF, líquido a percibir), y
-genera exportes CSV/XML orientativos para TC1/TC2 destinados a asesoría o
-importación en SILTRA/RED. Sigue la estructura estándar de módulo descrita
+genera exportes CSV/XML orientativos para TC1/TC2 y fichero RED texto plano
+(ISO-8859-1) orientativo para asesoría o conciliación — **no homologado TGSS**
+(ver `docs/payroll-red-siltra.md`). Sigue la estructura estándar de módulo descrita
 en ADR-0001 (`Api/Application/Domain/Infrastructure`), con `PayrollDbContext`
 sobre el esquema `payroll`.
 
@@ -46,8 +47,9 @@ ruta base `api/payroll`, `[Authorize]`) expone:
 - `GET/POST /api/payroll/settlements`, `POST .../lines`, `POST .../finalize` —
   vía handlers en `Application/Features/Settlements/SettlementHandlers.cs`.
 - `GET /api/payroll/export/tc1`, `/export/tc2`,
-  `/export/tc-red-orientativo` — vía `ExportTc1Query`/`ExportTc2Query`/
-  `ExportTcRedOrientativoQuery` en `Application/Features/Exports/PayrollExportHandlers.cs`.
+  `/export/tc-red-orientativo`, `/export/red` — vía handlers en
+  `Application/Features/Exports/PayrollExportHandlers.cs` (`RedSiltraFileBuilder`
+  para RED; validación NAF/CCC en `PayrollRedExportValidator`).
 
 No hay endpoints para editar/borrar trabajadores o líneas, ni para
 reabrir una liquidación `Final`.
@@ -128,9 +130,10 @@ resuelto vía puerto #19c).
   debería adoptar el patrón CQRS/MediatR + `Application/Commands`,
   `Application/Queries` que usan el resto de módulos (ADR-0001), en vez
   de seguir añadiendo lógica directamente al controller.
-- Los exportes TC1/TC2/XML deben seguir marcándose como no oficiales con
-  `FiscalExportHeaders.MarkAsNonOfficial` mientras no se implemente
-  generación del fichero RED/SILTRA real firmado.
+- Los exportes TC1/TC2/XML/RED deben seguir marcándose como no oficiales con
+  `FiscalExportHeaders.MarkAsNonOfficial`. El export RED (`RedSiltraFileBuilder`,
+  `GET /api/payroll/export/red`) es texto plano ISO-8859-1 orientativo — **no**
+  sustituye XML SILTRA homologado ni firma digital (véase `docs/payroll-red-siltra.md`).
 - Antes de dar por completo el módulo, conviene decidir explícitamente
   si las entidades no usadas (`Payroll`, `PayrollDeduction`, etc.) se
   retiran del modelo o se conectan a una futura fase 1, para evitar
@@ -148,4 +151,6 @@ resuelto vía puerto #19c).
   `PayrollController` solo inyecta `IMediator`.
 - La integración contable usa puerto `IPayrollJournalEntryGenerator` (#19c),
   no referencia directa a `Accounting.Application` desde Payroll.
-- Exportes TC1/TC2/RED siguen siendo orientativos (#29 pendiente — RED real).
+- Exportes TC1/TC2/RED: orientativos sin homologación TGSS (#29 ✅ alcance máximo
+  sin homologación — `RedSiltraFileBuilder`, validación NAF/CCC módulo 97,
+  `PayrollRedExportValidator`, frontend botón RED; ver `docs/payroll-red-siltra.md`).

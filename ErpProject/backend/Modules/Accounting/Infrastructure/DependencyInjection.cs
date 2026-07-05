@@ -49,6 +49,7 @@ public static class DependencyInjection
         // Hangfire jobs (transient — Hangfire resolves per execution)
         services.AddTransient<AmortizationMonthlyJob>();
         services.AddTransient<DeferredEntryMonthlyJob>();
+        services.AddTransient<AccountantExportJob>();
 
         return services;
     }
@@ -70,5 +71,10 @@ public static class DependencyInjection
             "accounting-deferred-entry-monthly",
             job => job.RunAsync(CancellationToken.None),
             "30 2 1 * *");
+
+        RecurringJob.AddOrUpdate<AccountantExportJob>(
+            "accountant-export-monthly",
+            job => job.ExecuteAsync(CancellationToken.None),
+            "0 6 3 * *");
     }
 }

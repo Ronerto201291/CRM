@@ -28,7 +28,9 @@ public class SubscriptionController : ControllerBase
             stripeStatus = sub?.StripeStatus,
             expirationDate = sub?.ExpirationDate,
             modules = sub?.Modules,
-            message = sub?.Message
+            message = sub?.Message,
+            maxCompanies = sub?.MaxCompanies,
+            companiesUsed = sub?.CompaniesUsed,
         });
     }
 
@@ -65,6 +67,7 @@ public class SubscriptionController : ControllerBase
             p.YearlyPrice,
             p.MaxUsers,
             p.MaxInvoicesPerMonth,
+            maxCompanies = p.MaxCompanies,
             Modules = p.Modules
         }));
     }

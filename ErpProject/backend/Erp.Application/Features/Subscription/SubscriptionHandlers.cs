@@ -14,22 +14,36 @@ public sealed class CurrentSubscriptionDto
     public DateTime? ExpirationDate { get; init; }
     public IReadOnlyList<string> Modules { get; init; } = Array.Empty<string>();
     public string? Message { get; init; }
+    public int MaxCompanies { get; init; }
+    public int CompaniesUsed { get; init; }
 }
 
 public class GetCurrentSubscriptionHandler : IRequestHandler<GetCurrentSubscriptionQuery, CurrentSubscriptionDto?>
 {
     private readonly IApplicationDbContext _ctx;
     private readonly ITenantContext _tenant;
+    private readonly IHttpContextCurrentUserAccessor _currentUser;
+    private readonly ICompanyMembershipLimitService _companyLimits;
 
-    public GetCurrentSubscriptionHandler(IApplicationDbContext ctx, ITenantContext tenant)
+    public GetCurrentSubscriptionHandler(
+        IApplicationDbContext ctx,
+        ITenantContext tenant,
+        IHttpContextCurrentUserAccessor currentUser,
+        ICompanyMembershipLimitService companyLimits)
     {
         _ctx = ctx;
         _tenant = tenant;
+        _currentUser = currentUser;
+        _companyLimits = companyLimits;
     }
 
     public async Task<CurrentSubscriptionDto?> Handle(GetCurrentSubscriptionQuery request, CancellationToken ct)
     {
         var tenantId = _tenant.TenantId ?? throw new InvalidOperationException("Tenant not resolved");
+
+        var (companiesUsed, maxCompanies) = _currentUser.UserId is Guid userId
+            ? await _companyLimits.GetUsageForUserAsync(userId, ct)
+            : (0, 1);
 
         var sub = await _ctx.Subscriptions.FirstOrDefaultAsync(s => s.CompanyId == tenantId, ct);
         if (sub == null)
@@ -38,7 +52,9 @@ public class GetCurrentSubscriptionHandler : IRequestHandler<GetCurrentSubscript
             {
                 Plan = "Free",
                 IsActive = false,
-                Message = "No active subscription."
+                Message = "No active subscription.",
+                CompaniesUsed = companiesUsed,
+                MaxCompanies = maxCompanies,
             };
         }
 
@@ -54,7 +70,9 @@ public class GetCurrentSubscriptionHandler : IRequestHandler<GetCurrentSubscript
             StripeStatus = sub.StripeStatus,
             ExpirationDate = sub.ExpirationDate,
             Modules = plan?.PlanModules.Where(m => m.IsIncluded).Select(m => m.ModuleName).ToList()
-                ?? new List<string>()
+                ?? new List<string>(),
+            CompaniesUsed = companiesUsed,
+            MaxCompanies = plan?.MaxCompanies > 0 ? plan.MaxCompanies : maxCompanies,
         };
     }
 }
@@ -69,6 +87,7 @@ public sealed record SubscriptionPlanDto(
     decimal YearlyPrice,
     int MaxUsers,
     int MaxInvoicesPerMonth,
+    int MaxCompanies,
     IReadOnlyList<string> Modules);
 
 public class GetSubscriptionPlansHandler : IRequestHandler<GetSubscriptionPlansQuery, IReadOnlyList<SubscriptionPlanDto>>
@@ -92,6 +111,7 @@ public class GetSubscriptionPlansHandler : IRequestHandler<GetSubscriptionPlansQ
                 p.YearlyPrice,
                 p.MaxUsers,
                 p.MaxInvoicesPerMonth,
+                p.MaxCompanies,
                 p.PlanModules.Where(m => m.IsIncluded).Select(m => m.ModuleName).ToList()))
             .ToListAsync(ct);
     }

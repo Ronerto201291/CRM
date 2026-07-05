@@ -3,8 +3,8 @@ import { useEffect, useState } from 'react';
 import PageContainer from '@/components/PageContainer';
 import EmptyState from '@/components/EmptyState';
 
-interface Plan { id: string; name: string; monthlyPrice: number; yearlyPrice: number; maxUsers: number; maxInvoicesPerMonth: number; }
-interface Subscription { id: string; planId: string; planName: string; status: string; stripeStatus?: string; currentPeriodStart?: string; currentPeriodEnd?: string; }
+interface Plan { id: string; name: string; monthlyPrice: number; yearlyPrice: number; maxUsers: number; maxInvoicesPerMonth: number; maxCompanies?: number; }
+interface Subscription { id: string; planId: string; planName: string; status: string; stripeStatus?: string; currentPeriodStart?: string; currentPeriodEnd?: string; maxCompanies?: number; companiesUsed?: number; }
 interface TenantModule { id: string; moduleName: string; isEnabled: boolean; }
 interface StripeInvoice { id: string; amount: number; currency: string; status: string; created: string; invoiceUrl?: string; }
 
@@ -114,6 +114,11 @@ export default function SubscriptionClient({
                                 <span>Inicio: {fmtDate(subscription.currentPeriodStart)}</span>
                                 <span>Vence: {fmtDate(subscription.currentPeriodEnd)}</span>
                             </div>
+                            {(subscription.maxCompanies ?? 0) > 0 && (
+                                <div style={{ marginTop: '10px', fontSize: '13px' }}>
+                                    Empresas: <strong>{subscription.companiesUsed ?? 0}</strong> / {subscription.maxCompanies === 9999 ? '∞' : subscription.maxCompanies}
+                                </div>
+                            )}
                         </div>
                         <span className={`badge ${subscription.status === 'active' ? 'badge-success' : 'badge-warning'}`} style={{ fontSize: '13px', padding: '4px 14px' }}>
                             {subscription.stripeStatus || subscription.status}
@@ -183,6 +188,7 @@ export default function SubscriptionClient({
                                 </div>
                                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
                                     Hasta {plan.maxUsers === 0 ? '∞' : plan.maxUsers} usuarios · {plan.maxInvoicesPerMonth === 0 ? '∞' : plan.maxInvoicesPerMonth} facturas/mes
+                                    {(plan.maxCompanies ?? 0) > 1 && <> · hasta {plan.maxCompanies} empresas</>}
                                 </div>
                                 <button className={`btn ${isCurrent ? 'btn-secondary' : 'btn-primary'}`} style={{ width: '100%' }}
                                     disabled={isCurrent || changing} onClick={() => changePlan(plan.id)}>

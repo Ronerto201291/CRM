@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Xml.Linq;
 using Erp.Application.Common.Interfaces;
+using Erp.Application.Common.Validation;
 using Erp.Modules.Payroll.Application.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -43,25 +44,51 @@ internal static class PayrollExportLineLoader
     }
 }
 
-internal record PayrollExportLine(
+public record PayrollExportLine(
     string TaxId, string FullName, string? SocialSecurityNumber,
     decimal CommonContingenciesBase, decimal EmployeeSocialSecurity,
     decimal EmployerSocialSecurity, decimal GrossSalary,
     decimal IrpfBase, decimal IrpfRate, decimal IrpfWithheld, decimal NetPay);
 
+internal static class PayrollExportCompanyLoader
+{
+    internal static async Task<(string TaxId, string Name, string Ccc)> LoadAsync(
+        IApplicationDbContext app, ITenantContext tenant, CancellationToken ct)
+    {
+        var companyId = tenant.TenantId ?? throw new InvalidOperationException("Tenant not resolved");
+        var company = await app.Companies.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == companyId, ct)
+            ?? throw new InvalidOperationException("Empresa no encontrada.");
+
+        PayrollRedExportValidator.ValidateCompany(company.TaxId, company.Name);
+        var ccc = PayrollRedExportValidator.ResolveEmployerCcc(company.TaxId);
+        return (company.TaxId, company.Name, ccc);
+    }
+}
+
 public class ExportTc1Handler : IRequestHandler<ExportTc1Query, PayrollFiscalExportResult>
 {
     private readonly IPayrollDbContext _ctx;
-    public ExportTc1Handler(IPayrollDbContext ctx) => _ctx = ctx;
+    private readonly IApplicationDbContext _app;
+    private readonly ITenantContext _tenant;
+
+    public ExportTc1Handler(IPayrollDbContext ctx, IApplicationDbContext app, ITenantContext tenant)
+    {
+        _ctx = ctx;
+        _app = app;
+        _tenant = tenant;
+    }
 
     public async Task<PayrollFiscalExportResult> Handle(ExportTc1Query request, CancellationToken ct)
     {
-        PayrollExportValidators.ValidateMonth(request.Month);
+        PayrollRedExportValidator.ValidatePeriod(request.Year, request.Month);
+        var company = await PayrollExportCompanyLoader.LoadAsync(_app, _tenant, ct);
         var lines = await PayrollExportLineLoader.LoadFinalLinesAsync(_ctx, request.Year, request.Month, ct);
 
         var sb = new StringBuilder();
-        sb.AppendLine("TC1_RESUMEN_COTIZACION;Documento orientativo para TGSS/asesoría");
+        sb.AppendLine("TC1_RESUMEN_COTIZACION;Documento orientativo para TGSS/asesoría — NO homologado SILTRA");
         sb.AppendLine($"Periodo;{request.Year}-{request.Month:D2}");
+        sb.AppendLine($"EmpresaNIF;{company.TaxId};CCC_orientativo;{company.Ccc}");
         sb.AppendLine("NIF;Nombre;NAF;BaseCC;CotizacionObrera;CotizacionEmpresa;Bruto");
         var es = CultureInfo.InvariantCulture;
         foreach (var l in lines)
@@ -86,16 +113,26 @@ public class ExportTc1Handler : IRequestHandler<ExportTc1Query, PayrollFiscalExp
 public class ExportTc2Handler : IRequestHandler<ExportTc2Query, PayrollFiscalExportResult>
 {
     private readonly IPayrollDbContext _ctx;
-    public ExportTc2Handler(IPayrollDbContext ctx) => _ctx = ctx;
+    private readonly IApplicationDbContext _app;
+    private readonly ITenantContext _tenant;
+
+    public ExportTc2Handler(IPayrollDbContext ctx, IApplicationDbContext app, ITenantContext tenant)
+    {
+        _ctx = ctx;
+        _app = app;
+        _tenant = tenant;
+    }
 
     public async Task<PayrollFiscalExportResult> Handle(ExportTc2Query request, CancellationToken ct)
     {
-        PayrollExportValidators.ValidateMonth(request.Month);
+        PayrollRedExportValidator.ValidatePeriod(request.Year, request.Month);
+        var company = await PayrollExportCompanyLoader.LoadAsync(_app, _tenant, ct);
         var lines = await PayrollExportLineLoader.LoadFinalLinesAsync(_ctx, request.Year, request.Month, ct);
 
         var sb = new StringBuilder();
-        sb.AppendLine("TC2_RETENCIONES_Y_LIQUIDACION;Documento orientativo");
+        sb.AppendLine("TC2_RETENCIONES_Y_LIQUIDACION;Documento orientativo — NO homologado TGSS");
         sb.AppendLine($"Periodo;{request.Year}-{request.Month:D2}");
+        sb.AppendLine($"EmpresaNIF;{company.TaxId};CCC_orientativo;{company.Ccc}");
         sb.AppendLine("NIF;Nombre;Bruto;BaseIRPF;TipoRetencion;IRPFRetenido;Liquido");
         var es = CultureInfo.InvariantCulture;
         foreach (var l in lines)
@@ -163,22 +200,25 @@ public class ExportRedHandler : IRequestHandler<ExportRedQuery, PayrollFiscalExp
 
     public async Task<PayrollFiscalExportResult> Handle(ExportRedQuery request, CancellationToken ct)
     {
-        PayrollExportValidators.ValidateMonth(request.Month);
-        var companyId = _tenant.TenantId ?? throw new InvalidOperationException("Tenant not resolved");
-        var company = await _app.Companies.AsNoTracking()
-            .FirstOrDefaultAsync(c => c.Id == companyId, ct)
-            ?? throw new InvalidOperationException("Empresa no encontrada.");
-
+        PayrollRedExportValidator.ValidatePeriod(request.Year, request.Month);
+        var company = await PayrollExportCompanyLoader.LoadAsync(_app, _tenant, ct);
         var lines = await PayrollExportLineLoader.LoadFinalLinesAsync(_ctx, request.Year, request.Month, ct);
+        PayrollRedExportValidator.ValidateWorkerLines(lines);
+
         var bytes = RedSiltraFileBuilder.Build(
-            company.TaxId, company.Name, request.Year, request.Month, lines);
+            company.Ccc, company.TaxId, company.Name, request.Year, request.Month, lines);
+
+        var cccNote = SpanishSocialSecurityNumberValidator.IsValidCcc(company.Ccc)
+            ? "CCC con dígito de control válido (módulo 97)."
+            : "CCC derivado orientativamente del CIF — contrastar con el CCC real de la TGSS.";
 
         return new PayrollFiscalExportResult(
             bytes,
-            "text/plain",
+            "text/plain; charset=iso-8859-1",
             $"RED_{request.Year}_{request.Month:D2}.txt",
-            "Fichero RED longitud fija 250: estructura orientativa SILTRA/TGSS. " +
-            "No homologado — validar con asesoría, SILTRA o RED oficial antes de remisión.");
+            "Fichero RED longitud fija 250 (ISO-8859-1): estructura orientativa inspirada en SILTRA. " +
+            "NO homologado TGSS — no sustituye XML SILTRA ni certificado digital. " +
+            $"{cccNote} Validar con asesoría antes de remisión.");
     }
 }
 

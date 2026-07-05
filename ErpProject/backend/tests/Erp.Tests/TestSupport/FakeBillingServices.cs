@@ -38,6 +38,10 @@ public sealed class FakeEmailService : IEmailService
 
     public Task SendAsync(string to, string subject, string htmlBody, CancellationToken ct = default)
         => Task.CompletedTask;
+
+    public Task SendWithAttachmentsAsync(
+        string to, string subject, string htmlBody, IReadOnlyList<EmailAttachment> attachments, CancellationToken ct = default)
+        => Task.CompletedTask;
 }
 
 public sealed class FakeQuotePdfService : IQuotePdfService

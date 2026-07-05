@@ -9,6 +9,19 @@ namespace Erp.Application.Common.Events;
 public interface IDomainEvent : INotification { }
 
 /// <summary>
+/// Fired when a TPV terminal registers a card payment against an invoice (ADR-0018 #41).
+/// → Billing: MarkPaidCommand (PaymentMethod = card).
+/// </summary>
+public class InvoiceCardPaymentRequestedEvent : IDomainEvent
+{
+    public Guid InvoiceId { get; set; }
+    public Guid CompanyId { get; set; }
+    public Guid PosTerminalId { get; set; }
+    public decimal Amount { get; set; }
+    public string? ExternalReference { get; set; }
+}
+
+/// <summary>
 /// Fired when a new Company is created (registro inicial o alta adicional
 /// multi-empresa, ver ADR-0002).
 /// → Accounting: siembra el plan contable PGC (ver SeedChartOfAccountsHandler) —

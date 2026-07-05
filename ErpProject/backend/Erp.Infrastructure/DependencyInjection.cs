@@ -50,6 +50,7 @@ public static class DependencyInjection
         // IAccountingDbContext, IExpensesDbContext) are now registered by each module's
         // own Infrastructure DI (AddBillingInfrastructure, AddCrmInfrastructure, etc.).
         services.AddScoped<IPlanLimitService, PlanLimitService>();
+        services.AddScoped<ICompanyMembershipLimitService, CompanyMembershipLimitService>();
         services.AddScoped<OutboxProcessorJob>();
         services.AddScoped<ITotpService, TotpService>();
         services.AddScoped<StripeService>();
