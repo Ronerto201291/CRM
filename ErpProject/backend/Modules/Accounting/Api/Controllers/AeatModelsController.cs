@@ -1,3 +1,4 @@
+using Erp.Application.Common.Attributes;
 using Erp.Modules.Accounting.Application.Features.Aeat;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -8,6 +9,7 @@ namespace Erp.Modules.Accounting.Api.Controllers;
 [ApiController]
 [Route("api/v1/accounting/aeat")]
 [Authorize]
+[RequiredModule("Accounting")]
 public class AeatModelsController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -15,10 +17,12 @@ public class AeatModelsController : ControllerBase
     public AeatModelsController(IMediator mediator) => _mediator = mediator;
 
     [HttpGet("models")]
+    [RequirePermission(Permissions.Vat.Read)]
     public async Task<IActionResult> ListModels(CancellationToken ct)
         => Ok(await _mediator.Send(new ListAeatModelsQuery(), ct));
 
     [HttpPost("modelo347")]
+    [RequirePermission(Permissions.Vat.Manage)]
     public async Task<IActionResult> CreateModelo347([FromBody] CreateModelo347Request dto, CancellationToken ct)
     {
         var year = dto.Year > 0 ? dto.Year : DateTime.UtcNow.Year;
@@ -27,6 +31,7 @@ public class AeatModelsController : ControllerBase
     }
 
     [HttpGet("modelo347/{year:int}")]
+    [RequirePermission(Permissions.Vat.Read)]
     public async Task<IActionResult> GetModelo347(int year, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetModelo347Query(year), ct);
@@ -42,6 +47,7 @@ public class AeatModelsController : ControllerBase
     }
 
     [HttpPost("modelo347/{id:guid}/export-txt")]
+    [RequirePermission(Permissions.Accounting.Export)]
     public async Task<IActionResult> ExportModelo347(Guid id, CancellationToken ct)
     {
         var result = await _mediator.Send(new ExportModelo347TxtCommand(id), ct);
@@ -49,6 +55,7 @@ public class AeatModelsController : ControllerBase
     }
 
     [HttpPost("modelo111-190")]
+    [RequirePermission(Permissions.Vat.Manage)]
     public async Task<IActionResult> CreateModelo111([FromBody] CreateModelo111Request dto, CancellationToken ct)
     {
         var year = dto.Year > 0 ? dto.Year : DateTime.UtcNow.Year;
@@ -58,6 +65,7 @@ public class AeatModelsController : ControllerBase
     }
 
     [HttpPost("modelo200")]
+    [RequirePermission(Permissions.Vat.Manage)]
     public async Task<IActionResult> CreateModelo200([FromBody] CreateModeloYearRequest dto, CancellationToken ct)
     {
         var year = dto.Year > 0 ? dto.Year : DateTime.UtcNow.Year;
@@ -66,6 +74,7 @@ public class AeatModelsController : ControllerBase
     }
 
     [HttpPost("modelo202")]
+    [RequirePermission(Permissions.Vat.Manage)]
     public async Task<IActionResult> CreateModelo202([FromBody] CreateModeloYearRequest dto, CancellationToken ct)
     {
         var year = dto.Year > 0 ? dto.Year : DateTime.UtcNow.Year;
@@ -74,6 +83,7 @@ public class AeatModelsController : ControllerBase
     }
 
     [HttpPost("{id:guid}/sign-and-submit")]
+    [RequirePermission(Permissions.Vat.Manage)]
     public async Task<IActionResult> SignAndSubmit(Guid id, CancellationToken ct)
     {
         var result = await _mediator.Send(new SignAndSubmitAeatModelCommand(id), ct);

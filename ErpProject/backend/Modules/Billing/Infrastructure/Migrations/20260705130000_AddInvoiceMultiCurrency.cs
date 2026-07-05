@@ -1,9 +1,13 @@
+using Erp.Modules.Billing.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace Erp.Modules.Billing.Infrastructure.Migrations;
 
+[DbContext(typeof(BillingDbContext))]
+[Migration("20260705130000_AddInvoiceMultiCurrency")]
 public partial class AddInvoiceMultiCurrency : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)

@@ -1,15 +1,24 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
+
+interface CostCenter {
+  id: string;
+  code: string;
+  name: string;
+  type: string;
+  totalCosts: number;
+}
+
 export default function CostCentersPage() {
-  const [centers, setCenters] = useState<any[]>([]);
+  const [centers, setCenters] = useState<CostCenter[]>([]);
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [type, setType] = useState("Department");
-  const fetchCenters = async () => {
+  const fetchCenters = useCallback(async () => {
     const res = await fetch(`/api/proxy/v1/accounting/cost-centers`);
     const data = await res.json();
     setCenters(data || []);
-  };
+  }, []);
   const create = async () => {
     await fetch(`/api/proxy/v1/accounting/cost-centers`, {
       method: 'POST',
@@ -20,7 +29,9 @@ export default function CostCentersPage() {
     setCode("");
     await fetchCenters();
   };
-  useEffect(() => { fetchCenters(); }, []);
+  useEffect(() => {
+    queueMicrotask(() => { void fetchCenters(); });
+  }, [fetchCenters]);
   return (
     <div>
       <h1 className="text-2xl font-bold mb-4">Cost Centers (Contabilidad Analítica)</h1>

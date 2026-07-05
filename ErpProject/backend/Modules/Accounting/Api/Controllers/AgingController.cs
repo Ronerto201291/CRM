@@ -1,3 +1,4 @@
+using Erp.Application.Common.Attributes;
 using Erp.Modules.Accounting.Application.Features.Aging;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -8,6 +9,8 @@ namespace Erp.Modules.Accounting.Api.Controllers;
 [ApiController]
 [Route("api/v1/accounting/aging")]
 [Authorize]
+[RequiredModule("Accounting")]
+[RequirePermission(Permissions.FinancialStatement.Read)]
 public class AgingController : ControllerBase
 {
     private readonly IMediator _mediator;

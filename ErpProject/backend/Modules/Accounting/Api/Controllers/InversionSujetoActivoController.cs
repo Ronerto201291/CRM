@@ -1,3 +1,4 @@
+using Erp.Application.Common.Attributes;
 using Erp.Modules.Accounting.Application.Features.Isp;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -8,6 +9,7 @@ namespace Erp.Modules.Accounting.Api.Controllers;
 [ApiController]
 [Route("api/v1/accounting/isp")]
 [Authorize]
+[RequiredModule("Accounting")]
 public class InversionSujetoActivoController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -15,10 +17,12 @@ public class InversionSujetoActivoController : ControllerBase
     public InversionSujetoActivoController(IMediator mediator) => _mediator = mediator;
 
     [HttpGet]
+    [RequirePermission(Permissions.Vat.Read)]
     public async Task<IActionResult> GetAll(CancellationToken ct)
         => Ok(await _mediator.Send(new GetIspOperationsQuery(), ct));
 
     [HttpPost]
+    [RequirePermission(Permissions.Vat.Manage)]
     public async Task<IActionResult> Create([FromBody] CreateIspRequest request, CancellationToken ct)
     {
         var result = await _mediator.Send(new CreateIspOperationCommand(
@@ -35,11 +39,12 @@ public class InversionSujetoActivoController : ControllerBase
             vatAmount = result.VatAmount,
             isReverseCharge = result.IsReverseCharge,
             status = result.Status,
-            message = "InversiÛn del sujeto pasivo registrada"
+            message = "Inversiùn del sujeto pasivo registrada"
         });
     }
 
     [HttpGet("{id:guid}")]
+    [RequirePermission(Permissions.Vat.Read)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetIspOperationQuery(id), ct);
@@ -59,6 +64,7 @@ public class InversionSujetoActivoController : ControllerBase
     }
 
     [HttpPost("{id:guid}/calculate-vat")]
+    [RequirePermission(Permissions.Vat.Manage)]
     public async Task<IActionResult> CalculateVAT(Guid id, [FromBody] CalculateIspVatRequest request, CancellationToken ct)
     {
         try

@@ -1,3 +1,4 @@
+using Erp.Application.Common.Attributes;
 using Erp.Modules.Accounting.Application.Features.IvaManagement;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -8,6 +9,7 @@ namespace Erp.Modules.Accounting.Api.Controllers;
 [ApiController]
 [Route("api/v1/accounting/iva")]
 [Authorize]
+[RequiredModule("Accounting")]
 public class IvaManagementController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -15,6 +17,7 @@ public class IvaManagementController : ControllerBase
     public IvaManagementController(IMediator mediator) => _mediator = mediator;
 
     [HttpGet("registro")]
+    [RequirePermission(Permissions.Vat.Read)]
     public async Task<IActionResult> GetIvaRegister(CancellationToken ct)
     {
         var summary = await _mediator.Send(new GetIvaRegisterSummaryQuery(), ct);
@@ -31,6 +34,7 @@ public class IvaManagementController : ControllerBase
     }
 
     [HttpGet("registro/purchase")]
+    [RequirePermission(Permissions.Vat.Read)]
     public async Task<IActionResult> GetPurchaseRegister(CancellationToken ct)
     {
         var detail = await _mediator.Send(new GetPurchaseIvaRegisterQuery(), ct);
@@ -44,6 +48,7 @@ public class IvaManagementController : ControllerBase
     }
 
     [HttpGet("registro/sales")]
+    [RequirePermission(Permissions.Vat.Read)]
     public async Task<IActionResult> GetSalesRegister(CancellationToken ct)
     {
         var detail = await _mediator.Send(new GetSalesIvaRegisterQuery(), ct);
@@ -57,14 +62,17 @@ public class IvaManagementController : ControllerBase
     }
 
     [HttpGet("registro/purchase/lines")]
+    [RequirePermission(Permissions.Vat.Read)]
     public async Task<IActionResult> GetPurchaseLines([FromQuery] int limit = 50, CancellationToken ct = default)
         => Ok(await _mediator.Send(new GetPurchaseIvaLinesQuery(limit), ct));
 
     [HttpGet("registro/sales/lines")]
+    [RequirePermission(Permissions.Vat.Read)]
     public async Task<IActionResult> GetSalesLines([FromQuery] int limit = 50, CancellationToken ct = default)
         => Ok(await _mediator.Send(new GetSalesIvaLinesQuery(limit), ct));
 
     [HttpPost("registro/export-riva")]
+    [RequirePermission(Permissions.Accounting.Export)]
     public async Task<IActionResult> ExportRiva([FromBody] ExportRivaRequest? dto, CancellationToken ct)
     {
         var result = await _mediator.Send(new ExportRivaCommand(dto?.Year, dto?.Month), ct);
@@ -81,6 +89,7 @@ public class IvaManagementController : ControllerBase
     }
 
     [HttpPost("sii")]
+    [RequirePermission(Permissions.Vat.Manage)]
     public async Task<IActionResult> CreateSiiDeclaration([FromBody] CreateSiiRequest dto, CancellationToken ct)
     {
         var year = dto.Year > 0 ? dto.Year : DateTime.UtcNow.Year;
@@ -98,6 +107,7 @@ public class IvaManagementController : ControllerBase
     }
 
     [HttpPost("sii/{id:guid}/submit")]
+    [RequirePermission(Permissions.Vat.Manage)]
     public async Task<IActionResult> SubmitSii(Guid id, CancellationToken ct)
     {
         var result = await _mediator.Send(new SubmitSiiDeclarationCommand(id), ct);
@@ -112,6 +122,7 @@ public class IvaManagementController : ControllerBase
     }
 
     [HttpGet("intra-eu")]
+    [RequirePermission(Permissions.Vat.Read)]
     public async Task<IActionResult> GetIntraEUOperations(CancellationToken ct)
     {
         var result = await _mediator.Send(new GetIntraEuOperationsQuery(), ct);

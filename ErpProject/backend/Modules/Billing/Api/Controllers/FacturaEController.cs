@@ -1,3 +1,4 @@
+using Erp.Application.Common.Attributes;
 using Erp.Modules.Billing.Application.Features.Billing.Queries;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -11,6 +12,7 @@ namespace Erp.Modules.Billing.Api.Controllers;
 [ApiController]
 [Route("api/v1/billing/facturae")]
 [Authorize]
+[RequiredModule("Billing")]
 public class FacturaEController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -18,6 +20,7 @@ public class FacturaEController : ControllerBase
     public FacturaEController(IMediator mediator) => _mediator = mediator;
 
     [HttpGet("{invoiceId:guid}")]
+    [RequirePermission(Permissions.FacturaE.Export)]
     public async Task<IActionResult> GenerateFacturaE(Guid invoiceId, CancellationToken ct)
     {
         try
@@ -30,6 +33,7 @@ public class FacturaEController : ControllerBase
     }
 
     [HttpGet("{invoiceId:guid}/signed")]
+    [RequirePermission(Permissions.FacturaE.Export)]
     public async Task<IActionResult> GenerateSignedFacturaE(Guid invoiceId, CancellationToken ct)
     {
         try
@@ -42,6 +46,7 @@ public class FacturaEController : ControllerBase
     }
 
     [HttpGet("{invoiceId:guid}/validate")]
+    [RequirePermission(Permissions.FacturaE.Read)]
     public async Task<IActionResult> ValidateFacturaE(Guid invoiceId, CancellationToken ct)
     {
         try
@@ -60,6 +65,7 @@ public class FacturaEController : ControllerBase
     }
 
     [HttpPost("{invoiceId:guid}/submit-face")]
+    [RequirePermission(Permissions.FacturaE.Manage)]
     public async Task<IActionResult> SubmitToFace(Guid invoiceId, CancellationToken ct)
     {
         try

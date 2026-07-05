@@ -1,10 +1,17 @@
 "use client";
 import React, { useState } from "react";
+
+interface ProrrataResult {
+  inlandRevenue: number;
+  exemptRevenue: number;
+  prorrataPercentage: number;
+}
+
 export default function ProrrataPage() {
   const [year, setYear] = useState(new Date().getFullYear());
   const [inlandRevenue, setInlandRevenue] = useState(100000);
   const [exemptRevenue, setExemptRevenue] = useState(20000);
-  const [prorrata, setProrrata] = useState<any>(null);
+  const [prorrata, setProrrata] = useState<ProrrataResult | null>(null);
   const calculate = async () => {
     const res = await fetch(`/api/proxy/v1/accounting/prorrata/calculate`, {
       method: 'POST',

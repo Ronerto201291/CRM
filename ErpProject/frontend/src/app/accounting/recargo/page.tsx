@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import PageContainer from "@/components/PageContainer";
 
 interface RecargoItem {
@@ -24,7 +24,7 @@ export default function RecargoPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchList = async () => {
+  const fetchList = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -38,9 +38,11 @@ export default function RecargoPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [year, quarter]);
 
-  useEffect(() => { fetchList(); }, []);
+  useEffect(() => {
+    queueMicrotask(() => { void fetchList(); });
+  }, [fetchList]);
 
   const eur = (n: number) => n.toLocaleString("es-ES", { style: "currency", currency: "EUR" });
 

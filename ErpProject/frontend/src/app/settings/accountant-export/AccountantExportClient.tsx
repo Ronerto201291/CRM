@@ -19,7 +19,9 @@ export default function AccountantExportClient() {
         }
     }, []);
 
-    useEffect(() => { void load(); }, [load]);
+    useEffect(() => {
+        queueMicrotask(() => { void load(); });
+    }, [load]);
 
     const save = async () => {
         setSaving(true);

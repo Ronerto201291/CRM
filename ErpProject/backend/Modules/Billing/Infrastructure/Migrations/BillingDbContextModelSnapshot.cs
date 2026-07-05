@@ -72,11 +72,20 @@ namespace Erp.Modules.Billing.Infrastructure.Migrations
                     b.Property<string>("CompanyNif")
                         .HasColumnType("text");
 
+                    b.Property<string>("CurrencyCode")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character(3)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("DueDate")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("ExchangeRateToEur")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
 
                     b.Property<int>("FiscalYear")
                         .HasColumnType("integer");
@@ -156,6 +165,9 @@ namespace Erp.Modules.Billing.Infrastructure.Migrations
                         .HasColumnType("numeric");
 
                     b.Property<decimal>("Total")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("TotalEur")
                         .HasColumnType("numeric");
 
                     b.Property<DateTime?>("UpdatedAt")

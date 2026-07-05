@@ -1,3 +1,4 @@
+using Erp.Application.Common.Attributes;
 using Erp.Modules.Accounting.Application.Features.FinancialStatements;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -8,6 +9,8 @@ namespace Erp.Modules.Accounting.Api.Controllers;
 [ApiController]
 [Route("api/v1/accounting/financial-statements")]
 [Authorize]
+[RequiredModule("Accounting")]
+[RequirePermission(Permissions.FinancialStatement.Read)]
 public class FinancialStatementsController : ControllerBase
 {
     private readonly IMediator _mediator;
