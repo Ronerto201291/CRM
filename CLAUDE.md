@@ -37,6 +37,8 @@ explícitamente para no asumir que todo funciona.
 | API pública y API Keys | `ErpProject/docs/adr/0016-api-publica-keys.md` |
 | Audit Logs | `ErpProject/docs/adr/0017-audit-logs.md` |
 | Calidad arquitectónica (SOLID, Clean Architecture, CQRS, duplicación) | `ErpProject/docs/adr/0018-calidad-arquitectura.md` |
+| Roadmap producto (#38–#42f) | `ErpProject/docs/adr/0019-producto-roadmap.md` |
+| Docker Compose local vs producción | `ErpProject/docs/adr/0020-docker-local-produccion.md` |
 
 Si un cambio modifica la estructura descrita en un ADR (nuevo endpoint,
 entidad, integración), actualiza ese ADR en el mismo cambio.

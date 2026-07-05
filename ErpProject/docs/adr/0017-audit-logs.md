@@ -8,9 +8,12 @@ El README describe un `AuditLog` inmutable con `OldValues`/`NewValues`
 en JSONB y hash de integridad, obligatorio por la Ley 11/2021 Antifraude.
 La entidad y su lectura vía API existen tal cual. **La escritura automática
 está conectada** desde ADR-0018 #31: `AuditSaveChangesInterceptor` en
-`ErpDbContext` y en los nueve DbContext de módulo. Algunos handlers fiscales
-(Billing, Expenses) además escriben entradas manuales con formato/hash
-específico en puntos críticos.
+`ErpDbContext` y en 8 de los 9 DbContext de módulo — **`CrmDbContext` es la
+excepción** (hallazgo de la contra-auditoría jul 2026, ADR-0018 ítem 71):
+altas/bajas/cambios de `Client`/`Lead`/`Supplier` no dejan `AuditLog`, pese a
+ser el módulo con más volumen de escritura de datos personales (RGPD).
+Algunos handlers fiscales (Billing, Expenses) además escriben entradas
+manuales con formato/hash específico en puntos críticos.
 
 ## Decisión
 
@@ -38,8 +41,13 @@ entidades de sistema como el propio `AuditLog`), serializa valores
 anterior/nuevo a JSON y calcula hash SHA-256. Registrado en:
 
 - `ErpDbContext` (`Erp.Infrastructure/DependencyInjection.cs`)
-- Cada `*DbContext` de módulo (p. ej. `AddAccountingInfrastructure`,
-  `AddBillingInfrastructure`, … — nueve módulos)
+- 8 de los 9 `*DbContext` de módulo (`AddAccountingInfrastructure`,
+  `AddBillingInfrastructure`, `AddExpensesInfrastructure`,
+  `AddPurchasingInfrastructure`, `AddSalesInfrastructure`,
+  `AddPayrollInfrastructure`, `AddTreasuryInfrastructure`,
+  `AddInventoryInfrastructure`) — **`AddCrmInfrastructure` no llama a
+  `.AddInterceptors(...)` al registrar `CrmDbContext`**, corrección
+  pendiente (ADR-0018 ítem 71)
 
 La clase estática `AuditInterceptor.ProcessAuditEntries` es código legado
 no registrado; no confundir con el interceptor activo.
@@ -88,7 +96,8 @@ Bloqueo de factura (caso fiscal con doble trazabilidad):
 ## Evaluación de calidad arquitectónica
 > Metodología en `ADR-0018`.
 
-- **Transversalidad:** ✅ interceptor en core + 9 módulos (#31).
+- **Transversalidad:** ✅ interceptor en core + 8 de 9 módulos (#31);
+  **pendiente**: `CrmDbContext` (ver arriba).
 - **Integridad:** hash SHA-256 en cada entrada del interceptor.
 - **Pendiente:** vocabulario de `Entity`/`Action` no está centralizado en
   enumeración; posible inconsistencia entre interceptor y entradas manuales.

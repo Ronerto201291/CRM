@@ -30,9 +30,16 @@ demás.
 Tres entidades en `backend/Erp.Domain/Entities/Licensing/`:
 
 - `Plan` (`Name`, `Description`, `MonthlyPrice`, `YearlyPrice`,
-  `MaxUsers`, `MaxInvoicesPerMonth`, `IsActive`, `SortOrder`) — catálogo
-  de planes SaaS (Free/Starter/Professional/Enterprise, según el
-  comentario del entity).
+  `MaxUsers`, `MaxInvoicesPerMonth`, `IsActive`, `SortOrder`,
+  `MaxCompanies` — añadido jul 2026, sección ausente hasta esta
+  actualización, ver ADR-0002 para el flujo completo de gestoría
+  multi-empresa) — catálogo de planes SaaS (Free/Starter/Professional/
+  Enterprise/**Gestoría**, este último con `MaxCompanies=15`, sembrado por
+  migración). `SubscriptionController` expone `companiesUsed`/`maxCompanies`
+  en la respuesta de estado actual, resueltos por
+  `ICompanyMembershipLimitService` (`Erp.Infrastructure/Services/
+  CompanyMembershipLimitService.cs`) contando membresías reales en
+  `UserCompany`, no un valor fijo.
 - `PlanModule` (`PlanId`, `ModuleName`, `IsIncluded`) — qué módulos de
   negocio incluye cada plan (p. ej. `"Inventory"`, `"OCR"`, `"PublicApi"`).
 - `Subscription` (`CompanyId`, `PlanName`, `ExpirationDate`,

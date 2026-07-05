@@ -124,6 +124,22 @@ pageSize }`) con header `X-Total-Count`; parámetros `page` (default 1) y
   firmar en descarga estándar.
 - **PDF**: `GET /api/invoices/{id}/pdf` (`IInvoicePdfService`) y envío por
   email (`POST /api/invoices/{id}/send`), ambos exigen `IsLocked`.
+- **Multi-moneda (ADR-0018 #38, añadido jul 2026 — sección ausente hasta esta
+  actualización)**: `Invoice.CurrencyCode`/`ExchangeRateToEur`/`TotalEur`
+  permiten facturar en una divisa distinta del euro. `CreateInvoiceHandler`
+  resuelve el tipo de cambio real vía `IExchangeRateLookup` (interfaz en
+  `Erp.Application.Common.Interfaces`, implementada por
+  `ExchangeRateLookupAdapter` en Treasury — no duplica lógica, delega en el
+  `IExchangeRateService`/`ExchangeRateService` ya existente de Treasury) y
+  guarda tanto el importe original como su conversión a EUR. Al bloquear la
+  factura, `InvoiceApprovedEvent` propaga los importes ya convertidos a EUR
+  (`ToEur()`), así que el asiento contable que genera Accounting nunca se
+  descuadra por divisa extranjera; `MarkPaidHandler` publica
+  `PaymentReceivedEvent.Amount = TotalEur` cuando la factura no es en EUR.
+  Selector de divisa real en `BillingClient.tsx` (recalcula el equivalente
+  EUR en el propio formulario antes de enviar, aunque el backend vuelve a
+  calcular la conversión de forma independiente — el frontend no puede
+  falsear el tipo de cambio).
 
 **Nota sobre entidades no conectadas**: `Domain/Entities/FacturaE.cs`
 (`FacturaEDocument`, `VerifactuDeclaration`, `FacturaEGraphic`) y
@@ -254,7 +270,14 @@ Creación y bloqueo de una factura, con propagación a Accounting:
   `Quantity`/`UnitPrice` pensado para integración de stock (el DTO existe en
   `DomainEvents.cs` con comentario explícito "Inventory integration"),
   aunque el consumo de ese campo debe verificarse en el propio módulo
-  Inventory (ADR-0008), no en Billing.
+  Inventory (ADR-0008), no en Billing. **Cuidado con doble descuento**: si la
+  factura procede de Sales (`CustomerInvoice`→`CreateInvoiceCommand`, ver
+  ADR-0011), el albarán ya descontó el mismo stock al entregarse — bloquear
+  la factura lo descuenta una segunda vez, sin protección cruzada entre
+  `ReferenceType="DeliveryNote"` y `ReferenceType="Invoice"` (bug real
+  documentado en ADR-0018 ítem 66).
+- **Treasury** (ADR-0012): fuente real del tipo de cambio para el
+  multi-moneda de arriba, vía `ExchangeRateLookupAdapter` → `IExchangeRateService`.
 
 ## Buenas prácticas aplicables
 - Nunca mutar una factura con `IsLocked = true` fuera de los flujos ya

@@ -32,8 +32,7 @@ Migraciones: `InitialCreate`, `Phase4TreasuryFinancingGroups` y
 **Arqueo de caja (`CashSession`, ADR-0018 #42b):** apertura
 (`OpenCashSessionCommand`, importe inicial, rechaza si ya hay una caja
 abierta) y cierre (`CloseCashSessionCommand`, importe contado) vía
-`CashSessionsController` (`api/treasury/cash-sessions`, seis controladores en
-total). El importe esperado al cerrar se calcula reutilizando
+`CashSessionsController` (`api/treasury/cash-sessions`). El importe esperado al cerrar se calcula reutilizando
 `IBankReconciliationLedgerQuery` (el mismo puerto compartido que ya usa
 `BankReconciliationService`, sin inyectar `IAccountingDbContext` de nuevo)
 sobre los movimientos de la cuenta "570" desde la apertura. Si hay
@@ -41,7 +40,14 @@ diferencia, se publica `CashSessionClosedEvent` — Treasury no crea el
 asiento contable, lo hace Accounting (`PostCashDifferenceHandler`, ver
 ADR-0006).
 
-Seis controladores en `Api/Controllers/`:
+**Corrección de recuento (contra-auditoría jul 2026):** esta ADR contaba
+seis controllers (`TreasuryController`, `CurrenciesController`,
+`FinancingController`, `GuaranteesController`, `ConsolidationController`,
+`CashSessionsController`) — hoy hay un séptimo, `PosTerminalsController`
+(ver más abajo), no documentado hasta ahora en este ADR pese a existir con
+handlers y persistencia reales.
+
+Siete controladores en `Api/Controllers/`:
 - **`TreasuryController`** (`api/treasury`) — el núcleo operativo: cuentas
   bancarias (`bank-accounts`), movimientos paginados (`page`/`pageSize`,
   `X-Total-Count`), importación de extracto CSV (`POST
@@ -80,6 +86,17 @@ Seis controladores en `Api/Controllers/`:
   el grupo exista pero solo devuelve un estado `"Consolidated"` con timestamp,
   sin generar aún estados financieros reales — apunta a lógica de
   consolidación pendiente de completar.
+- **`PosTerminalsController`** (`api/treasury/pos-terminals`, añadido jul
+  2026 — sección ausente hasta esta actualización) — CRUD de terminales
+  TPV y `POST {id}/payments` para registrar un cobro con tarjeta; despacha
+  vía `IMediator` a `PosTerminalHandlers.cs`, que persiste `PosTerminal`/
+  `PosPayment` reales y publica `InvoiceCardPaymentRequestedEvent`.
+  **El backend es real, pero no tiene ningún frontend**: ningún archivo bajo
+  `frontend/src/app/treasury/` lo referencia (verificado por grep de
+  "pos-terminal"/"PosTerminal"/"TPV" — la única mención de "TPV" en el
+  frontend es un placeholder de texto no funcional en `TreasuryClient.tsx`).
+  No dar por hecho el ítem #41 del roadmap producto (ADR-0019) solo porque
+  este controller exista — ver ADR-0018 ítem 72.
 
 Todos los controladores son `[Authorize]` y resuelven `CompanyId` vía
 `ITenantContext.TenantId`, filtrando explícitamente cada consulta EF Core por
@@ -124,6 +141,21 @@ independientes sin relación de clave foránea fuerte con el resto del módulo,
 solo `CompanyId`. `ConsolidationGroup` (1) → (N) `SubsidiaryCompany`, y
 agrega `ConsolidatedFinancialStatement` e `IntercompanyTransaction` por
 grupo.
+
+**Open Banking / PSD2 (ADR-0018 #28, añadido jul 2026 — sección ausente
+hasta esta actualización):** además de la importación manual de CSV,
+`POST bank-accounts/{id}/sync-open-banking` despacha `SyncOpenBankingHandler`
+vía `IMediator`, que delega en `IOpenBankingProvider` (Strategy real, no
+duplicado): `ConfigurableOpenBankingProvider` hace llamadas HTTP reales
+(OAuth `POST token/new/` + `GET accounts/{id}/transactions/`, formato
+GoCardless Bank Account Data); si `OpenBanking:Provider` no está configurado
+en `appsettings`, el registro DI cae en `"Mock"` → `MockOpenBankingProvider`
+(fixture con transacciones fijas) — de fábrica el sistema corre con datos
+simulados hasta que alguien configure credenciales reales de un agregador.
+Documentado con honestidad en `docs/open-banking-psd2.md` (la tabla
+Mock/Stub/GoCardless de ese documento coincide con el código, no exagera).
+Ver ADR-0018 para el detalle de bloqueo externo (contrato con agregador,
+consentimiento PSD2).
 
 ### Flujo end-to-end representativo
 Importación de extracto bancario → conciliación automática contra

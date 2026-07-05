@@ -1,7 +1,7 @@
 # ADR-0019: Roadmap producto (#38–#42f)
 
 ## Estado
-Aceptado — **jul 2026**: ítems #38, #41 (parcial), #42a (fase 4), #42e implementados en código; resto documentado.
+Aceptado — **jul 2026**: ítems #38, #42a (fase 4), #42e implementados en código; #41 tiene backend real pero cero frontend (ver tabla, corrección contra-auditoría jul 2026); resto documentado.
 
 ## Contexto
 ADR-0018 ítems 38–42f describen capacidades de producto. Este ADR centraliza el diseño y el endpoint `GET /api/platform/product-roadmap`.
@@ -19,7 +19,7 @@ ADR-0018 ítems 38–42f describen capacidades de producto. Este ADR centraliza 
 | #38 | Multi-moneda Billing↔Treasury | ✅ Implementado | FacturaE/XML siempre EUR; homologación multi-divisa AEAT |
 | #39 | Portal autoservicio cliente | Parcial (#39 portal factura) | Auth externa + UX |
 | #40 | IA / anomalías | OCR Expenses real; IA no | Proveedor + coste |
-| #41 | TPV físico | ✅ Parcial | `PosTerminal`, cobro card; homologación pasarela/hardware |
+| #41 | TPV físico | 🟡 Backend real, sin frontend (contra-auditoría jul 2026) | `PosTerminal`/`PosTerminalsController` persisten pagos reales, pero ningún archivo de `frontend/src/app/treasury` lo usa — no es solo un bloqueo de homologación pasarela/hardware, es que hoy nadie puede usarlo desde la UI. Ver ADR-0012 y ADR-0018 ítem 72 |
 | #42 | Notificaciones proactivas | Motor reglas parcial | Canal email/push |
 | #42a | Gestoría multi-empresa | ✅ Fase 1+4 | Fase 5 facturación Stripe consolidada |
 | #42b | Conciliación TPV/Bizum/caja | ✅ | — |

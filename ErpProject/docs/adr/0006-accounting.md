@@ -92,8 +92,11 @@ Los 16 controladores de `Api/Controllers/` se agrupan así:
 
 **IVA, modelos AEAT y fiscalidad especial:**
 Los controllers mock (`AeatModelsController`, `IvaManagementController`,
-`InversionSujetoActivoController`, `AgingController`) fueron **eliminados**
-(ADR-0018 #3c). Modelo 303/347 reales vía `Modelo303Reader`/`Modelo347Reader`
+`InversionSujetoActivoController`, `AgingController`) fueron **reescritos con
+MediatR real** (ADR-0018 #3c; corrección de wording jul 2026 — los archivos de
+controller no se eliminaron, se reemplazó la lógica mock que tenían dentro,
+y siguen recibiendo cambios: ver commit de permisos jul 2026 más abajo).
+Modelo 303/347 reales vía `Modelo303Reader`/`Modelo347Reader`
 y rutas de export (`#24`/`#25`); estados financieros vía `ReportsController`
 (PyG/balance) y `FinancialStatementsController` (EFE/patrimonio, `#26`).
 `ViesController` (`api/v1/accounting/vies`) despacha `ValidateViesCommand` vía
@@ -104,9 +107,14 @@ arquitectónica).
 `GetRecargosQuery`/`GetRecargoByIdQuery`/`CreateRecargoCommand`/
 `GenerateRecargoModelo303Command` vía `IMediator` (controller delgado, ver
 Evaluación de calidad arquitectónica); `GetAll`/`GetById`/`modelo303` consultan
-`IBillingDbContext.Invoices` reales filtrando por `SurchargeRate > 0`, mientras
-que `Create` sigue siendo un stub sin persistencia (igual que antes de la
-migración a CQRS).
+`IBillingDbContext.Invoices` reales filtrando por `SurchargeRate > 0`.
+**Corregido (esta fila estaba desactualizada — contra-auditoría jul 2026):**
+`Create` ya no es un stub; `RecargoHandlers.cs` persiste de verdad
+(`_accounting.RecargoDEquivalencias.Add(entity); await SaveChangesAsync()`,
+commit `602affa "feat(accounting): RecargoController MediatR + real Create
+persistence"`) — la corrección se hizo pero no se actualizó este párrafo en
+el mismo cambio, exactamente el tipo de desfase que la regla de "no cerrar
+sin actualizar el ADR" de `CLAUDE.md` busca evitar.
 `VatController.CalculateVat` y `ProrrataController.CalculateProrrata` dejaron
 de ser mock (ver Evaluación de calidad arquitectónica más abajo); `VatController.declare/modelo330`
 sigue siendo un stub. Validación VIES real disponible en dos rutas equivalentes:
@@ -121,6 +129,23 @@ y `ReportsController` (`diario`, `mayor`, `balance`, `pyg`) calculan desde
 (DSO ponderado por días desde emisión) y pagos desde `IExpensesDbContext.ExpenseDocuments`
 aprobados (DPO). La entidad `AgingReport` en BBDD queda para snapshots futuros;
 el informe en vivo no persiste en cada consulta.
+
+**Export periódico para gestoría (ADR-0018 #42e, añadido jul 2026 — sección
+ausente hasta esta actualización):** `AccountantExportController` despacha
+`ExportAccountantPackageCommand` vía `IMediator` → `AccountantExportHandlers.cs`
+genera un ZIP real con el libro de IVA (emitidas/recibidas) en CSV + un
+`LEEME.txt`. `AccountantExportJob` (Hangfire, cron mensual día 3, registrado
+en `Modules/Accounting/Infrastructure/DependencyInjection.cs` e invocado desde
+`Program.cs` — no repite el bug histórico de job huérfano sin registrar de
+`RuleEvaluatorJob`, ver ADR-0015) envía el ZIP por email real vía
+`EmailService`/MailKit a `Company.AccountantEmail` según
+`Company.AccountantExportFrequency`. Frontend conectado de verdad:
+`settings/accountant-export/AccountantExportClient.tsx` hace fetch real a
+`/api/proxy/accountant-export/{settings,export,send}`. **Alcance actual
+menor que la promesa original del roadmap**: el ZIP no incluye PDFs de
+facturas ni los asientos contables del período, solo los libros de IVA —
+pendiente decidir si se amplía el contenido o se recorta la promesa de
+ADR-0019 #42e al alcance real.
 
 ### Frontend
 `frontend/src/app/accounting/` contiene subrutas para cada área: `aeat`,
@@ -209,9 +234,10 @@ en `AccountingController` → `GetAgingReportQuery` + `IAgingReportReader`
 (Billing/Expenses); frontend `aging/page.tsx` conectado vía `serverFetch`.
 
 **Pendiente (sin cerrar en backlog):** `IAccountingDbContext` expone 29 DbSets
-(ISP — `GetFiscalPeriodsHandler` solo usa `FiscalPeriods`). `RecargoController.Create`
-sigue siendo stub sin persistencia. `VatController.DeclareModelo330` sigue sin
-implementar. OCP: tasas IVA en `Dictionary`/`switch` (`CalculateVatCommand`).
+(ISP — `GetFiscalPeriodsHandler` solo usa `FiscalPeriods`). `VatController.DeclareModelo330`
+sigue sin implementar. OCP: tasas IVA en `Dictionary`/`switch` (`CalculateVatCommand`).
+(`RecargoController.Create` ya no está pendiente — ver corrección más arriba,
+persiste de verdad desde el commit `602affa`.)
 
 **Corregido (backlog #4):** `AccountingExportController` (~350 líneas, 16 rutas)
 delega todas las exportaciones en `IMediator` + exporters en Infrastructure;
@@ -267,8 +293,8 @@ usado por `TaxController`). El frontend
 ## Consecuencias
 - La madurez del módulo es heterogénea: cierre, presupuestos, activos fijos,
   provisiones, exportación fiscal, modelos 303/347 y **aging DSO/DPO** están
-  sobre datos reales; quedan huecos puntuales (`RecargoController.Create`,
-  `DeclareModelo330`, ISP sin controller dedicado).
+  sobre datos reales; queda un hueco puntual (`VatController.DeclareModelo330`,
+  ISP sin controller dedicado).
 - **Corregido (ADR-0018 #14):** las entidades núcleo (`Account`,
   `JournalEntry`, `FiscalPeriod`, etc.) viven en
   `Modules/Accounting/Domain/Entities/`, no en `Erp.Domain`.

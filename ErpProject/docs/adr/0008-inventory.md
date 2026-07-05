@@ -190,7 +190,19 @@ Entrada de stock al aprobar un gasto de compra (Expenses → Inventory):
 - **Sales:** ✅ Corregido (ADR-0018 #21) — `CreateDeliveryNoteHandler`
   publica `DeliveryNoteCreatedEvent`; `DeliveryNoteInventoryHandler`
   decrementa stock. Además persiste el camino vía `InvoiceApprovedEvent`
-  (Billing) y `ExpenseApprovedEvent` (Expenses).
+  (Billing) y `ExpenseApprovedEvent` (Expenses). **Bug real encontrado
+  (contra-auditoría jul 2026, ADR-0018 ítem 66):** en el ciclo de venta
+  completo (`SalesOrder`→`DeliveryNote`→`CustomerInvoice`→bloqueo en
+  Billing), tanto `DeliveryNoteInventoryHandler` como
+  `InvoiceApprovedInventoryHandler` descuentan el mismo `Stock` para los
+  mismos productos/cantidades — cada uno solo comprueba idempotencia
+  dentro de su propio `ReferenceType` (`"DeliveryNote"` vs `"Invoice"`),
+  sin ninguna protección cruzada entre ambos. Pendiente de corregir: o bien
+  el flujo Sales no debería disparar `InvoiceApprovedEvent` con líneas de
+  producto cuando la factura ya viene de un albarán, o
+  `InvoiceApprovedInventoryHandler` debe comprobar si ya existe un
+  `StockMovement` de tipo `"DeliveryNote"` para el mismo pedido antes de
+  descontar de nuevo.
 - **Multi-tenancy y arquitectura de módulos**: Inventory sigue el patrón
   común de ADR-0001 (`ModuleDbContextBase`, esquema PostgreSQL propio
   `inventory`, filtros `HasQueryFilter` por `CompanyId`, migraciones

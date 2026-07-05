@@ -31,23 +31,23 @@ varios módulos tienen hallazgos así (ver tabla).
 
 | ADR | Módulo / pieza | Notas relevantes |
 |---|---|---|
-| [0001](adr/0001-arquitectura-general.md) | Arquitectura general | Modular monolith + Clean Architecture, CQRS/MediatR, patrón Outbox. Sin tests automatizados en todo el repo. |
+| [0001](adr/0001-arquitectura-general.md) | Arquitectura general | Modular monolith + Clean Architecture, CQRS/MediatR, patrón Outbox. ~878 tests (backend + frontend + E2E); queda una violación de dirección de dependencias sin cerrar (`Erp.Infrastructure`→`Billing.Application`, ver ADR-0018 ítem 13) |
 | [0002](adr/0002-multitenancy-auth.md) | Multi-tenancy y autenticación | JWT+refresh, 2FA, RBAC/ABAC, `CompanyId` como aislamiento de tenant |
 | [0003](adr/0003-despliegue-infraestructura.md) | Despliegue e infraestructura | Health-check post-deploy roto (puerto equivocado), TLS desactivado con HSTS activo, Postgres expuesto a internet — ver ADR-0018 |
 | [0004](adr/0004-crm.md) | CRM | Clients, Contacts, Leads, Suppliers, Notes, Alerts |
 | [0005](adr/0005-billing.md) | Billing (Facturación) | Invoices, Quotes, FacturaE, hash-chain, normativa antifraude |
-| [0006](adr/0006-accounting.md) | Accounting (Contabilidad) | Varios controllers (AEAT, VAT, VIES, Prorrata...) devuelven datos mock, sin persistencia real |
+| [0006](adr/0006-accounting.md) | Accounting (Contabilidad) | Controllers antes mock (AEAT, VAT, VIES, Prorrata...) reescritos con MediatR real; export periódico para gestoría (ZIP libro IVA); queda `VatController.DeclareModelo330` sin implementar |
 | [0007](adr/0007-expenses.md) | Expenses | Captura OCR (Tesseract) de tickets vía QR público |
-| [0008](adr/0008-inventory.md) | Inventory | Productos, Stock, Lotes/Series; movimientos de stock solo desde Billing y Expenses |
-| [0009](adr/0009-payroll.md) | Payroll (Nóminas) | Sin capa CQRS/MediatR, a diferencia del resto; frontend marcado "Fase 0" |
-| [0010](adr/0010-purchasing.md) | Purchasing | Three-way match; sin integración real con Inventory ni Accounting |
-| [0011](adr/0011-sales.md) | Sales | Pedidos/Entregas/Facturas de cliente; sin integración real con Inventory ni Billing |
-| [0012](adr/0012-treasury.md) | Treasury | Conciliación bancaria retrospectiva contra asientos de Accounting |
+| [0008](adr/0008-inventory.md) | Inventory | Productos, Stock, Lotes/Series; movimientos de stock reales desde Billing, Expenses, Sales y Purchasing — **bug real**: doble descuento de stock en el ciclo completo de venta (ver ADR-0018 ítem 66) |
+| [0009](adr/0009-payroll.md) | Payroll (Nóminas) | CQRS/MediatR completo (`PayrollController` solo `IMediator`); frontend rotulado "Fase 0" a propósito (alcance inicial deliberado, no desconexión); export RED/SILTRA orientativo, no homologado TGSS |
+| [0010](adr/0010-purchasing.md) | Purchasing | Flujo de aprobación de pedidos real; integración real con Inventory; **sin integración con Accounting**; **bug crítico**: los formularios de recepción/factura de proveedor no pueden enviarse desde la UI real (faltan campos obligatorios) |
+| [0011](adr/0011-sales.md) | Sales | Integración real con CRM, Inventory y Billing (reutiliza el pipeline fiscal real, no duplica facturación); **bug real**: doble descuento de stock compartido con Inventory (ver ADR-0008) |
+| [0012](adr/0012-treasury.md) | Treasury | Conciliación bancaria retrospectiva contra asientos de Accounting; Open Banking real (GoCardless) con fallback a Mock; TPV físico con backend real pero sin frontend |
 | [0013](adr/0013-fiscal-sii-verifactu.md) | Fiscal — SII y VeriFactu | Cumplimiento normativo español, cruza con Billing y Accounting |
-| [0014](adr/0014-suscripciones-licencias.md) | Suscripciones y Licencias | Billing del propio SaaS (Stripe), distinto de ADR-0005 |
-| [0015](adr/0015-automatizacion.md) | Automatización | Motor de reglas no funcional: no persiste, ni frontend ni job están conectados |
-| [0016](adr/0016-api-publica-keys.md) | API Pública y API Keys | Dos sistemas de API Key en paralelo y desconectados |
-| [0017](adr/0017-audit-logs.md) | Audit Logs | El interceptor que debería auditar cambios nunca se invoca |
+| [0014](adr/0014-suscripciones-licencias.md) | Suscripciones y Licencias | Billing del propio SaaS (Stripe), distinto de ADR-0005; plan Gestoría con límite de empresas (`MaxCompanies`) |
+| [0015](adr/0015-automatizacion.md) | Automatización | Motor de reglas funcional: persiste reglas reales, `RuleEvaluatorJob` diario + evaluación en tiempo real conectados |
+| [0016](adr/0016-api-publica-keys.md) | API Pública y API Keys | Sistema unificado de API Keys con rate limiting; el sistema Redis huérfano en paralelo ya se eliminó |
+| [0017](adr/0017-audit-logs.md) | Audit Logs | Interceptor de auditoría conectado en 8 de 9 módulos — **hueco real**: `CrmDbContext` no lo tiene registrado (ver ADR-0018 ítem 71) |
 | [0018](adr/0018-calidad-arquitectura.md) | Calidad arquitectónica (transversal) | Backlog 64 ítems; techo accionable ~100%; ver sección Cierre backlog |
 | [0019](adr/0019-producto-roadmap.md) | Roadmap producto (#38–#42f) | Diseño + metadatos API; requiere OK producto para implementar |
 | [0020](adr/0020-docker-local-produccion.md) | Docker Compose local vs producción | Comandos, URLs, migraciones, seed, `.env`, troubleshooting — complementa ADR-0003 |

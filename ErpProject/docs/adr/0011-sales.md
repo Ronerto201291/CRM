@@ -139,6 +139,13 @@ autocontenido solo en `SalesDbContext`.
 ## Consecuencias
 - Las entregas generan movimiento de stock (#21) y la facturación pasa por
   Billing (#22) — el flujo order-to-cash ya no es un silo aislado.
+- **Bug real (contra-auditoría jul 2026, ADR-0018 ítem 66):** en el ciclo
+  completo (albarán → factura de cliente → bloqueo en Billing), el stock se
+  descuenta **dos veces** para los mismos productos — una al crear el
+  `DeliveryNote` (`DeliveryNoteInventoryHandler`), otra al bloquear la
+  factura fiscal generada por `CreateCustomerInvoiceHandler`
+  (`InvoiceApprovedInventoryHandler`). Ninguno de los dos handlers conoce al
+  otro. Ver ADR-0008 para el detalle técnico y la corrección propuesta.
 - Sales no escribe en `ActivityLog` de CRM al crear pedidos; timeline CRM
   sigue dependiendo de eventos explícitos si se quiere trazabilidad comercial.
 - El versionado de rutas (`api/v1/sales/...`) es consistente con el frontend

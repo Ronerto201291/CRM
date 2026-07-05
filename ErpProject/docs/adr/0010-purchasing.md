@@ -12,13 +12,19 @@ mercancía (`GoodsReceipt`) y registro de facturas de proveedor
 `backend/Modules/Purchasing/` (backend) y en
 `frontend/src/app/purchasing/` (frontend, Next.js 15 App Router).
 
-A diferencia de otros módulos del monolito modular, la implementación actual
-de Purchasing es deliberadamente mínima: no hay todavía flujo de aprobación
-de facturas, ni integración activa con Inventario o Contabilidad, ni vínculo
-persistido con el proveedor (`Supplier`) de CRM. Esta ADR documenta el
-estado "as-built" tal cual existe hoy, incluyendo esas carencias, para que
-cualquier trabajo futuro sobre el módulo parta de hechos verificados y no de
-suposiciones sobre cómo "debería" funcionar un ERP de compras.
+A diferencia de otros módulos del monolito modular, la implementación de
+Purchasing sigue siendo parcial: **sí existe** un flujo de aprobación de
+pedidos de compra (ver más abajo, ADR-0018 #30) y **sí existe** integración
+activa con Inventario (recepción de mercancía → stock, ADR-0018 #20), pero
+**no hay** integración con Contabilidad (una factura de proveedor validada
+nunca genera asiento contable) ni vínculo persistido con el proveedor
+(`Supplier`) de CRM. Además, una contra-auditoría jul 2026 encontró que los
+formularios reales del frontend de recepción y factura de proveedor no
+pueden completarse en absoluto (ver "Consecuencias" — bug crítico, no solo
+deuda de documentación). Esta ADR documenta el estado "as-built" tal cual
+existe hoy, incluyendo esas carencias, para que cualquier trabajo futuro
+sobre el módulo parta de hechos verificados y no de suposiciones sobre cómo
+"debería" funcionar un ERP de compras.
 
 ## Decisión
 ### Backend
@@ -33,14 +39,26 @@ Controllers (`backend/Modules/Purchasing/Api/Controllers/`):
   `GET` (lista), `GET {id}`, `POST`, `PUT {id}`, `DELETE {id}`. **Corregido
   (backlog #11):** controller delgado vía `IMediator`
   (`Application/Features/Orders/PurchaseOrderHandlers.cs`); filtra por
-  `CompanyId` del tenant. No lleva `[Authorize]`.
+  `CompanyId` del tenant. No lleva `[Authorize]`. **Flujo de aprobación
+  (ADR-0018 #30, añadido jul 2026 — sección ausente hasta esta
+  actualización):** `POST {id}/submit-for-approval`, `POST {id}/approve` y
+  `POST {id}/reject` despachan `SubmitPurchaseOrderForApprovalCommand`/
+  `ApprovePurchaseOrderCommand`/`RejectPurchaseOrderCommand` vía `IMediator`.
+  `PurchaseOrder.Status` transiciona `Draft`→`PendingApproval`→
+  `Approved`/`Rejected`; el umbral que exige aprobación es
+  `Company.ApprovalThresholdAmount` (configurable por tenant). Frontend real:
+  `orders/[id]/OrderDetailClient.tsx` hace `POST` real a estas tres rutas y
+  muestra el estado con badges.
 - `ReceiptsController` — ruta `api/v{version:apiVersion}/purchasing/receipts`,
   con `[Authorize]`. `POST` despacha `CreateGoodsReceiptCommand` vía
   `IMediator`. `GET {id}` es un stub que solo devuelve `{ id }`, sin datos
-  reales de la recepción.
+  reales de la recepción. **No existe ningún `GET` de listado** (solo
+  `POST`/`GET {id}`) — ver "Consecuencias".
 - `InvoicesController` — ruta `api/v{version:apiVersion}/purchasing/invoices`,
-  sin `[Authorize]`. `POST` despacha `CreateSupplierInvoiceCommand` vía
-  `IMediator`. `GET {id}` es igualmente un stub `{ id }`.
+  con `[Authorize]` (corrección jul 2026: una versión anterior de este ADR
+  decía que no lo llevaba). `POST` despacha `CreateSupplierInvoiceCommand`
+  vía `IMediator`. `GET {id}` es igualmente un stub `{ id }`, y **tampoco
+  existe ningún `GET` de listado**.
 
 CQRS (`backend/Modules/Purchasing/Application/Features/`): solo existen dos
 casos de uso implementados con MediatR, `Receipts/Commands/CreateGoodsReceiptCommand`
@@ -202,8 +220,17 @@ exactamente esas columnas). `PurchaseOrder` tiene un índice único
 - **Controllers delgados:** ✅ `PurchaseOrdersController` vía `IMediator` (#11).
 - **N+1:** ✅ corregido en `CreateGoodsReceiptHandler` (#7).
 - **Pendiente:** `ReceiptsController.Get` e `InvoicesController.Get` siguen
-  siendo stubs `{ id }`; `SupplierId` no persistido; sin contabilización al
-  crear factura de proveedor.
+  siendo stubs `{ id }` y **sin ningún endpoint de listado**; `SupplierId`
+  no persistido; sin contabilización al crear factura de proveedor.
+- **Crítico (contra-auditoría jul 2026):** los formularios reales
+  `receipts/new/page.tsx` e `invoices/new/page.tsx` no recogen
+  `purchaseOrderLineId`/`purchaseOrderId`/`productId` — campos `Guid` no
+  anulables y obligatorios en `CreateGoodsReceiptCommand`/
+  `CreateSupplierInvoiceCommand`. Toda petición real desde estas páginas
+  lanza `InvalidOperationException` antes de llegar a la lógica de negocio
+  (`"Purchase order line not found"`/`"Purchase order not found"`) — el
+  three-way match, aunque el backend que lo implementa es correcto, nunca
+  se puede ejercitar por un usuario real hoy. Ver ADR-0018 ítem 67.
 
 ## Buenas prácticas aplicables
 - El "three-way match" en `ThreeWayMatchValidator` es el patrón de control
