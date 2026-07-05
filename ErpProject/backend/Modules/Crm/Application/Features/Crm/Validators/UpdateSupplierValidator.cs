@@ -11,6 +11,6 @@ public class UpdateSupplierValidator : AbstractValidator<UpdateSupplierCommand>
         RuleFor(x => x.Id).NotEmpty();
         RuleFor(x => x.Name).NotEmpty().MaximumLength(200);
         RuleFor(x => x.TaxId).NotEmpty().MaximumLength(50)
-            .Must(SpanishTaxIdValidator.IsValid).WithMessage("NIF/CIF/NIE no v√°lido");
+            .Must(SpanishTaxIdValidator.IsValid).WithMessage("NIF/CIF/NIE no v·lido");
     }
 }

@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using Erp.Application.Common.Interfaces;
 using Erp.Modules.Accounting.Application.Interfaces;
 using Erp.Modules.Accounting.Domain.Entities;

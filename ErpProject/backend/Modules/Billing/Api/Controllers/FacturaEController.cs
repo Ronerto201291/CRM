@@ -1,4 +1,3 @@
-using Erp.Application.Common.Attributes;
 using Erp.Modules.Billing.Application.Features.Billing.Queries;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -8,12 +7,10 @@ namespace Erp.Modules.Billing.Api.Controllers;
 
 /// <summary>
 /// Endpoints para generación de FacturaE 3.2.2 (Ley 18/2022 Crea y Crece).
-/// Todos los endpoints requieren autenticación JWT y que la factura esté bloqueada (IsLocked=true).
 /// </summary>
 [ApiController]
 [Route("api/v1/billing/facturae")]
 [Authorize]
-[RequiredModule("Billing")]
 public class FacturaEController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -21,7 +18,6 @@ public class FacturaEController : ControllerBase
     public FacturaEController(IMediator mediator) => _mediator = mediator;
 
     [HttpGet("{invoiceId:guid}")]
-    [RequirePermission(Permissions.FacturaE.Export)]
     public async Task<IActionResult> GenerateFacturaE(Guid invoiceId, CancellationToken ct)
     {
         try
@@ -29,18 +25,11 @@ public class FacturaEController : ControllerBase
             var result = await _mediator.Send(new GenerateFacturaEQuery(invoiceId), ct);
             return File(result.XmlBytes, "application/xml", result.FileName);
         }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(new { error = ex.Message });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        catch (KeyNotFoundException ex) { return NotFound(new { error = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
     }
 
     [HttpGet("{invoiceId:guid}/signed")]
-    [RequirePermission(Permissions.FacturaE.Export)]
     public async Task<IActionResult> GenerateSignedFacturaE(Guid invoiceId, CancellationToken ct)
     {
         try
@@ -48,18 +37,11 @@ public class FacturaEController : ControllerBase
             var result = await _mediator.Send(new GenerateSignedFacturaEQuery(invoiceId), ct);
             return File(result.XmlBytes, "application/xml", result.FileName);
         }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(new { error = ex.Message });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        catch (KeyNotFoundException ex) { return NotFound(new { error = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
     }
 
     [HttpGet("{invoiceId:guid}/validate")]
-    [RequirePermission(Permissions.FacturaE.Read)]
     public async Task<IActionResult> ValidateFacturaE(Guid invoiceId, CancellationToken ct)
     {
         try
@@ -73,34 +55,19 @@ public class FacturaEController : ControllerBase
                 warnings = result.Warnings
             });
         }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(new { error = ex.Message });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        catch (KeyNotFoundException ex) { return NotFound(new { error = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
     }
 
     [HttpPost("{invoiceId:guid}/submit-face")]
-    [RequirePermission(Permissions.FacturaE.Manage)]
     public async Task<IActionResult> SubmitToFace(Guid invoiceId, CancellationToken ct)
     {
         try
         {
             var result = await _mediator.Send(new SubmitFacturaEFaceCommand(invoiceId), ct);
-            return result.Success
-                ? Ok(result)
-                : StatusCode(501, result);
+            return result.Success ? Ok(result) : StatusCode(501, result);
         }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(new { error = ex.Message });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        catch (KeyNotFoundException ex) { return NotFound(new { error = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
     }
 }

@@ -1,4 +1,4 @@
-using Erp.Application.Common.Fiscal;
+﻿using Erp.Application.Common.Fiscal;
 using Erp.Application.Common.Interfaces;
 using Erp.Modules.Billing.Application.Interfaces;
 using MediatR;

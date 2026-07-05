@@ -1,9 +1,10 @@
-using Erp.Application.Common.Interfaces;
+﻿using Erp.Application.Common.Interfaces;
 using Erp.Modules.Billing.Application.Interfaces;
 using Erp.Modules.Billing.Application.Validators;
 using FluentValidation;
 using Erp.Modules.Billing.Infrastructure.Data;
 using Erp.Modules.Billing.Infrastructure.Services;
+using Erp.Infrastructure.Services.FacturaE;
 using Erp.Infrastructure.Services.Sii;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -34,6 +35,7 @@ public static class DependencyInjection
         services.AddSingleton<IQuotePdfService, QuotePdfService>();
 
         // FacturaE 3.2.2 (Ley 18/2022 Crea y Crece)
+        services.AddScoped<FacturaESigningService>();
         services.AddScoped<IFacturaEService, FacturaEService>();
         services.AddHttpClient("Face");
         services.AddScoped<IFaceSubmissionService, FaceSubmissionService>();
@@ -43,7 +45,7 @@ public static class DependencyInjection
         services.AddScoped<ISiiEmitidasInvoiceSource, SiiEmitidasInvoiceSource>();
         services.AddScoped<IAutomationBillingQuery, AutomationBillingQuery>();
 
-        // Job de expiración de presupuestos (Hangfire lo resuelve del DI)
+        // Job de expiraci├│n de presupuestos (Hangfire lo resuelve del DI)
         services.AddScoped<ExpireQuotesJob>();
 
         // VERI*FACTU submission job (Hangfire)
@@ -54,3 +56,4 @@ public static class DependencyInjection
         return services;
     }
 }
+

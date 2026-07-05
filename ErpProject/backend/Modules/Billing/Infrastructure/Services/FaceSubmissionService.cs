@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Erp.Modules.Billing.Infrastructure.Services;
 
-/// <summary>EnvÃ­o FacturaE a FACe (B2G). SOAP real opcional vÃ­a Face:SendEnabled.</summary>
+/// <summary>Envío FacturaE a FACe (B2G). SOAP real opcional vía Face:SendEnabled.</summary>
 public sealed class FaceSubmissionService : IFaceSubmissionService
 {
     private readonly IHttpClientFactory _httpClientFactory;
@@ -25,17 +25,18 @@ public sealed class FaceSubmissionService : IFaceSubmissionService
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(_endpoint);
 
-    public async Task<FaceSubmissionResult> SubmitAsync(byte[] signedXml, string fileName, CancellationToken ct = default)
+    public async Task<FaceSubmissionResult> SubmitAsync(
+        byte[] signedXml, string fileName, CancellationToken ct = default)
     {
         if (!IsConfigured)
         {
             return new FaceSubmissionResult(
                 false,
-                "FACe no configurado. Defina Face:Endpoint en configuraciÃ³n.");
+                "FACe no configurado. Defina Face:Endpoint en configuración.");
         }
 
         if (signedXml.Length == 0)
-            return new FaceSubmissionResult(false, "XML firmado vacÃ­o.");
+            return new FaceSubmissionResult(false, "XML firmado vacío.");
 
         var payload = Convert.ToBase64String(signedXml);
         var soap = BuildFaceSoapEnvelope(fileName, payload);
@@ -45,7 +46,7 @@ public sealed class FaceSubmissionService : IFaceSubmissionService
         {
             return new FaceSubmissionResult(
                 false,
-                "FACe: SOAP invÃ¡lido â€” " + string.Join("; ", soapValidation.Errors),
+                "FACe: SOAP inválido — " + string.Join("; ", soapValidation.Errors),
                 ReferenceId: fileName);
         }
 
@@ -54,7 +55,7 @@ public sealed class FaceSubmissionService : IFaceSubmissionService
             return new FaceSubmissionResult(
                 false,
                 $"FACe: SOAP preparado ({soap.Length} chars) para {_endpoint}. " +
-                "Active Face:SendEnabled=true para envÃ­o HTTP.",
+                "Active Face:SendEnabled=true para envío HTTP.",
                 ReferenceId: fileName);
         }
 
@@ -68,7 +69,7 @@ public sealed class FaceSubmissionService : IFaceSubmissionService
             if (response.IsSuccessStatusCode)
             {
                 _logger.LogInformation(
-                    "FACe: envÃ­o OK {FileName} â†’ {StatusCode}", fileName, (int)response.StatusCode);
+                    "FACe: envío OK {FileName} ? {StatusCode}", fileName, (int)response.StatusCode);
                 return new FaceSubmissionResult(
                     true,
                     $"FACe: enviado correctamente (HTTP {(int)response.StatusCode}).",
@@ -90,7 +91,7 @@ public sealed class FaceSubmissionService : IFaceSubmissionService
         catch (Exception ex)
         {
             _logger.LogError(ex, "FACe: fallo de red enviando {FileName}", fileName);
-            return new FaceSubmissionResult(false, $"FACe: error de red â€” {ex.Message}", ReferenceId: fileName);
+            return new FaceSubmissionResult(false, $"FACe: error de red — {ex.Message}", ReferenceId: fileName);
         }
     }
 
@@ -109,5 +110,5 @@ public sealed class FaceSubmissionService : IFaceSubmissionService
         """;
 
     private static string Truncate(string value, int max) =>
-        value.Length <= max ? value : value[..max] + "â€¦";
+        value.Length <= max ? value : value[..max] + "…";
 }

@@ -19,14 +19,12 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("DefaultConnection missing.");
 
-        services.AddDbContext<CrmDbContext>((sp, options) =>
+        services.AddDbContext<CrmDbContext>(options =>
             options.UseNpgsql(connectionString)
-               .AddInterceptors(sp.GetRequiredService<Erp.Infrastructure.Interceptors.AuditSaveChangesInterceptor>())
                .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
 
         services.AddScoped<ICrmDbContext>(p => p.GetRequiredService<CrmDbContext>());
         services.AddScoped<IClientInfoService, ClientInfoService>();
-        services.AddScoped<IExpenseOcrCrmBridge, ExpenseOcrCrmBridge>();
         services.AddValidatorsFromAssembly(typeof(CreateClientValidator).Assembly);
 
         return services;

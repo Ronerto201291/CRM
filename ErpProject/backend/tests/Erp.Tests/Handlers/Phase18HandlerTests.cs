@@ -1,4 +1,4 @@
-using Erp.Modules.Accounting.Application.Features.Recargo;
+﻿using Erp.Modules.Accounting.Application.Features.Recargo;
 using Erp.Modules.Accounting.Application.Handlers;
 using Erp.Modules.Accounting.Application.Interfaces;
 using Erp.Modules.Accounting.Application.Queries;
@@ -18,7 +18,7 @@ using Xunit;
 
 namespace Erp.Tests.Handlers;
 
-/// <summary>Fase 18 backlog ADR-0018 #32 — unit XPlat hacia 30%+.</summary>
+/// <summary>Fase 18 backlog ADR-0018 #32 â€” unit XPlat hacia 30%+.</summary>
 public class Phase18HandlerTests
 {
     [Fact]
@@ -39,7 +39,7 @@ public class Phase18HandlerTests
             Id = assetId,
             CompanyId = companyId,
             AssetCode = "FA-001",
-            Name = "Ordenador portátil",
+            Name = "Ordenador portÃ¡til",
             AcquisitionDate = DateTime.UtcNow.Date,
             AcquisitionCost = 1200m,
             ResidualValue = 0m,
@@ -55,7 +55,7 @@ public class Phase18HandlerTests
         var result = await new GetFixedAssetHandler(ctx).Handle(new GetFixedAssetQuery(assetId), CancellationToken.None);
 
         Assert.NotNull(result);
-        Assert.Equal("Ordenador portátil", result!.Name);
+        Assert.Equal("Ordenador portÃ¡til", result!.Name);
     }
 
     [Fact]
@@ -75,7 +75,7 @@ public class Phase18HandlerTests
             Id = Guid.NewGuid(),
             CompanyId = companyId,
             AssetCode = "FA-002",
-            Name = "Vehículo",
+            Name = "VehÃ­culo",
             AcquisitionDate = DateTime.UtcNow.Date,
             AcquisitionCost = 20000m,
             UsefulLifeYears = 5,
@@ -90,7 +90,7 @@ public class Phase18HandlerTests
         var result = await new GetFixedAssetsHandler(ctx).Handle(new GetFixedAssetsQuery(), CancellationToken.None);
 
         Assert.Single(result);
-        Assert.Equal("Vehículo", result[0].Name);
+        Assert.Equal("VehÃ­culo", result[0].Name);
     }
 
     [Fact]
@@ -180,13 +180,13 @@ public class Phase18HandlerTests
         var ok = await new UpdateContactHandler(ctx).Handle(new UpdateContactCommand
         {
             Id = contactId,
-            Name = "Después",
+            Name = "DespuÃ©s",
             Email = "despues@test.local",
         }, CancellationToken.None);
 
         Assert.True(ok);
         var updated = await ctx.Contacts.SingleAsync(c => c.Id == contactId);
-        Assert.Equal("Después", updated.Name);
+        Assert.Equal("DespuÃ©s", updated.Name);
     }
 
     [Fact]
@@ -226,7 +226,12 @@ public class Phase18HandlerTests
         var tenant = new FakeTenantContext();
         tenant.SetTenant(companyId, "Empresa test");
 
-        var handler = new GetRecargosHandler(new FakeRecargoInvoiceReader(), tenant);
+        var options = new DbContextOptionsBuilder<AccountingDbContext>()
+            .UseInMemoryDatabase($"p18-recargo-{Guid.NewGuid()}")
+            .Options;
+
+        await using var ctx = new AccountingDbContext(options, tenant);
+        var handler = new GetRecargosHandler(new FakeRecargoInvoiceReader(), ctx, tenant);
         var result = await handler.Handle(new GetRecargosQuery(2026, 2), CancellationToken.None);
 
         Assert.Equal("T2 2026", result.Period);
@@ -356,3 +361,4 @@ internal sealed class FakeRecargoInvoiceReader : IRecargoInvoiceReader
     public Task<RecargoInvoiceData?> GetInvoiceAsync(Guid tenantId, Guid invoiceId, CancellationToken ct = default)
         => Task.FromResult<RecargoInvoiceData?>(null);
 }
+

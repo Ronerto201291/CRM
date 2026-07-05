@@ -3,42 +3,43 @@ using Microsoft.Extensions.Options;
 
 namespace Erp.Infrastructure.Services;
 
-/// <summary>ADR-0018 #0e — sk_test en no-producción, sk_live en producción.</summary>
+/// <summary>
+/// Ensures Stripe API keys match the deployment environment (sk_test_ vs sk_live_).
+/// </summary>
 public sealed class StripeOptionsValidator : IValidateOptions<StripeOptions>
 {
     private readonly IHostEnvironment _environment;
 
-    public StripeOptionsValidator(IHostEnvironment environment) => _environment = environment;
+    public StripeOptionsValidator(IHostEnvironment environment)
+    {
+        _environment = environment;
+    }
 
     public ValidateOptionsResult Validate(string? name, StripeOptions options)
     {
-        if (string.IsNullOrWhiteSpace(options.SecretKey))
+        var key = options.SecretKey;
+        if (string.IsNullOrWhiteSpace(key))
             return ValidateOptionsResult.Fail("Stripe:SecretKey is required.");
 
-        var isProduction = _environment.IsProduction();
-        var key = options.SecretKey.Trim();
+        var isTestKey = key.StartsWith("sk_test_", StringComparison.Ordinal);
+        var isLiveKey = key.StartsWith("sk_live_", StringComparison.Ordinal);
 
-        if (isProduction && !key.StartsWith("sk_live_", StringComparison.Ordinal))
+        if (!isTestKey && !isLiveKey)
         {
             return ValidateOptionsResult.Fail(
-                "Stripe:SecretKey debe usar prefijo sk_live_ en entorno Production.");
+                "Stripe:SecretKey must start with sk_test_ or sk_live_.");
         }
 
-        if (!isProduction && !key.StartsWith("sk_test_", StringComparison.Ordinal))
+        if (_environment.IsProduction() && isTestKey)
         {
             return ValidateOptionsResult.Fail(
-                "Stripe:SecretKey debe usar prefijo sk_test_ fuera de Production.");
+                "Production environment requires a live Stripe key (sk_live_).");
         }
 
-        if (!string.IsNullOrWhiteSpace(options.PublishableKey))
+        if (!_environment.IsProduction() && isLiveKey)
         {
-            var pk = options.PublishableKey.Trim();
-            var expectedPkPrefix = isProduction ? "pk_live_" : "pk_test_";
-            if (!pk.StartsWith(expectedPkPrefix, StringComparison.Ordinal))
-            {
-                return ValidateOptionsResult.Fail(
-                    $"Stripe:PublishableKey debe usar prefijo {expectedPkPrefix} en este entorno.");
-            }
+            return ValidateOptionsResult.Fail(
+                "Non-production environments must use a test Stripe key (sk_test_).");
         }
 
         return ValidateOptionsResult.Success;

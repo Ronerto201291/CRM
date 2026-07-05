@@ -1,4 +1,4 @@
-using Erp.Application.Common.Attributes;
+﻿using Erp.Application.Common.Attributes;
 using Erp.Modules.Accounting.Application.Features.Recargo;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -51,7 +51,7 @@ public class RecargoController : ControllerBase
     }
 
     /// <summary>
-    /// Genera la sección de recargo de equivalencia del Modelo 303 para un periodo.
+    /// Genera la secci├│n de recargo de equivalencia del Modelo 303 para un periodo.
     /// </summary>
     [HttpPost("{id:guid}/modelo303")]
     [RequirePermission(Permissions.Recargo.Manage)]

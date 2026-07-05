@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using Erp.Application.Common.Interfaces;
 using Erp.Modules.Accounting.Application.Interfaces;
 using Erp.Modules.Accounting.Domain.Entities;
@@ -8,8 +8,8 @@ namespace Erp.Modules.Accounting.Application.Features.Vat;
 /// <summary>
 /// Calculadora manual de prorrata: el usuario introduce los ingresos sujetos
 /// y exentos (frontend/src/app/accounting/prorrata/page.tsx), no se derivan
-/// automáticamente de las transacciones de IVA — coincide con el contrato que
-/// ya consume esa página (fiscalYear/inlandRevenue/exemptRevenue/type).
+/// autom├íticamente de las transacciones de IVA ÔÇö coincide con el contrato que
+/// ya consume esa p├ígina (fiscalYear/inlandRevenue/exemptRevenue/type).
 /// </summary>
 public class CalculateProrrataCommand : IRequest<ProrrataResponse>
 {

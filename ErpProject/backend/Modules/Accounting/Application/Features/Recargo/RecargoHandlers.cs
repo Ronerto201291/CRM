@@ -1,10 +1,11 @@
 using Erp.Application.Common.Interfaces;
+using Erp.Application.Common.Validation;
 using Erp.Modules.Accounting.Application.Interfaces;
+using Erp.Modules.Accounting.Domain.Entities;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Erp.Modules.Accounting.Application.Features.Recargo;
-
-// ── Queries / Commands ───────────────────────────────────────────────────────
 
 public record GetRecargosQuery(int Year, int Quarter) : IRequest<GetRecargosResult>;
 
@@ -18,8 +19,6 @@ public record CreateRecargoCommand(
 
 public record GenerateRecargoModelo303Command(Guid InvoiceId) : IRequest<RecargoModelo303Result>;
 
-// ── DTOs ─────────────────────────────────────────────────────────────────────
-
 public class GetRecargosResult
 {
     public string Period { get; set; } = string.Empty;
@@ -28,7 +27,9 @@ public class GetRecargosResult
 
 public class RecargoListItem
 {
-    public Guid InvoiceId { get; set; }
+    public Guid Id { get; set; }
+    public Guid? InvoiceId { get; set; }
+    public string Source { get; set; } = "Invoice";
     public string InvoiceNumber { get; set; } = string.Empty;
     public string ClientTaxId { get; set; } = string.Empty;
     public string ClientName { get; set; } = string.Empty;
@@ -40,7 +41,9 @@ public class RecargoListItem
 
 public class GetRecargoByIdResult
 {
-    public Guid InvoiceId { get; set; }
+    public Guid Id { get; set; }
+    public Guid? InvoiceId { get; set; }
+    public string Source { get; set; } = "Invoice";
     public string InvoiceNumber { get; set; } = string.Empty;
     public string SupplierVat { get; set; } = string.Empty;
     public decimal BaseAmount { get; set; }
@@ -93,16 +96,19 @@ public class RecargoModelo303Casilla
     public decimal SurchargeRate { get; set; }
 }
 
-// ── Handlers ─────────────────────────────────────────────────────────────────
-
 public class GetRecargosHandler : IRequestHandler<GetRecargosQuery, GetRecargosResult>
 {
     private readonly IRecargoInvoiceReader _reader;
+    private readonly IAccountingDbContext _accounting;
     private readonly ITenantContext _tenant;
 
-    public GetRecargosHandler(IRecargoInvoiceReader reader, ITenantContext tenant)
+    public GetRecargosHandler(
+        IRecargoInvoiceReader reader,
+        IAccountingDbContext accounting,
+        ITenantContext tenant)
     {
         _reader = reader;
+        _accounting = accounting;
         _tenant = tenant;
     }
 
@@ -113,20 +119,47 @@ public class GetRecargosHandler : IRequestHandler<GetRecargosQuery, GetRecargosR
 
         var invoices = await _reader.GetLockedInvoicesWithRecargoAsync(tenantId, from, to, ct);
 
+        var fromInvoices = invoices.Select(i => new RecargoListItem
+        {
+            Id = i.Id,
+            InvoiceId = i.Id,
+            Source = "Invoice",
+            InvoiceNumber = i.Number,
+            ClientTaxId = i.ClientNif,
+            ClientName = i.ClientName,
+            BaseAmount = i.Subtotal,
+            SurchargeRate = i.Lines.First().SurchargeRate,
+            SurchargeAmount = i.Lines.Sum(l => l.SurchargeAmount),
+            InvoiceDate = i.IssueDate,
+        });
+
+        var manual = await _accounting.RecargoDEquivalencias
+            .Where(r => r.CompanyId == tenantId
+                     && r.CreatedAt >= from && r.CreatedAt < to
+                     && r.InvoiceId == null)
+            .AsNoTracking()
+            .ToListAsync(ct);
+
+        var fromManual = manual.Select(r => new RecargoListItem
+        {
+            Id = r.Id,
+            InvoiceId = null,
+            Source = "Manual",
+            InvoiceNumber = $"RE-{r.Id.ToString()[..8]}",
+            ClientTaxId = r.SupplierVatNumber,
+            ClientName = r.SupplierIsRE ? "Proveedor RE" : "Proveedor",
+            BaseAmount = r.Base,
+            SurchargeRate = r.RechargeRate,
+            SurchargeAmount = r.RechargeAmount,
+            InvoiceDate = r.CreatedAt,
+        });
+
         return new GetRecargosResult
         {
             Period = $"T{request.Quarter} {request.Year}",
-            Recargos = invoices.Select(i => new RecargoListItem
-            {
-                InvoiceId = i.Id,
-                InvoiceNumber = i.Number,
-                ClientTaxId = i.ClientNif,
-                ClientName = i.ClientName,
-                BaseAmount = i.Subtotal,
-                SurchargeRate = i.Lines.First().SurchargeRate,
-                SurchargeAmount = i.Lines.Sum(l => l.SurchargeAmount),
-                InvoiceDate = i.IssueDate,
-            }).ToList(),
+            Recargos = fromInvoices.Concat(fromManual)
+                .OrderByDescending(r => r.InvoiceDate)
+                .ToList(),
         };
     }
 }
@@ -134,11 +167,16 @@ public class GetRecargosHandler : IRequestHandler<GetRecargosQuery, GetRecargosR
 public class GetRecargoByIdHandler : IRequestHandler<GetRecargoByIdQuery, GetRecargoByIdResult>
 {
     private readonly IRecargoInvoiceReader _reader;
+    private readonly IAccountingDbContext _accounting;
     private readonly ITenantContext _tenant;
 
-    public GetRecargoByIdHandler(IRecargoInvoiceReader reader, ITenantContext tenant)
+    public GetRecargoByIdHandler(
+        IRecargoInvoiceReader reader,
+        IAccountingDbContext accounting,
+        ITenantContext tenant)
     {
         _reader = reader;
+        _accounting = accounting;
         _tenant = tenant;
     }
 
@@ -146,38 +184,104 @@ public class GetRecargoByIdHandler : IRequestHandler<GetRecargoByIdQuery, GetRec
     {
         var tenantId = _tenant.TenantId ?? throw new InvalidOperationException("Tenant not resolved");
 
-        var invoice = await _reader.GetInvoiceWithRecargoAsync(tenantId, request.Id, ct)
-            ?? throw new KeyNotFoundException($"No se encontró factura con recargo de equivalencia para el ID '{request.Id}'.");
+        var invoice = await _reader.GetInvoiceWithRecargoAsync(tenantId, request.Id, ct);
+        if (invoice is not null)
+        {
+            var line = invoice.Lines.First();
+            return new GetRecargoByIdResult
+            {
+                Id = invoice.Id,
+                InvoiceId = invoice.Id,
+                Source = "Invoice",
+                InvoiceNumber = invoice.Number,
+                SupplierVat = invoice.ClientNif,
+                BaseAmount = invoice.Subtotal,
+                SurchargeRate = line.SurchargeRate,
+                SurchargeAmount = line.SurchargeAmount,
+            };
+        }
 
-        var line = invoice.Lines.First();
+        var manual = await _accounting.RecargoDEquivalencias
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.CompanyId == tenantId && r.Id == request.Id, ct)
+            ?? throw new KeyNotFoundException(
+                $"No se encontr� recargo de equivalencia para el ID '{request.Id}'.");
+
         return new GetRecargoByIdResult
         {
-            InvoiceId = invoice.Id,
-            InvoiceNumber = invoice.Number,
-            SupplierVat = invoice.ClientNif,
-            BaseAmount = invoice.Subtotal,
-            SurchargeRate = line.SurchargeRate,
-            SurchargeAmount = line.SurchargeAmount,
+            Id = manual.Id,
+            InvoiceId = manual.InvoiceId,
+            Source = manual.InvoiceId.HasValue ? "Invoice" : "Manual",
+            InvoiceNumber = manual.InvoiceId.HasValue ? manual.InvoiceId.ToString()! : $"RE-{manual.Id.ToString()[..8]}",
+            SupplierVat = manual.SupplierVatNumber,
+            BaseAmount = manual.Base,
+            SurchargeRate = manual.RechargeRate,
+            SurchargeAmount = manual.RechargeAmount,
+            Modelo303Status = manual.Modelo303Status,
+            Status = manual.Modelo303Status == "Confirmed" ? "Confirmed" : "Active",
         };
     }
 }
 
 public class CreateRecargoHandler : IRequestHandler<CreateRecargoCommand, CreateRecargoResult>
 {
-    public Task<CreateRecargoResult> Handle(CreateRecargoCommand request, CancellationToken ct)
-    {
-        var rechargeAmount = request.BaseAmount * (request.RechargeRate / 100);
+    private static readonly HashSet<decimal> AllowedRates = [0.5m, 1.4m, 5.2m];
 
-        return Task.FromResult(new CreateRecargoResult
+    private readonly IAccountingDbContext _accounting;
+    private readonly ITenantContext _tenant;
+
+    public CreateRecargoHandler(IAccountingDbContext accounting, ITenantContext tenant)
+    {
+        _accounting = accounting;
+        _tenant = tenant;
+    }
+
+    public async Task<CreateRecargoResult> Handle(CreateRecargoCommand request, CancellationToken ct)
+    {
+        var tenantId = _tenant.TenantId ?? throw new InvalidOperationException("Tenant not resolved");
+
+        if (request.BaseAmount <= 0)
+            throw new InvalidOperationException("La base imponible debe ser mayor que cero.");
+
+        if (!AllowedRates.Contains(request.RechargeRate))
         {
-            Id = Guid.NewGuid(),
-            SupplierVat = request.SupplierVat,
+            throw new InvalidOperationException(
+                "Tasa de recargo no v�lida. Valores permitidos: 0,5%, 1,4% o 5,2%.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.SupplierVat)
+            && !SpanishTaxIdValidator.IsValid(request.SupplierVat))
+        {
+            throw new InvalidOperationException("NIF/CIF del proveedor no v�lido.");
+        }
+
+        var rechargeAmount = Math.Round(request.BaseAmount * (request.RechargeRate / 100m), 2);
+
+        var entity = new RecargoDEquivalencia
+        {
+            CompanyId = tenantId,
+            SupplierVatNumber = request.SupplierVat.Trim().ToUpperInvariant(),
             SupplierIsRE = request.SupplierIsRE,
-            BaseAmount = request.BaseAmount,
+            Base = request.BaseAmount,
             RechargeRate = request.RechargeRate,
             RechargeAmount = rechargeAmount,
+            IsEndToEnd = false,
+            Modelo303Status = "Pending",
+        };
+
+        _accounting.RecargoDEquivalencias.Add(entity);
+        await _accounting.SaveChangesAsync(ct);
+
+        return new CreateRecargoResult
+        {
+            Id = entity.Id,
+            SupplierVat = entity.SupplierVatNumber,
+            SupplierIsRE = entity.SupplierIsRE,
+            BaseAmount = entity.Base,
+            RechargeRate = entity.RechargeRate,
+            RechargeAmount = entity.RechargeAmount,
             Message = "Recargo de equivalencia registrado",
-        });
+        };
     }
 }
 
@@ -200,10 +304,10 @@ public class GenerateRecargoModelo303Handler : IRequestHandler<GenerateRecargoMo
             ?? throw new KeyNotFoundException($"Factura '{request.InvoiceId}' no encontrada.");
 
         if (!invoice.IsLocked)
-            throw new InvalidOperationException("Solo se puede generar Modelo 303 para facturas bloqueadas (IsLocked=true).");
+            throw new InvalidOperationException(
+                "Solo se puede generar Modelo 303 para facturas bloqueadas (IsLocked=true).");
 
         var recargoLines = invoice.Lines.ToList();
-
         if (recargoLines.Count == 0)
             throw new InvalidOperationException("La factura no tiene recargo de equivalencia.");
 
@@ -218,9 +322,6 @@ public class GenerateRecargoModelo303Handler : IRequestHandler<GenerateRecargoMo
             })
             .ToList();
 
-        var totalBase = bySurchargeRate.Sum(r => r.BaseImponible);
-        var totalCuota = bySurchargeRate.Sum(r => r.CuotaRecargo);
-
         return new RecargoModelo303Result
         {
             InvoiceId = invoice.Id,
@@ -228,8 +329,8 @@ public class GenerateRecargoModelo303Handler : IRequestHandler<GenerateRecargoMo
             Recargo = bySurchargeRate,
             Totales = new RecargoModelo303Totals
             {
-                TotalBaseImponible = totalBase,
-                TotalCuotaRecargo = totalCuota,
+                TotalBaseImponible = bySurchargeRate.Sum(r => r.BaseImponible),
+                TotalCuotaRecargo = bySurchargeRate.Sum(r => r.CuotaRecargo),
             },
             Casillas = bySurchargeRate.Select(r => new RecargoModelo303Casilla
             {
@@ -247,7 +348,6 @@ internal static class RecargoPeriodHelper
     {
         var startMonth = (q - 1) * 3 + 1;
         var from = new DateTime(year, startMonth, 1, 0, 0, 0, DateTimeKind.Utc);
-        var to = from.AddMonths(3);
-        return (from, to);
+        return (from, from.AddMonths(3));
     }
 }

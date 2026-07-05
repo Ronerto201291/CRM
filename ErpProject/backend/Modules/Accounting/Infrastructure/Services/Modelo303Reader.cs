@@ -1,3 +1,4 @@
+using Erp.Application.Common.Fiscal;
 using Erp.Application.Common.Interfaces;
 using Erp.Modules.Accounting.Application.Interfaces;
 using Erp.Modules.Billing.Application.Interfaces;
@@ -24,6 +25,9 @@ public class Modelo303Reader : IModelo303Reader
     public async Task<Modelo303QuarterData> GetQuarterAsync(
         Guid tenantId, int year, int quarter, CancellationToken ct)
     {
+        if (quarter is < 1 or > 4)
+            throw new ArgumentException("Quarter must be 1–4");
+
         var company = await _app.Companies.AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == tenantId, ct);
         var (from, to) = FiscalQuarterHelper.QuarterRange(year, quarter);
@@ -32,7 +36,8 @@ public class Modelo303Reader : IModelo303Reader
             .Include(i => i.InvoiceLines)
             .Where(i => i.CompanyId == tenantId && i.IsLocked
                      && i.IssueDate >= from && i.IssueDate < to)
-            .AsNoTracking().ToListAsync(ct);
+            .AsNoTracking()
+            .ToListAsync(ct);
 
         var allLines = invoices.SelectMany(i => i.InvoiceLines).ToList();
 
@@ -58,8 +63,10 @@ public class Modelo303Reader : IModelo303Reader
             {
                 var (casBase, casCuota) = FiscalQuarterHelper.SurchargeRateToCasillas(g.Key);
                 return new Modelo303RecargoLine(
-                    g.Key, Math.Round(g.Sum(l => l.LineTotal), 2),
-                    Math.Round(g.Sum(l => l.SurchargeAmount), 2), casBase, casCuota);
+                    g.Key,
+                    Math.Round(g.Sum(l => l.LineTotal), 2),
+                    Math.Round(g.Sum(l => l.SurchargeAmount), 2),
+                    casBase, casCuota);
             }).ToList();
 
         var intracom = Math.Round(
@@ -73,11 +80,11 @@ public class Modelo303Reader : IModelo303Reader
                 .Where(l => l.JournalEntry.CompanyId == tenantId
                          && l.AccountCode.StartsWith("472")
                          && l.JournalEntry.Date >= from && l.JournalEntry.Date < to)
-                .AsNoTracking().ToListAsync(ct))
+                .AsNoTracking()
+                .ToListAsync(ct))
             .Sum(l => l.Debit), 2);
 
-        var totalDevengado = Math.Round(
-            nacional.Sum(x => x.Cuota) + recargo.Sum(x => x.Cuota), 2);
+        var totalDevengado = Math.Round(nacional.Sum(x => x.Cuota) + recargo.Sum(x => x.Cuota), 2);
         var resultado = totalDevengado - ivaDeducible;
 
         return new Modelo303QuarterData(

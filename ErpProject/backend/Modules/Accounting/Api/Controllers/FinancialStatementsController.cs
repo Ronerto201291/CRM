@@ -1,19 +1,13 @@
-using Erp.Application.Common.Attributes;
-using Erp.Modules.Accounting.Application.Queries;
+using Erp.Modules.Accounting.Application.Features.FinancialStatements;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Erp.Modules.Accounting.Application.Features.FinancialStatements;
 
 namespace Erp.Modules.Accounting.Api.Controllers;
 
-/// <summary>All 4 actions generate a read-only report, so the permission check is applied
-/// once at class level (ADR-0018 #42c).</summary>
 [ApiController]
 [Route("api/v1/accounting/financial-statements")]
 [Authorize]
-[RequiredModule("Accounting")]
-[RequirePermission(Permissions.FinancialStatement.Read)]
 public class FinancialStatementsController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -21,39 +15,32 @@ public class FinancialStatementsController : ControllerBase
     public FinancialStatementsController(IMediator mediator) => _mediator = mediator;
 
     [HttpPost("cash-flow")]
-    public async Task<IActionResult> GenerateCashFlow([FromBody] CashFlowRequest request, CancellationToken ct)
+    public async Task<IActionResult> GenerateCashFlow([FromBody] GenerateCashFlowRequest request, CancellationToken ct)
     {
-        var result = await _mediator.Send(new GenerateCashFlowStatementQuery(request.Year, request.Month), ct);
+        var year = request.FiscalYear > 0 ? request.FiscalYear : DateTime.UtcNow.Year;
+        var result = await _mediator.Send(new GenerateCashFlowCommand(year), ct);
         return Ok(result);
     }
 
     [HttpPost("equity")]
-    public async Task<IActionResult> GenerateEquityStatement([FromBody] EquityRequest request, CancellationToken ct)
+    public async Task<IActionResult> GenerateEquityStatement([FromBody] GenerateCashFlowRequest request, CancellationToken ct)
     {
-        var result = await _mediator.Send(new GenerateEquityStatementQuery(request.Year), ct);
-        return Ok(result);
-    }
-
-    [HttpPost("income-statement")]
-    public async Task<IActionResult> GenerateIncomeStatement([FromBody] PeriodRangeRequest request, CancellationToken ct)
-    {
-        var result = await _mediator.Send(new GetProfitAndLossQuery
+        var year = request.FiscalYear > 0 ? request.FiscalYear : DateTime.UtcNow.Year;
+        var result = await _mediator.Send(new GenerateEquityStatementCommand(year), ct);
+        return Ok(new
         {
-            FechaInicio = request.From,
-            FechaFin = request.To
-        }, ct);
-        return Ok(result);
-    }
-
-    [HttpPost("balance-sheet")]
-    public async Task<IActionResult> GenerateBalanceSheet([FromBody] BalanceSheetRequest request, CancellationToken ct)
-    {
-        var result = await _mediator.Send(new GetBalanceSheetQuery { FechaCorte = request.AsOf }, ct);
-        return Ok(result);
+            id = result.Id,
+            beginningCapital = result.BeginningCapital,
+            netIncome = result.NetIncome,
+            dividendsPaid = result.DividendsPaid,
+            otherChanges = result.OtherChanges,
+            endingCapital = result.EndingCapital,
+            status = result.Status
+        });
     }
 }
 
-public record CashFlowRequest(int Year, int Month);
-public record EquityRequest(int Year);
-public record PeriodRangeRequest(DateTime From, DateTime To);
-public record BalanceSheetRequest(DateTime AsOf);
+public class GenerateCashFlowRequest
+{
+    public int FiscalYear { get; set; }
+}

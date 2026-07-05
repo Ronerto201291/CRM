@@ -46,6 +46,12 @@ public static class DependencyInjection
         services.AddScoped<IFiscalSkeletonXmlExporter, FiscalSkeletonXmlExporter>();
         services.AddScoped<IModelo390XmlExporter, Modelo390XmlExporter>();
 
+        services.AddScoped<IAgingDataService, AgingDataService>();
+        services.AddScoped<IIvaRegisterDataService, IvaRegisterDataService>();
+        services.AddScoped<IAeatModelsDataService, AeatModelsDataService>();
+        services.AddScoped<IRecargoInvoiceReader, RecargoInvoiceReader>();
+        services.AddScoped<IModelo303Reader, Modelo303Reader>();
+
         // Hangfire jobs (transient — Hangfire resolves per execution)
         services.AddTransient<AmortizationMonthlyJob>();
         services.AddTransient<DeferredEntryMonthlyJob>();

@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using Erp.Application.Common;
 using Erp.Application.Common.Interfaces;
 using Erp.Modules.Accounting.Application.Interfaces;
@@ -7,7 +7,7 @@ using Erp.Modules.Accounting.Domain.Entities;
 namespace Erp.Modules.Accounting.Application.Features.Vat;
 
 /// <summary>
-/// Valida un NIF-IVA UE vía el servicio oficial VIES (misma fuente que TaxController)
+/// Valida un NIF-IVA UE v├¡a el servicio oficial VIES (misma fuente que TaxController)
 /// y registra la consulta en IntraEuOperations para trazabilidad contable.
 /// </summary>
 public class ValidateViesCommand : IRequest<ValidateViesResult>
@@ -35,9 +35,9 @@ public class ValidateViesHandler : IRequestHandler<ValidateViesCommand, Validate
     public async Task<ValidateViesResult> Handle(ValidateViesCommand request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.CountryCode) || request.CountryCode.Length != 2)
-            throw new ArgumentException("countryCode debe ser un código ISO-2 de 2 letras, p.ej. 'FR'.");
+            throw new ArgumentException("countryCode debe ser un c├│digo ISO-2 de 2 letras, p.ej. 'FR'.");
         if (string.IsNullOrWhiteSpace(request.VatNumber))
-            throw new ArgumentException("vatNumber no puede estar vacío.");
+            throw new ArgumentException("vatNumber no puede estar vac├¡o.");
 
         var companyId = _tenant.TenantId ?? throw new InvalidOperationException("Tenant no resuelto.");
         var countryCode = request.CountryCode.ToUpperInvariant();

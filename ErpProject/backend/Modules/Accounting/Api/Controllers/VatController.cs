@@ -1,4 +1,4 @@
-using Erp.Application.Common.Attributes;
+﻿using Erp.Application.Common.Attributes;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -28,17 +28,25 @@ public class VatController : ControllerBase
     [RequirePermission(Permissions.Vat.Read)]
     public IActionResult GetVatRates() => Ok(SpanishVatRates.All);
 
+    /// <summary>Nombre legacy «modelo330» — el modelo vigente es el 303 (el 330 quedó obsoleto en 2014).</summary>
     [HttpPost("declare/modelo330")]
     [RequirePermission(Permissions.Vat.Manage)]
-    public IActionResult DeclareModelo330([FromBody] object dto)
+    public async Task<IActionResult> DeclareModelo330([FromBody] DeclareModelo330Request request, CancellationToken ct)
     {
-        return Created("", new
+        try
         {
-            id = Guid.NewGuid(),
-            modelo = "330",
-            status = "Declared",
-            message = "Modelo 330 declarado exitosamente"
-        });
+            var result = await _mediator.Send(new DeclareModelo330Command(request.Year, request.Quarter), ct);
+            return Created("", result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 }
 
+public class DeclareModelo330Request
+{
+    public int Year { get; set; }
+    public int Quarter { get; set; } = 1;
+}

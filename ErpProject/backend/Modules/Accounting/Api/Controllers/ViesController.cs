@@ -1,4 +1,4 @@
-using Erp.Application.Common.Attributes;
+﻿using Erp.Application.Common.Attributes;
 using Erp.Modules.Accounting.Application.Features.Vat;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -18,7 +18,7 @@ public class ViesController : ControllerBase
 
     /// <summary>
     /// POST /api/v1/accounting/vies/validate
-    /// Misma validación VIES real que TaxController, con registro en IntraEuOperations.
+    /// Misma validaci├│n VIES real que TaxController, con registro en IntraEuOperations.
     /// </summary>
     [HttpPost("validate")]
     [RequirePermission(Permissions.Vies.Manage)]

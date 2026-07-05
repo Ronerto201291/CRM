@@ -2,17 +2,9 @@ using System.Xml.Linq;
 
 namespace Erp.Application.Common.Fiscal;
 
-/// <summary>Validaci√≥n estructural FacturaE 3.2.2 sin certificado (homologaci√≥n offline).</summary>
+/// <summary>ValidaciÛn estructural FacturaE 3.2.2 sin certificado (homologaciÛn offline).</summary>
 public static class FacturaEXmlStructureValidator
 {
-    // Namespace real de FacturaE 3.2.2 (facturae.gob.es); antes apuntaba a
-    // "Version3.2.2/Facturae32.xsd", que no es el namespace oficial de la
-    // versi√≥n ‚Äî un receptor FACe/validador real rechazar√≠a el documento.
-    // √önica fuente de verdad: FacturaEService.cs referencia esta misma
-    // constante para que generador y validador no puedan volver a divergir.
-    public const string FacturaENamespace =
-        "http://www.facturae.gob.es/formato/Versiones/Facturaev3_2_2.xml";
-
     public static FacturaEValidationResult Validate(string xml)
     {
         var errors = new List<string>();
@@ -31,38 +23,46 @@ public static class FacturaEXmlStructureValidator
         var root = doc.Root;
         if (root is null)
         {
-            errors.Add("Documento sin elemento ra√≠z.");
+            errors.Add("Documento sin elemento raÌz.");
             return new FacturaEValidationResult(false, errors, warnings);
         }
 
         if (root.Name.LocalName != "Facturae")
-            errors.Add($"Ra√≠z esperada 'Facturae', encontrada '{root.Name.LocalName}'.");
+            errors.Add($"RaÌz esperada 'Facturae', encontrada '{root.Name.LocalName}'.");
 
-        if (root.Name.NamespaceName != FacturaENamespace)
-            errors.Add($"Namespace ra√≠z debe ser '{FacturaENamespace}', encontrado '{root.Name.NamespaceName}'.");
+        var ns = root.Name.NamespaceName;
+        if (ns == FacturaEConstants.LegacyWrongNamespace)
+        {
+            errors.Add(
+                $"Namespace obsoleto detectado ('{FacturaEConstants.LegacyWrongNamespace}'). " +
+                $"Use '{FacturaEConstants.Namespace}'.");
+        }
+        else if (ns != FacturaEConstants.Namespace)
+        {
+            errors.Add(
+                $"Namespace raÌz debe ser '{FacturaEConstants.Namespace}', encontrado '{ns}'.");
+        }
 
         var header = root.Descendants()
-            .FirstOrDefault(e => e.Name.LocalName == "FileHeader" && e.Name.NamespaceName == FacturaENamespace);
+            .FirstOrDefault(e => e.Name.LocalName == "FileHeader");
         if (header is null)
             errors.Add("Falta elemento FileHeader.");
         else
         {
             var schemaVersion = header.Elements()
                 .FirstOrDefault(e => e.Name.LocalName == "SchemaVersion");
-            if (schemaVersion?.Value != "3.2.2")
+            if (schemaVersion?.Value != FacturaEConstants.SchemaVersion)
             {
-                var found = schemaVersion?.Value ?? "(vac√≠o)";
-                errors.Add($"SchemaVersion debe ser 3.2.2, encontrado: {found}");
+                var found = schemaVersion?.Value ?? "(vacÌo)";
+                errors.Add($"SchemaVersion debe ser {FacturaEConstants.SchemaVersion}, encontrado: {found}");
             }
+
+            ValidateExtensions(header, errors, warnings);
         }
 
-        var seller = root.Descendants()
-            .FirstOrDefault(e => e.Name.LocalName == "SellerParty");
-        var buyer = root.Descendants()
-            .FirstOrDefault(e => e.Name.LocalName == "BuyerParty");
-        if (seller is null)
+        if (root.Descendants().FirstOrDefault(e => e.Name.LocalName == "SellerParty") is null)
             errors.Add("Falta SellerParty en Parties.");
-        if (buyer is null)
+        if (root.Descendants().FirstOrDefault(e => e.Name.LocalName == "BuyerParty") is null)
             errors.Add("Falta BuyerParty en Parties.");
 
         var invoice = root.Descendants()
@@ -77,12 +77,32 @@ public static class FacturaEXmlStructureValidator
                 errors.Add("Falta InvoiceNumber.");
         }
 
-        var taxesOutputs = root.Descendants()
-            .FirstOrDefault(e => e.Name.LocalName == "TaxesOutputs");
-        if (taxesOutputs is null)
+        if (root.Descendants().FirstOrDefault(e => e.Name.LocalName == "TaxesOutputs") is null)
             warnings.Add("Sin TaxesOutputs (factura sin IVA desglosado).");
 
         return new FacturaEValidationResult(errors.Count == 0, errors, warnings);
+    }
+
+    private static void ValidateExtensions(XElement header, List<string> errors, List<string> warnings)
+    {
+        var extensions = header.Elements()
+            .FirstOrDefault(e => e.Name.LocalName == "Extensions");
+        if (extensions is null) return;
+
+        foreach (var extension in extensions.Elements().Where(e => e.Name.LocalName == "Extension"))
+        {
+            if (extension.Elements().Any(e => e.Name.LocalName is "ExtensionCode" or "ExtensionName"))
+            {
+                errors.Add(
+                    "Extensions/Extension no admite ExtensionCode/ExtensionName en FacturaE 3.2.2; " +
+                    "use ExtensionContent con namespace ajeno.");
+            }
+
+            var content = extension.Elements()
+                .FirstOrDefault(e => e.Name.LocalName == "ExtensionContent");
+            if (content is null)
+                warnings.Add("Extension sin ExtensionContent.");
+        }
     }
 }
 

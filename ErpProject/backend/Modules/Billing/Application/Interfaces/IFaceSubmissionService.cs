@@ -1,6 +1,5 @@
 namespace Erp.Modules.Billing.Application.Interfaces;
 
-/// <summary>Envío FacturaE a FACe (B2G). Primer paso: contrato + stub.</summary>
 public interface IFaceSubmissionService
 {
     bool IsConfigured { get; }

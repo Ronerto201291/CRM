@@ -2,7 +2,7 @@ using System.Xml.Linq;
 
 namespace Erp.Modules.Billing.Infrastructure.Services;
 
-/// <summary>Validaci√≥n estructural del sobre SOAP FACe sin env√≠o HTTP.</summary>
+/// <summary>ValidaciÛn estructural del sobre SOAP FACe sin envÌo HTTP.</summary>
 public static class FaceSoapStructureValidator
 {
     private const string SoapNs = "http://schemas.xmlsoap.org/soap/envelope/";
@@ -26,7 +26,7 @@ public static class FaceSoapStructureValidator
         var envelope = doc.Root;
         if (envelope is null || envelope.Name.LocalName != "Envelope")
         {
-            errors.Add("Falta elemento ra√≠z soapenv:Envelope.");
+            errors.Add("Falta elemento raÌz soapenv:Envelope.");
             return new FaceSoapValidationResult(false, errors, warnings);
         }
 
@@ -42,27 +42,21 @@ public static class FaceSoapStructureValidator
         }
 
         if (submit.Name.NamespaceName != FaceNs)
-            warnings.Add($"SubmitInvoice deber√≠a estar en namespace '{FaceNs}'.");
+            warnings.Add($"SubmitInvoice deberÌa estar en namespace '{FaceNs}'.");
 
         var fileName = submit.Elements()
             .FirstOrDefault(e => e.Name.LocalName == "FileName")?.Value;
         if (string.IsNullOrWhiteSpace(fileName))
-            errors.Add("Falta o est√° vac√≠o face:FileName.");
+            errors.Add("Falta o est· vacÌo face:FileName.");
 
         var content = submit.Elements()
             .FirstOrDefault(e => e.Name.LocalName == "Content")?.Value;
         if (string.IsNullOrWhiteSpace(content))
-            errors.Add("Falta o est√° vac√≠o face:Content (Base64).");
+            errors.Add("Falta o est· vacÌo face:Content (Base64).");
         else
         {
-            try
-            {
-                Convert.FromBase64String(content);
-            }
-            catch (FormatException)
-            {
-                errors.Add("face:Content no es Base64 v√°lido.");
-            }
+            try { Convert.FromBase64String(content); }
+            catch (FormatException) { errors.Add("face:Content no es Base64 v·lido."); }
         }
 
         return new FaceSoapValidationResult(errors.Count == 0, errors, warnings);

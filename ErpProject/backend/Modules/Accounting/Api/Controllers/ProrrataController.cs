@@ -1,4 +1,4 @@
-using Erp.Application.Common.Attributes;
+﻿using Erp.Application.Common.Attributes;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -31,7 +31,7 @@ public class ProrrataController : ControllerBase
         return Ok(new[]
         {
             new { id = "General", name = "Prorrata General", description = "Para empresas con operaciones mixtas" },
-            new { id = "Special", name = "Prorrata Especial", description = "Sectores específicos" }
+            new { id = "Special", name = "Prorrata Especial", description = "Sectores espec├¡ficos" }
         });
     }
 }
