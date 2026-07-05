@@ -464,6 +464,7 @@ public class LockInvoiceHandler : IRequestHandler<LockInvoiceCommand, bool>
     private readonly IVerifactuSubmissionGateway _verifactuGateway;
     private readonly IVerifactuModeSettings _verifactuMode;
     private readonly IHttpContextCurrentUserAccessor _currentUser;
+    private readonly IBillingInvoiceSalesLinkQuery _salesLink;
     private readonly Microsoft.Extensions.Logging.ILogger<LockInvoiceHandler> _log;
 
     public LockInvoiceHandler(
@@ -475,6 +476,7 @@ public class LockInvoiceHandler : IRequestHandler<LockInvoiceCommand, bool>
         IVerifactuSubmissionGateway verifactuGateway,
         IVerifactuModeSettings verifactuMode,
         IHttpContextCurrentUserAccessor currentUser,
+        IBillingInvoiceSalesLinkQuery salesLink,
         Microsoft.Extensions.Logging.ILogger<LockInvoiceHandler> log)
     {
         _ctx              = ctx;
@@ -485,6 +487,7 @@ public class LockInvoiceHandler : IRequestHandler<LockInvoiceCommand, bool>
         _verifactuGateway = verifactuGateway;
         _verifactuMode    = verifactuMode;
         _currentUser      = currentUser;
+        _salesLink        = salesLink;
         _log              = log;
     }
 
@@ -566,6 +569,8 @@ public class LockInvoiceHandler : IRequestHandler<LockInvoiceCommand, bool>
             await _appCtx.SaveChangesAsync(ct);
         }
 
+        var salesOrderId = await _salesLink.GetSalesOrderIdForBillingInvoiceAsync(inv.Id, ct);
+
         await _publisher.Publish(new InvoiceApprovedEvent
         {
             InvoiceId = inv.Id, CompanyId = inv.CompanyId,
@@ -576,6 +581,7 @@ public class LockInvoiceHandler : IRequestHandler<LockInvoiceCommand, bool>
             SurchargeAmount = ToEur(inv.SurchargeAmount),
             Total = inv.TotalEur > 0 ? inv.TotalEur : ToEur(inv.Total),
             ClientId = inv.ClientId, IssueDate = inv.IssueDate,
+            SalesOrderId = salesOrderId,
             Lines = inv.InvoiceLines.Select(l => new InvoiceLineEventDto
             {
                 ProductId = l.ProductId, Quantity = l.Quantity, UnitPrice = l.UnitPrice

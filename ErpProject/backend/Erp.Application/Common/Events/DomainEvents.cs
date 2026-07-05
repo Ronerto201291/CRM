@@ -66,6 +66,12 @@ public class InvoiceApprovedEvent : IDomainEvent
     public Guid? ClientId { get; set; }
     public DateTime IssueDate { get; set; }
 
+    /// <summary>
+    /// Set when the billing invoice was created from a Sales customer invoice.
+    /// Stock is already decremented on delivery in that flow (ADR-0018 #66).
+    /// </summary>
+    public Guid? SalesOrderId { get; set; }
+
     // Inventory integration
     public List<InvoiceLineEventDto> Lines { get; set; } = new();
 }
@@ -269,6 +275,22 @@ public class QuoteConvertedToInvoiceEvent : IDomainEvent
 }
 
 // ── Purchasing / Sales → Inventory ────────────────────────────────────────────
+
+/// <summary>
+/// Fired when a supplier invoice passes three-way match (Purchasing).
+/// → Accounting: registra asiento de compra (600/472/410), mismo patrón que ExpenseApprovedEvent.
+/// </summary>
+public class SupplierInvoiceCreatedEvent : IDomainEvent
+{
+    public Guid SupplierInvoiceId { get; set; }
+    public Guid CompanyId { get; set; }
+    public Guid PurchaseOrderId { get; set; }
+    public string InvoiceNumber { get; set; } = string.Empty;
+    public decimal TaxBase { get; set; }
+    public decimal VATAmount { get; set; }
+    public decimal Total { get; set; }
+    public DateTime InvoiceDate { get; set; }
+}
 
 /// <summary>
 /// Fired when goods are received against a purchase order.

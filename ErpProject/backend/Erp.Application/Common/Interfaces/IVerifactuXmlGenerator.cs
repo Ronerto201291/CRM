@@ -1,8 +1,8 @@
-namespace Erp.Modules.Billing.Application.Interfaces;
+namespace Erp.Application.Common.Interfaces;
 
 /// <summary>
 /// Generates VERI*FACTU XML for AEAT TIKE registration (RD 1007/2023).
-/// Implementation lives in Erp.Infrastructure.
+/// Implementation lives in Billing.Infrastructure.
 /// </summary>
 public interface IVerifactuXmlGenerator
 {

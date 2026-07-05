@@ -40,5 +40,26 @@ public static class SepaXmlStructureValidator
 
         if (root.Element(root.Name.Namespace + rootChild) is null)
             throw new InvalidOperationException($"XML SEPA {label}: falta elemento {rootChild}.");
+
+        var initn = root.Element(root.Name.Namespace + rootChild)!;
+        var grpHdr = initn.Element(root.Name.Namespace + "GrpHdr");
+        if (grpHdr is null)
+            throw new InvalidOperationException($"XML SEPA {label}: falta GrpHdr.");
+
+        if (grpHdr.Element(root.Name.Namespace + "MsgId") is null)
+            throw new InvalidOperationException($"XML SEPA {label}: GrpHdr sin MsgId.");
+
+        if (grpHdr.Element(root.Name.Namespace + "NbOfTxs") is null)
+            throw new InvalidOperationException($"XML SEPA {label}: GrpHdr sin NbOfTxs.");
+
+        var pmtInf = initn.Element(root.Name.Namespace + "PmtInf");
+        if (pmtInf is null)
+            throw new InvalidOperationException($"XML SEPA {label}: falta PmtInf.");
+
+        if (label == "pain.001" && pmtInf.Element(root.Name.Namespace + "CdtTrfTxInf") is null)
+            throw new InvalidOperationException($"XML SEPA {label}: PmtInf sin CdtTrfTxInf.");
+
+        if (label == "pain.008" && pmtInf.Element(root.Name.Namespace + "DrctDbtTxInf") is null)
+            throw new InvalidOperationException($"XML SEPA {label}: PmtInf sin DrctDbtTxInf.");
     }
 }

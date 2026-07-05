@@ -91,12 +91,9 @@ Siete controladores en `Api/Controllers/`:
   TPV y `POST {id}/payments` para registrar un cobro con tarjeta; despacha
   vía `IMediator` a `PosTerminalHandlers.cs`, que persiste `PosTerminal`/
   `PosPayment` reales y publica `InvoiceCardPaymentRequestedEvent`.
-  **El backend es real, pero no tiene ningún frontend**: ningún archivo bajo
-  `frontend/src/app/treasury/` lo referencia (verificado por grep de
-  "pos-terminal"/"PosTerminal"/"TPV" — la única mención de "TPV" en el
-  frontend es un placeholder de texto no funcional en `TreasuryClient.tsx`).
-  No dar por hecho el ítem #41 del roadmap producto (ADR-0019) solo porque
-  este controller exista — ver ADR-0018 ítem 72.
+  **Frontend conectado (ADR-0018 #72 ✅):** pestaña "TPV" en `TreasuryClient.tsx`
+  — listado, alta de terminal y registro de cobro vía
+  `/api/proxy/treasury/pos-terminals` y `POST .../{id}/payments`.
 
 Todos los controladores son `[Authorize]` y resuelven `CompanyId` vía
 `ITenantContext.TenantId`, filtrando explícitamente cada consulta EF Core por
@@ -116,7 +113,7 @@ Accounting (`IAccountingDbContext`), no solo del propio módulo.
 
 ### Frontend
 `frontend/src/app/treasury/page.tsx` (RSC) + `TreasuryClient.tsx` — panel
-principal con pestañas `accounts | movements | effects | orders | forecast`,
+principal con pestañas `accounts | movements | effects | orders | forecast | cash | pos`,
 llamando a `fetch('/api/proxy/treasury/...')` (patrón de proxy de ADR-0001).
 Subrutas dedicadas: `frontend/src/app/treasury/{consolidation,currencies,
 financing,guarantees}/page.tsx`, cada una consumiendo su controlador

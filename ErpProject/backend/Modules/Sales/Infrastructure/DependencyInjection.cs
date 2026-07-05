@@ -1,6 +1,8 @@
+using Erp.Application.Common.Interfaces;
 using Erp.Modules.Sales.Application.Interfaces;
 using Erp.Modules.Sales.Application.Validators;
 using Erp.Modules.Sales.Infrastructure.Data;
+using Erp.Modules.Sales.Infrastructure.Services;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -23,6 +25,7 @@ public static class DependencyInjection
                .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
 
         services.AddScoped<ISalesDbContext>(p => p.GetRequiredService<SalesDbContext>());
+        services.AddScoped<IBillingInvoiceSalesLinkQuery, BillingInvoiceSalesLinkQuery>();
         services.AddValidatorsFromAssembly(typeof(CreateSalesOrderCommandValidator).Assembly);
 
         return services;

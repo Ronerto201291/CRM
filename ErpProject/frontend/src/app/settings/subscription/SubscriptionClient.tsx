@@ -4,9 +4,10 @@ import PageContainer from '@/components/PageContainer';
 import EmptyState from '@/components/EmptyState';
 
 interface Plan { id: string; name: string; monthlyPrice: number; yearlyPrice: number; maxUsers: number; maxInvoicesPerMonth: number; maxCompanies?: number; }
-interface Subscription { id: string; planId: string; planName: string; status: string; stripeStatus?: string; currentPeriodStart?: string; currentPeriodEnd?: string; maxCompanies?: number; companiesUsed?: number; }
+interface GestoriaCompany { companyId: string; name: string; taxId: string; }
+interface Subscription { id: string; planId: string; planName: string; status: string; stripeStatus?: string; currentPeriodStart?: string; currentPeriodEnd?: string; maxCompanies?: number; companiesUsed?: number; gestoriaCompanies?: GestoriaCompany[]; }
 interface TenantModule { id: string; moduleName: string; isEnabled: boolean; }
-interface StripeInvoice { id: string; amount: number; currency: string; status: string; created: string; invoiceUrl?: string; }
+interface StripeInvoice { id: string; amount: number; currency: string; status: string; created: string; invoiceUrl?: string; description?: string; companyBreakdown?: GestoriaCompany[]; lineItems?: { companyName: string; amountEur: number; description?: string }[]; }
 
 interface SubscriptionClientProps {
     initialPlans: Plan[];
@@ -45,9 +46,24 @@ export default function SubscriptionClient({
             fetch('/api/proxy/subscription/invoices'),
         ]);
         if (r1.ok) setPlans(await r1.json());
-        if (r2.ok) setSubscription(await r2.json());
+        if (r2.ok) {
+            const data = await r2.json();
+            setSubscription({
+                id: data.plan ?? '',
+                planId: data.plan ?? '',
+                planName: data.plan ?? 'Free',
+                status: data.isActive ? 'active' : 'inactive',
+                stripeStatus: data.stripeStatus,
+                maxCompanies: data.maxCompanies,
+                companiesUsed: data.companiesUsed,
+                gestoriaCompanies: data.gestoriaCompanies,
+            });
+        }
         if (r3.ok) setModules(await r3.json());
-        if (r4.ok) setStripeInvoices(await r4.json());
+        if (r4.ok) {
+            const data = await r4.json();
+            setStripeInvoices(Array.isArray(data) ? data : []);
+        }
     };
     useEffect(() => { load(); }, []);
 
@@ -117,6 +133,19 @@ export default function SubscriptionClient({
                             {(subscription.maxCompanies ?? 0) > 0 && (
                                 <div style={{ marginTop: '10px', fontSize: '13px' }}>
                                     Empresas: <strong>{subscription.companiesUsed ?? 0}</strong> / {subscription.maxCompanies === 9999 ? '∞' : subscription.maxCompanies}
+                                </div>
+                            )}
+                            {(subscription.gestoriaCompanies?.length ?? 0) > 1 && (
+                                <div style={{ marginTop: '12px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                                    <div style={{ fontWeight: 700, marginBottom: 6 }}>Desglose facturación gestoría</div>
+                                    <ul style={{ margin: 0, paddingLeft: 18 }}>
+                                        {subscription.gestoriaCompanies!.map(c => (
+                                            <li key={c.companyId}>{c.name} ({c.taxId})</li>
+                                        ))}
+                                    </ul>
+                                    <p style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
+                                        Facturación Stripe: un line item por empresa activa en cada ciclo.
+                                    </p>
                                 </div>
                             )}
                         </div>
@@ -210,6 +239,7 @@ export default function SubscriptionClient({
                                 <th>Fecha</th>
                                 <th style={{ textAlign: 'right' }}>Importe</th>
                                 <th>Estado</th>
+                                <th>Desglose</th>
                                 <th style={{ textAlign: 'right' }}>Factura</th>
                             </tr>
                         </thead>
@@ -222,6 +252,13 @@ export default function SubscriptionClient({
                                         <span className={`badge ${inv.status === 'paid' ? 'badge-success' : 'badge-warning'}`}>
                                             {inv.status}
                                         </span>
+                                    </td>
+                                    <td style={{ fontSize: '12px', maxWidth: 280 }}>
+                                        {inv.lineItems && inv.lineItems.length > 1
+                                            ? inv.lineItems.map(l => `${l.companyName}: ${l.amountEur.toFixed(2)}€`).join(' · ')
+                                            : inv.companyBreakdown && inv.companyBreakdown.length > 1
+                                                ? inv.companyBreakdown.map(c => c.name).join(', ')
+                                                : inv.description ?? '—'}
                                     </td>
                                     <td style={{ textAlign: 'right' }}>
                                         {inv.invoiceUrl && (

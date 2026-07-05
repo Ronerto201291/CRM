@@ -111,4 +111,42 @@ public class ExpenseApprovedEventHandlerTests
             });
         }
     }
+
+    [Fact]
+    public async Task SupplierInvoiceCreated_CreatesBalancedJournalEntry_600_410()
+    {
+        var companyId = Guid.NewGuid();
+        var invoiceId = Guid.NewGuid();
+        var tenant = new FakeTenantContext();
+        tenant.SetTenant(companyId, "Empresa test");
+
+        var options = new DbContextOptionsBuilder<AccountingDbContext>()
+            .UseInMemoryDatabase($"accounting-si-{Guid.NewGuid()}")
+            .Options;
+
+        await using var ctx = new AccountingDbContext(options, tenant);
+        SeedExpenseAccounts(ctx, companyId);
+        await ctx.SaveChangesAsync();
+
+        var handler = new SupplierInvoiceCreatedEventHandler(ctx, NullLogger<SupplierInvoiceCreatedEventHandler>.Instance);
+        await handler.Handle(new SupplierInvoiceCreatedEvent
+        {
+            SupplierInvoiceId = invoiceId,
+            CompanyId = companyId,
+            PurchaseOrderId = Guid.NewGuid(),
+            InvoiceNumber = "FPROV-001",
+            TaxBase = 100m,
+            VATAmount = 21m,
+            Total = 121m,
+            InvoiceDate = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+        }, CancellationToken.None);
+
+        var entry = await ctx.JournalEntries
+            .Include(j => j.JournalEntryLines)
+            .SingleAsync(j => j.SourceType == "SupplierInvoice" && j.SourceId == invoiceId);
+
+        Assert.Equal(3, entry.JournalEntryLines.Count);
+        Assert.Equal(121m, entry.JournalEntryLines.Sum(l => l.Debit));
+        Assert.Equal(121m, entry.JournalEntryLines.Sum(l => l.Credit));
+    }
 }

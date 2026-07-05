@@ -66,4 +66,21 @@ public class FacturaEXmlStructureValidatorTests
         Assert.False(result.IsValid);
         Assert.Contains(result.Errors, e => e.Contains("ExtensionCode"));
     }
+
+    [Fact]
+    public void Validate_SignedWithoutPolicyIdentifier_Fails()
+    {
+        var xml = ValidMinimalXml.Replace(
+            "</fe:Invoices>",
+            """
+              </fe:Invoices>
+              <ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
+                <ds:SignedInfo/>
+              </ds:Signature>
+            """);
+
+        var result = FacturaEXmlStructureValidator.Validate(xml);
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Contains("SignaturePolicyIdentifier"));
+    }
 }

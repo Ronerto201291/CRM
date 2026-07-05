@@ -15,16 +15,13 @@ mercancía (`GoodsReceipt`) y registro de facturas de proveedor
 A diferencia de otros módulos del monolito modular, la implementación de
 Purchasing sigue siendo parcial: **sí existe** un flujo de aprobación de
 pedidos de compra (ver más abajo, ADR-0018 #30) y **sí existe** integración
-activa con Inventario (recepción de mercancía → stock, ADR-0018 #20), pero
-**no hay** integración con Contabilidad (una factura de proveedor validada
-nunca genera asiento contable) ni vínculo persistido con el proveedor
-(`Supplier`) de CRM. Además, una contra-auditoría jul 2026 encontró que los
-formularios reales del frontend de recepción y factura de proveedor no
-pueden completarse en absoluto (ver "Consecuencias" — bug crítico, no solo
-deuda de documentación). Esta ADR documenta el estado "as-built" tal cual
-existe hoy, incluyendo esas carencias, para que cualquier trabajo futuro
-sobre el módulo parta de hechos verificados y no de suposiciones sobre cómo
-"debería" funcionar un ERP de compras.
+activa con Inventario (recepción de mercancía → stock, ADR-0018 #20) y
+**sí existe** integración con Contabilidad vía eventos (factura de proveedor
+validada → asiento 600/472/410, ADR-0018 #69 ✅), pero **no hay** vínculo
+persistido con el proveedor (`Supplier`) de CRM. Esta ADR documenta el estado
+"as-built" tal cual existe hoy, incluyendo esas carencias, para que cualquier
+trabajo futuro sobre el módulo parta de hechos verificados y no de
+suposiciones sobre cómo "debería" funcionar un ERP de compras.
 
 ## Decisión
 ### Backend
@@ -49,16 +46,13 @@ Controllers (`backend/Modules/Purchasing/Api/Controllers/`):
   `Company.ApprovalThresholdAmount` (configurable por tenant). Frontend real:
   `orders/[id]/OrderDetailClient.tsx` hace `POST` real a estas tres rutas y
   muestra el estado con badges.
-- `ReceiptsController` — ruta `api/v{version:apiVersion}/purchasing/receipts`,
-  con `[Authorize]`. `POST` despacha `CreateGoodsReceiptCommand` vía
-  `IMediator`. `GET {id}` es un stub que solo devuelve `{ id }`, sin datos
-  reales de la recepción. **No existe ningún `GET` de listado** (solo
-  `POST`/`GET {id}`) — ver "Consecuencias".
-- `InvoicesController` — ruta `api/v{version:apiVersion}/purchasing/invoices`,
-  con `[Authorize]` (corrección jul 2026: una versión anterior de este ADR
-  decía que no lo llevaba). `POST` despacha `CreateSupplierInvoiceCommand`
-  vía `IMediator`. `GET {id}` es igualmente un stub `{ id }`, y **tampoco
-  existe ningún `GET` de listado**.
+- `ReceiptsController` — ruta `api/v{version:apiVersion}/purchasing/receipts`.
+  `GET` listado paginado (`GetAllGoodsReceiptsQuery`), `POST` →
+  `CreateGoodsReceiptCommand`, `GET {id}` → `GetGoodsReceiptQuery` con líneas
+  reales (ADR-0018 #68 ✅).
+- `InvoicesController` — ruta `api/v{version:apiVersion}/purchasing/invoices`.
+  `GET` listado paginado (`GetAllSupplierInvoicesQuery`), `POST` →
+  `CreateSupplierInvoiceCommand`, `GET {id}` → `GetSupplierInvoiceQuery` (#68 ✅).
 
 CQRS (`backend/Modules/Purchasing/Application/Features/`): solo existen dos
 casos de uso implementados con MediatR, `Receipts/Commands/CreateGoodsReceiptCommand`
@@ -80,7 +74,9 @@ tolerancia de matching configurable por tenant
 (`Company.MatchingToleranceAmount`, en `backend/Erp.Domain/Entities/Core/Company.cs`,
 por defecto `0m`), construye la `SupplierInvoice` con sus líneas y ejecuta
 `ThreeWayMatchValidator.ValidateInvoiceAgainstOrderAndReceipt(invoice, _context, tolerance)`
-**antes** de añadir la factura al contexto y hacer `SaveChangesAsync`. Si el
+**antes** de añadir la factura al contexto y hacer `SaveChangesAsync`. Tras
+persistir, publica `SupplierInvoiceCreatedEvent` vía `IPublisher` (ADR-0018 #69).
+Si el
 validador lanza excepción, la factura no llega a persistirse: es un bloqueo
 duro, no un aviso ni un flag que se guarde en la entidad (la factura no
 tiene ningún campo de estado de matching).
@@ -126,10 +122,11 @@ raíz `purchasing/page.tsx`):
   Recepción" y "Crear Factura" que navegan a los formularios
   correspondientes precargando `purchaseOrderId`, y un botón "Cancelar" que
   llama a `PATCH /purchasing/orders/{id}/cancel`.
-- `receipts/page.tsx` y `receipts/new/page.tsx` — listado y alta de
-  recepciones, seleccionando un pedido existente.
-- `invoices/page.tsx` y `invoices/new/page.tsx` — listado y alta de
-  facturas de proveedor.
+- `receipts/page.tsx` y `receipts/new/page.tsx` — listado (datos reales vía
+  `GET /api/v1/purchasing/receipts`) y alta con líneas del pedido aprobado
+  (`purchaseOrderLineId`, `productId`, `unitPrice`; ADR-0018 #67 ✅).
+- `invoices/page.tsx` y `invoices/new/page.tsx` — listado y alta contra
+  `purchaseOrderId` con líneas del pedido (#67 ✅).
 
 Todas las páginas son componentes `"use client"` que llaman al backend a
 través de `frontend/src/app/api/proxy/[...path]/route.ts`, un proxy
@@ -184,8 +181,9 @@ exactamente esas columnas). `PurchaseOrder` tiene un índice único
    tolerancia, la operación se aborta con `InvalidOperationException` y no
    se crea la factura.
 4. La recepción dispara `GoodsReceiptCreatedEvent` → Inventory incrementa
-   stock (ADR-0018 #20). No hay contabilización automática ni obligación de
-   pago en Treasury al crear la factura de proveedor.
+   stock (ADR-0018 #20). La factura dispara `SupplierInvoiceCreatedEvent` →
+   Accounting crea asiento automático 600/472/410 (ADR-0018 #69 ✅). No hay
+   obligación de pago en Treasury al crear la factura de proveedor.
 
 ## Relación con otros módulos
 - **ADR-0001 (patrón compartido):** ✅ cuatro proyectos por capa (#12);
@@ -219,18 +217,12 @@ exactamente esas columnas). `PurchaseOrder` tiene un índice único
 - **Estructura:** ✅ cuatro `.csproj` con frontera de compilador (#12).
 - **Controllers delgados:** ✅ `PurchaseOrdersController` vía `IMediator` (#11).
 - **N+1:** ✅ corregido en `CreateGoodsReceiptHandler` (#7).
-- **Pendiente:** `ReceiptsController.Get` e `InvoicesController.Get` siguen
-  siendo stubs `{ id }` y **sin ningún endpoint de listado**; `SupplierId`
-  no persistido; sin contabilización al crear factura de proveedor.
-- **Crítico (contra-auditoría jul 2026):** los formularios reales
-  `receipts/new/page.tsx` e `invoices/new/page.tsx` no recogen
-  `purchaseOrderLineId`/`purchaseOrderId`/`productId` — campos `Guid` no
-  anulables y obligatorios en `CreateGoodsReceiptCommand`/
-  `CreateSupplierInvoiceCommand`. Toda petición real desde estas páginas
-  lanza `InvalidOperationException` antes de llegar a la lógica de negocio
-  (`"Purchase order line not found"`/`"Purchase order not found"`) — el
-  three-way match, aunque el backend que lo implementa es correcto, nunca
-  se puede ejercitar por un usuario real hoy. Ver ADR-0018 ítem 67.
+- **Pendiente:** `SupplierId` no persistido en `PurchaseOrder` (solo texto suelto
+  vía CRM); campos de dominio que el frontend modela de más (`supplierName`,
+  estados `Paid`/`Draft`, etc.).
+- **✅ Corregido (jul 2026, #67–#69):** formularios `receipts/new` e `invoices/new`
+  cargan líneas del pedido con `purchaseOrderLineId`/`productId`; listados y
+  `GET {id}` reales (#68); `SupplierInvoiceCreatedEvent` → asiento contable (#69).
 
 ## Buenas prácticas aplicables
 - El "three-way match" en `ThreeWayMatchValidator` es el patrón de control
@@ -250,28 +242,19 @@ exactamente esas columnas). `PurchaseOrder` tiene un índice único
 
 ## Consecuencias
 - **Estructura:** ✅ alineada con ADR-0001 (#12, #19g).
-- **Endpoints de lectura incompletos**: `ReceiptsController.Get` e
-  `InvoicesController.Get` son stubs que devuelven `{ id }`, no la entidad
-  real; el frontend de detalle no podría consumirlos tal cual.
-- **Desajuste frontend/backend**: el frontend modela `PurchaseOrder`,
-  `SupplierInvoice` y `GoodsReceipt` con campos que no existen en el backend
-  (`supplierId`/`supplierName`, `status` con estados como `Open` /
-  `PartiallyReceived` / `Completed` / `Cancelled` / `Draft` / `Approved` /
-  `Paid`, `subtotal`/`taxAmount`/`total`, `deliveredQuantity`/`billedQuantity`
-  por línea, endpoint `PATCH .../cancel`). Ninguno de esos campos ni la
-  acción `cancel` existen en las entidades, DTOs, comandos ni controllers
-  reales. Además, las páginas de listado llaman a
-  `/api/proxy/purchasing/...` (sin versión) mientras que las de alta/detalle
-  llaman a `/api/proxy/v1/purchasing/...`; solo la segunda ruta coincide con
-  el prefijo `api/v{version}/...` que exponen los controllers.
+- **Endpoints de lectura** ✅ (#68): listados y detalle reales en
+  `ReceiptsController`/`InvoicesController`. Siguen pendientes campos de
+  dominio que el frontend aún modela de más (`supplierName`, estados
+  `Paid`/`Draft`, etc.).
+- **Desajuste frontend/backend (cosmético):** el frontend modela estados y
+  campos que el backend no persiste (`supplierName` derivado, estados
+  `Paid`/`Draft` en facturas, etc.) — no bloquea el flujo principal.
 - **Proveedor no vinculado**: al no persistirse `SupplierId` en Purchasing,
-  no hay forma de saber en base de datos a qué proveedor de CRM pertenece
-  un pedido, una recepción o una factura; cualquier reporting o
-  contabilización futura que necesite esa relación requiere añadir la
-  columna y el flujo correspondiente.
-- **Integración parcial con Inventory** ✅: registrar una recepción mueve
-  stock vía `GoodsReceiptCreatedEvent`. Pendiente: crear factura de proveedor
-  no genera asiento contable ni obligación de pago en Treasury.
+  no hay FK a CRM; reporting cross-módulo requiere añadir la columna.
+- **Integración Inventory** ✅ (#20): recepción incrementa stock.
+  **Integración Accounting** ✅ (#69): factura validada publica
+  `SupplierInvoiceCreatedEvent` → asiento 600/472/410. Pendiente: obligación
+  de pago automática en Treasury.
 - El validador de three-way match no persiste su resultado (no hay estado
   de "conciliado"/"con discrepancias" en `SupplierInvoice`): un fallo
   bloquea la creación por completo, sin posibilidad de guardar la factura

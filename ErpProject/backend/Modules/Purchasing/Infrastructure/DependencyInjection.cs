@@ -1,3 +1,4 @@
+using Erp.Application.Common.Interfaces;
 using Erp.Modules.Purchasing.Application.Interfaces;
 using Erp.Modules.Purchasing.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -21,6 +22,7 @@ public static class DependencyInjection
                .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
 
         services.AddScoped<IPurchasingDbContext>(p => p.GetRequiredService<PurchasingDbContext>());
+        services.AddScoped<IAutomationPurchasingQuery, Services.AutomationPurchasingQuery>();
 
         return services;
     }

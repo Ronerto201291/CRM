@@ -19,6 +19,7 @@ public interface IApplicationDbContext
     DbSet<RolePermission> RolePermissions { get; }
     DbSet<UserPermission> UserPermissions { get; }
     DbSet<UserCompany> UserCompanies { get; }
+    DbSet<PushSubscription> PushSubscriptions { get; }
     DbSet<RefreshToken> RefreshTokens { get; }
     DbSet<TenantInvitation> TenantInvitations { get; }
     DbSet<Document> Documents { get; }

@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import PageContainer from '@/components/PageContainer';
@@ -16,6 +16,8 @@ interface ExpenseDoc {
     ocrConfidence?: number;
 }
 interface Stats { pending: number; approved: number; totalVATSoportado: number; totalBase: number; }
+interface AnomalyItem { expenseId: string; invoiceNumber?: string; supplierName?: string; amount: number; type: string; message: string; }
+interface CategorySuggestion { accountCode: string; accountName: string; reason: string; confidence: number; }
 
 const STATUS_MAP: Record<string, { label: string; cls: string }> = {
     Draft:    { label: 'Borrador',  cls: 'badge-warning' },
@@ -48,7 +50,29 @@ export default function ExpensesClient({
     });
     const [creating, setCreating] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+    const [anomalies, setAnomalies] = useState<{ outliers: AnomalyItem[]; duplicates: AnomalyItem[]; aiSummary?: string } | null>(null);
+    const [categoryHint, setCategoryHint] = useState<CategorySuggestion | null>(null);
     const { fetchCached, invalidateCached } = useCachedApi();
+
+    const loadAnomalies = useCallback(async () => {
+        const r = await fetch('/api/proxy/expenses/anomalies');
+        if (r.ok) {
+            const data = await r.json();
+            setAnomalies({ outliers: data.outliers ?? [], duplicates: data.duplicates ?? [], aiSummary: data.aiSummary });
+        }
+    }, []);
+
+    useEffect(() => {
+        queueMicrotask(() => { void loadAnomalies(); });
+    }, [loadAnomalies]);
+
+    const suggestCategory = async (supplierTaxId?: string, description?: string) => {
+        const params = new URLSearchParams();
+        if (supplierTaxId) params.set('supplierTaxId', supplierTaxId);
+        if (description) params.set('description', description);
+        const r = await fetch(`/api/proxy/expenses/suggest-category?${params}`);
+        if (r.ok) setCategoryHint(await r.json());
+    };
 
     const refresh = async () => {
         invalidateCached('expenses');
@@ -173,6 +197,20 @@ export default function ExpensesClient({
                 </div>
             )}
 
+            {anomalies && (anomalies.outliers.length > 0 || anomalies.duplicates.length > 0) && (
+                <div className="erp-card" style={{ padding: '16px', marginBottom: '20px', borderLeft: '4px solid var(--warning)' }}>
+                    <div style={{ fontWeight: 700, marginBottom: '8px' }}>⚠ Anomalías detectadas (heurística #40)</div>
+                    <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                        {[...anomalies.outliers, ...anomalies.duplicates].slice(0, 5).map(a => (
+                            <li key={`${a.expenseId}-${a.type}`}>{a.message}</li>
+                        ))}
+                    </ul>
+                    {anomalies.aiSummary && (
+                        <p style={{ marginTop: '10px', fontSize: '13px', fontStyle: 'italic' }}>{anomalies.aiSummary}</p>
+                    )}
+                </div>
+            )}
+
             {/* Info banner */}
             <div style={{ background: 'var(--info-bg)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: '8px', padding: '12px 16px', marginBottom: '20px', display: 'flex', gap: '12px', alignItems: 'center', fontSize: '13px', color: 'var(--info)' }}>
                 <span>ℹ️</span>
@@ -254,8 +292,15 @@ export default function ExpensesClient({
                             </div>
                             <div className="form-group">
                                 <FormLabel htmlFor="exp-taxId">CIF / NIF proveedor</FormLabel>
-                                <input id="exp-taxId" className="erp-input" placeholder="B12345678" {...register('supplierTaxId')} />
+                                <input id="exp-taxId" className="erp-input" placeholder="B12345678" {...register('supplierTaxId', {
+                                    onBlur: (e) => suggestCategory(e.target.value, getValues('supplierName')),
+                                })} />
                             </div>
+                            {categoryHint && (
+                                <div style={{ gridColumn: '1 / -1', fontSize: '12px', color: 'var(--info)', background: 'var(--info-bg)', padding: '8px 12px', borderRadius: '6px' }}>
+                                    💡 Categoría sugerida: <strong>{categoryHint.accountCode}</strong> — {categoryHint.accountName} ({Math.round(categoryHint.confidence * 100)}% · {categoryHint.reason})
+                                </div>
+                            )}
                             <div className="form-group">
                                 <FormLabel htmlFor="exp-vatRate">% IVA</FormLabel>
                                 <select id="exp-vatRate" className="erp-input" {...register('vatRate', {

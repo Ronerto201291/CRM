@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 import ExpensesClient from '@/app/expenses/ExpensesClient';
 
 vi.mock('@/hooks/useCachedApi', () => ({
@@ -10,6 +10,15 @@ vi.mock('@/hooks/useCachedApi', () => ({
 }));
 
 describe('ExpensesClient', () => {
+    beforeEach(() => {
+        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+            if (url.includes('/anomalies')) {
+                return Promise.resolve({ ok: true, json: async () => ({ outliers: [], duplicates: [] }) });
+            }
+            return Promise.resolve({ ok: true, json: async () => ({}) });
+        }));
+    });
+
     it('renderiza listado de gastos inicial', () => {
         render(
             <ExpensesClient

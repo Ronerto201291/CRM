@@ -32,6 +32,9 @@ public class Company : AuditableEntity
 
     public DateTime? AccountantExportLastRunAt { get; set; }
 
+    /// <summary>disabled | daily | weekly — notificaciones proactivas (#42).</summary>
+    public string ProactiveNotificationsFrequency { get; set; } = "daily";
+
     public ICollection<User> Users { get; set; } = new List<User>();
     public ICollection<Role> Roles { get; set; } = new List<Role>();
 }

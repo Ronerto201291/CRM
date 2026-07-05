@@ -15,10 +15,10 @@ public class LibroIvaRecibidasExporter : ILibroIvaRecibidasExporter
 
     public LibroIvaRecibidasExporter(IExpensesDbContext expenses) => _expenses = expenses;
 
-    public async Task<FiscalCsvExportResult> ExportAsync(Guid tenantId, int year, CancellationToken ct)
+    public async Task<FiscalCsvExportResult> ExportAsync(Guid tenantId, FiscalExportPeriod period, CancellationToken ct)
     {
-        var from = new DateTime(year, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-        var to = from.AddYears(1);
+        var from = period.FromUtc;
+        var to = period.ToUtc;
 
         var docs = await _expenses.ExpenseDocuments
             .Where(e => e.CompanyId == tenantId && e.Status == "Approved"
@@ -28,7 +28,7 @@ public class LibroIvaRecibidasExporter : ILibroIvaRecibidasExporter
             .ToListAsync(ct);
 
         var sb = new StringBuilder();
-        sb.AppendLine("Libro facturas recibidas;RIVA Art.64;Ejercicio;" + year);
+        sb.AppendLine("Libro facturas recibidas;RIVA Art.64;Ejercicio;" + period.Year);
         sb.AppendLine("FechaExpedicion;FechaRegistro;NumeroDocumento;NIFProveedor;NombreProveedor;BaseImponible;CuotaIVASoportada;IRPF;Total;Deducible");
         foreach (var e in docs)
         {
@@ -52,7 +52,7 @@ public class LibroIvaRecibidasExporter : ILibroIvaRecibidasExporter
         return new FiscalCsvExportResult
         {
             Content = bytes,
-            FileName = $"LibroIVA_Recibidas_{year}.csv",
+            FileName = $"LibroIVA_Recibidas_{period.FileSuffix}.csv",
             Disclaimer = "CSV libro IVA recibidas orientativo; contrastar con normativa RIVA vigente.",
         };
     }

@@ -38,6 +38,15 @@ describe('TreasuryPage forecast tab', () => {
                     ],
                 });
             }
+            if (url.includes('/liquidity-forecast')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: async () => ({
+                        currentBankBalance: 5000,
+                        horizons: [{ days: 30, horizonDate: '2026-08-05', expectedInflow: 1000, expectedOutflow: 500, recurringInflow: 0, recurringOutflow: 0, projectedBalance: 5500 }],
+                    }),
+                });
+            }
             return Promise.resolve({ ok: true, json: async () => ({ items: [], totalCount: 0 }) });
         }));
     });

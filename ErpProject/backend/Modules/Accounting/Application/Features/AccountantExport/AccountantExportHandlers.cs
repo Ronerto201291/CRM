@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Text;
 using Erp.Application.Common.Interfaces;
+using Erp.Modules.Accounting.Application.Features.Export;
 using Erp.Modules.Accounting.Application.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -56,6 +57,9 @@ public class ExportAccountantPackageHandler(
     ITenantContext tenant,
     ILibroIvaEmitidasExporter emitidasExporter,
     ILibroIvaRecibidasExporter recibidasExporter,
+    IJournalEntriesPeriodExporter journalExporter,
+    IAccountantBillingPdfExporter billingPdfExporter,
+    IAccountantExpensePdfExporter expensePdfExporter,
     IEmailService email) : IRequestHandler<ExportAccountantPackageCommand, AccountantPackageResultDto>
 {
     public async Task<AccountantPackageResultDto> Handle(ExportAccountantPackageCommand request, CancellationToken ct)
@@ -65,39 +69,35 @@ public class ExportAccountantPackageHandler(
 
         var now = DateTime.UtcNow;
         var year = request.Year ?? now.Year;
-        int monthStart, monthEnd;
-        if (request.Quarter is >= 1 and <= 4)
-        {
-            monthStart = (request.Quarter.Value - 1) * 3 + 1;
-            monthEnd = monthStart + 2;
-        }
-        else
-        {
-            var m = request.Month ?? now.Month;
-            monthStart = monthEnd = Math.Clamp(m, 1, 12);
-        }
+        FiscalExportPeriod period = request.Quarter is >= 1 and <= 4
+            ? FiscalExportPeriod.FromQuarter(year, request.Quarter.Value)
+            : FiscalExportPeriod.FromMonth(year, request.Month ?? now.Month);
 
-        var periodLabel = monthStart == monthEnd
-            ? $"{year}-{monthStart:D2}"
-            : $"Q{((monthStart - 1) / 3) + 1}-{year}";
-
-        var emitidas = await emitidasExporter.ExportAsync(companyId, year, ct);
-        var recibidas = await recibidasExporter.ExportAsync(companyId, year, ct);
+        var emitidas = await emitidasExporter.ExportAsync(companyId, period, ct);
+        var recibidas = await recibidasExporter.ExportAsync(companyId, period, ct);
+        var diario = await journalExporter.ExportAsync(companyId, period, ct);
+        var invoicePdfs = await billingPdfExporter.ExportLockedInvoicePdfsAsync(companyId, period, ct);
+        var expensePdfs = await expensePdfExporter.ExportExpensePdfsAsync(companyId, period, ct);
 
         using var zipStream = new MemoryStream();
         using (var archive = new ZipArchive(zipStream, ZipArchiveMode.Create, leaveOpen: true))
         {
-            AddEntry(archive, emitidas.FileName, emitidas.Content);
-            AddEntry(archive, recibidas.FileName, recibidas.Content);
-            var readme = Encoding.UTF8.GetBytes(
-                $"Paquete gestoría {company.Name} — periodo {periodLabel}\n" +
-                $"Generado: {now:yyyy-MM-dd HH:mm} UTC\n" +
-                "Contenido: libro IVA emitidas + recibidas (CSV).\n");
-            AddEntry(archive, "LEEME.txt", readme);
+            AddEntry(archive, $"libros-iva/{emitidas.FileName}", emitidas.Content);
+            AddEntry(archive, $"libros-iva/{recibidas.FileName}", recibidas.Content);
+            AddEntry(archive, $"asientos/{diario.FileName}", diario.Content);
+
+            foreach (var pdf in invoicePdfs)
+                AddEntry(archive, pdf.ZipPath, pdf.Content);
+
+            foreach (var pdf in expensePdfs)
+                AddEntry(archive, pdf.ZipPath, pdf.Content);
+
+            var readme = BuildReadme(company.Name, period, now, emitidas, recibidas, diario, invoicePdfs, expensePdfs);
+            AddEntry(archive, "LEEME.txt", Encoding.UTF8.GetBytes(readme));
         }
 
         var zipBytes = zipStream.ToArray();
-        var fileName = $"gestoria_{company.TaxId}_{periodLabel}.zip";
+        var fileName = $"gestoria_{company.TaxId}_{period.Label}.zip";
         var emailSent = false;
 
         if (request.SendEmail)
@@ -107,8 +107,8 @@ public class ExportAccountantPackageHandler(
 
             await email.SendWithAttachmentsAsync(
                 company.AccountantEmail,
-                $"Paquete contable {company.Name} — {periodLabel}",
-                $"<p>Adjunto paquete contable del periodo <strong>{periodLabel}</strong> para {company.Name}.</p>",
+                $"Paquete contable {company.Name} — {period.Label}",
+                $"<p>Adjunto paquete contable del periodo <strong>{period.Label}</strong> para {company.Name}.</p>",
                 [new EmailAttachment(fileName, zipBytes, "application/zip")],
                 ct);
             emailSent = true;
@@ -125,6 +125,34 @@ public class ExportAccountantPackageHandler(
             EmailSent = emailSent,
             Message = emailSent ? $"Enviado a {company.AccountantEmail}" : null,
         };
+    }
+
+    private static string BuildReadme(
+        string companyName,
+        FiscalExportPeriod period,
+        DateTime generatedAt,
+        FiscalCsvExportResult emitidas,
+        FiscalCsvExportResult recibidas,
+        FiscalCsvExportResult diario,
+        IReadOnlyList<AccountantZipFile> invoicePdfs,
+        IReadOnlyList<AccountantZipFile> expensePdfs)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"Paquete gestoría {companyName} — periodo {period.Label}");
+        sb.AppendLine($"Generado: {generatedAt:yyyy-MM-dd HH:mm} UTC");
+        sb.AppendLine();
+        sb.AppendLine("Índice de contenido:");
+        sb.AppendLine($"  libros-iva/{emitidas.FileName} — libro IVA facturas emitidas (CSV)");
+        sb.AppendLine($"  libros-iva/{recibidas.FileName} — libro IVA facturas recibidas (CSV)");
+        sb.AppendLine($"  asientos/{diario.FileName} — asientos contables del periodo (CSV)");
+        sb.AppendLine($"  facturas/ — {invoicePdfs.Count} PDF(s) de facturas emitidas bloqueadas");
+        sb.AppendLine($"  gastos/ — {expensePdfs.Count} documento(s) adjunto(s) de gastos aprobados");
+        sb.AppendLine();
+        sb.AppendLine("Notas:");
+        sb.AppendLine("- Los CSV de IVA son orientativos; contrastar con normativa RIVA vigente.");
+        sb.AppendLine("- Solo se incluyen facturas emitidas en estado Locked (PDF legal).");
+        sb.AppendLine("- Los gastos incluyen el archivo original subido cuando está disponible en almacenamiento.");
+        return sb.ToString();
     }
 
     private static void AddEntry(ZipArchive archive, string name, byte[] content)

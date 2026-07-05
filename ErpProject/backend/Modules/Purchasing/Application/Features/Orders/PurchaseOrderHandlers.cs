@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Erp.Modules.Purchasing.Application.Features.Orders;
 
-public record PurchaseOrderLineDto(Guid? ProductId, decimal Quantity, decimal UnitPrice);
+public record PurchaseOrderLineDto(Guid Id, Guid? ProductId, decimal Quantity, decimal UnitPrice);
 
 public record PurchaseOrderDto(
     Guid Id,

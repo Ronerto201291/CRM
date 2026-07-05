@@ -32,6 +32,8 @@ spec:
                 secretKeyRef:
                   name: erp-secrets
                   key: jwt-secret
+            - name: Postgres__RlsEnabled
+              value: "true"
           resources:
             requests:
               memory: "256Mi"

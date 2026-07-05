@@ -66,7 +66,7 @@ public class UpdatePurchaseOrderHandlerTests
             orderId,
             "PO-NEW",
             DateTime.UtcNow,
-            [new PurchaseOrderLineDto(null, 2m, 25m)]), CancellationToken.None);
+            [new PurchaseOrderLineDto(Guid.NewGuid(), null, 2m, 25m)]), CancellationToken.None);
 
         Assert.NotNull(result);
         Assert.Equal("PO-NEW", result!.Number);

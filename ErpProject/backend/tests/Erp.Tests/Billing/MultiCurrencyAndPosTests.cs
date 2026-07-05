@@ -9,18 +9,6 @@ using Xunit;
 
 namespace Erp.Tests.Billing;
 
-public class CreateInvoiceMultiCurrencyTests
-{
-    [Fact]
-    public async Task ExchangeRateLookup_ConvertsUsdToEur()
-    {
-        var lookup = new FakeExchangeRateLookup();
-        var eur = await lookup.ConvertToEurAsync("USD", 100m);
-        Assert.Equal(92m, eur);
-        Assert.Equal(0.92m, await lookup.GetRateToEurAsync("USD"));
-    }
-}
-
 public class RegisterPosPaymentHandlerTests
 {
     [Fact]

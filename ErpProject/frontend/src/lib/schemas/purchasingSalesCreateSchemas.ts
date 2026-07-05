@@ -25,14 +25,15 @@ export const purchaseOrderCreateSchema = z.object({
 });
 
 export const goodsReceiptCreateSchema = z.object({
-    purchaseOrderId: z.string().optional(),
+    purchaseOrderId: z.string().min(1, 'Selecciona un pedido de compra'),
     number: z.string().min(1, 'Número de recepción obligatorio'),
     receiptDate: z.string().min(1),
     lines: z.array(z.object({
-        purchaseOrderLineId: z.string().optional(),
+        purchaseOrderLineId: z.string().min(1, 'Línea de pedido obligatoria'),
         productId: z.string().optional(),
         description: z.string().min(1, 'Descripción obligatoria'),
         quantityReceived: z.number().positive('Cantidad debe ser mayor que 0'),
+        unitPrice: z.number().min(0, 'Precio no puede ser negativo'),
     })).min(1, 'Añade al menos una línea'),
 });
 
@@ -49,14 +50,17 @@ export const deliveryNoteCreateSchema = z.object({
 });
 
 export const supplierInvoiceCreateSchema = z.object({
-    supplierId: z.string().min(1, 'Selecciona un proveedor'),
+    purchaseOrderId: z.string().min(1, 'Selecciona un pedido de compra'),
     number: z.string().min(1, 'Número de factura obligatorio'),
     invoiceDate: z.string().min(1, 'Fecha obligatoria'),
-    lines: z.array(orderLineSchema).min(1),
-}).superRefine((data, ctx) => {
-    if (data.lines.every((l) => !l.description.trim())) {
-        ctx.addIssue({ code: 'custom', message: 'Añade al menos una línea con descripción', path: ['lines'] });
-    }
+    lines: z.array(z.object({
+        purchaseOrderLineId: z.string().min(1, 'Línea de pedido obligatoria'),
+        productId: z.string().optional(),
+        description: z.string().min(1, 'Descripción obligatoria'),
+        quantity: z.number().positive('Cantidad debe ser mayor que 0'),
+        unitPrice: z.number().min(0, 'Precio no puede ser negativo'),
+        taxRate: z.number().min(0).max(100),
+    })).min(1, 'Añade al menos una línea'),
 });
 
 export const customerSalesInvoiceCreateSchema = z.object({

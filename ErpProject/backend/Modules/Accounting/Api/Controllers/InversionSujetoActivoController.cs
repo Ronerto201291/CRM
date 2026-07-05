@@ -39,7 +39,7 @@ public class InversionSujetoActivoController : ControllerBase
             vatAmount = result.VatAmount,
             isReverseCharge = result.IsReverseCharge,
             status = result.Status,
-            message = "Inversiùn del sujeto pasivo registrada"
+            message = "InversiÛn del sujeto pasivo registrada"
         });
     }
 

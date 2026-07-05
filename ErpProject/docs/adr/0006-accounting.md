@@ -117,7 +117,8 @@ el mismo cambio, exactamente el tipo de desfase que la regla de "no cerrar
 sin actualizar el ADR" de `CLAUDE.md` busca evitar.
 `VatController.CalculateVat` y `ProrrataController.CalculateProrrata` dejaron
 de ser mock (ver Evaluación de calidad arquitectónica más abajo); `VatController.declare/modelo330`
-sigue siendo un stub. Validación VIES real disponible en dos rutas equivalentes:
+persiste una `VatLiquidation` real vía `DeclareModelo330Handler` + `IModelo303Reader`
+(el nombre legacy «330» corresponde al modelo 303 vigente). Validación VIES real disponible en dos rutas equivalentes:
 `TaxController` (`api/tax/vies/validate`, ver ADR-0013) y `ViesController`
 (`api/v1/accounting/vies/validate`, con persistencia en `IntraEuOperations`).
 `FinancialStatementsController` (`cash-flow`, `equity`, `income-statement`, `balance-sheet`)
@@ -130,22 +131,21 @@ y `ReportsController` (`diario`, `mayor`, `balance`, `pyg`) calculan desde
 aprobados (DPO). La entidad `AgingReport` en BBDD queda para snapshots futuros;
 el informe en vivo no persiste en cada consulta.
 
-**Export periódico para gestoría (ADR-0018 #42e, añadido jul 2026 — sección
-ausente hasta esta actualización):** `AccountantExportController` despacha
-`ExportAccountantPackageCommand` vía `IMediator` → `AccountantExportHandlers.cs`
-genera un ZIP real con el libro de IVA (emitidas/recibidas) en CSV + un
-`LEEME.txt`. `AccountantExportJob` (Hangfire, cron mensual día 3, registrado
-en `Modules/Accounting/Infrastructure/DependencyInjection.cs` e invocado desde
-`Program.cs` — no repite el bug histórico de job huérfano sin registrar de
-`RuleEvaluatorJob`, ver ADR-0015) envía el ZIP por email real vía
-`EmailService`/MailKit a `Company.AccountantEmail` según
-`Company.AccountantExportFrequency`. Frontend conectado de verdad:
-`settings/accountant-export/AccountantExportClient.tsx` hace fetch real a
-`/api/proxy/accountant-export/{settings,export,send}`. **Alcance actual
-menor que la promesa original del roadmap**: el ZIP no incluye PDFs de
-facturas ni los asientos contables del período, solo los libros de IVA —
-pendiente decidir si se amplía el contenido o se recorta la promesa de
-ADR-0019 #42e al alcance real.
+**Export periódico para gestoría (ADR-0018 #42e, ✅ jul 2026):**
+`AccountantExportController` despacha `ExportAccountantPackageCommand` vía
+`IMediator` → `AccountantExportHandlers.cs` genera un ZIP con:
+- `libros-iva/` — CSV emitidas + recibidas filtrados por mes/trimestre
+  (`FiscalExportPeriod`, no todo el ejercicio si el job es mensual);
+- `asientos/` — libro diario CSV del periodo (`IJournalEntriesPeriodExporter`);
+- `facturas/` — PDFs de facturas emitidas bloqueadas vía
+  `GetInvoicePdfQuery` (QuestPDF, reutilizado sin duplicar generador);
+- `gastos/` — archivos originales de `ExpenseUpload` aprobados cuando existen
+  en almacenamiento (`IAccountantExpensePdfExporter`);
+- `LEEME.txt` — índice de contenido.
+
+`AccountantExportJob` (Hangfire, cron mensual día 3) envía el ZIP por email
+real vía `EmailService`/MailKit. Frontend:
+`settings/accountant-export/AccountantExportClient.tsx`.
 
 ### Frontend
 `frontend/src/app/accounting/` contiene subrutas para cada área: `aeat`,
@@ -205,6 +205,11 @@ dominio, sin intervención manual):
 - **Expenses (ADR-0007):** `ExpenseApprovedEventHandler`
   (`Application/Handlers/ExpenseApprovedEventHandler.cs`) genera asientos de
   gasto de forma análoga a `InvoiceApprovedEventHandler`.
+- **Purchasing (ADR-0010):** `SupplierInvoiceCreatedEventHandler`
+  (`Application/Handlers/SupplierInvoiceCreatedEventHandler.cs`) genera asientos
+  de compra (600/472/410) cuando Purchasing publica `SupplierInvoiceCreatedEvent`
+  tras un three-way match exitoso (ADR-0018 #69 ✅) — sin referencia de proyecto
+  Purchasing→Accounting, mismo patrón de eventos que Expenses.
 - **Treasury (ADR-0012):** `BankReconciliationService` de Treasury lee
   `JournalEntryLines` de Accounting (cuenta 572) vía el puerto compartido
   `IBankReconciliationLedgerQuery` (`Erp.Application.Common.Interfaces`,
@@ -227,15 +232,24 @@ dominio, sin intervención manual):
 ## Evaluación de calidad arquitectónica
 > Metodología completa y hallazgos transversales en `ADR-0018`.
 
-**Controllers delgados:** los 16/16 controllers usan `IMediator` (ADR-0018 #3c,
-#4, #5). Los stubs mock fueron eliminados; `FinancialStatementsController`
-delega en handlers con cálculo real parcial (#26). **Aging:** `GET /api/accounting/aging`
-en `AccountingController` → `GetAgingReportQuery` + `IAgingReportReader`
-(Billing/Expenses); frontend `aging/page.tsx` conectado vía `serverFetch`.
+**ABAC (ADR-0018 #42c, refuerzo jul 2026):** los controllers fiscales del
+merge #3c llevan permisos granulares reutilizando el catálogo existente —
+`AeatModelsController`/`IvaManagementController`/`InversionSujetoActivoController`
+(`Vat.Read`/`Vat.Manage`; exportaciones AEAT también `Accounting.Export`),
+`AgingController`/`FinancialStatementsController` (`FinancialStatement.Read`),
+`FacturaEController` en Billing (`FacturaE.Read`/`FacturaE.Export`/`FacturaE.Manage`).
+`SeedDefaultRolePermissionsHandler` ya incluye esos recursos en el rol Contable.
+
+**Controllers delgados:** los 17/17 controllers usan `IMediator` (ADR-0018 #3c,
+#4, #5). Los stubs mock fueron **reescritos con MediatR real** (no eliminados);
+`FinancialStatementsController` delega en handlers con cálculo real (#26).
+**Aging:** `GET /api/v1/accounting/aging` en `AgingController` (y legacy
+`GET /api/accounting/aging` en `AccountingController`) → queries MediatR +
+`AgingReportReader`; frontend `aging/page.tsx` conectado vía `serverFetch`.
 
 **Pendiente (sin cerrar en backlog):** `IAccountingDbContext` expone 29 DbSets
-(ISP — `GetFiscalPeriodsHandler` solo usa `FiscalPeriods`). `VatController.DeclareModelo330`
-sigue sin implementar. OCP: tasas IVA en `Dictionary`/`switch` (`CalculateVatCommand`).
+(ISP — `GetFiscalPeriodsHandler` solo usa `FiscalPeriods`). OCP: tasas IVA en
+`Dictionary`/`switch` (`CalculateVatCommand`).
 (`RecargoController.Create` ya no está pendiente — ver corrección más arriba,
 persiste de verdad desde el commit `602affa`.)
 
@@ -292,9 +306,10 @@ usado por `TaxController`). El frontend
 
 ## Consecuencias
 - La madurez del módulo es heterogénea: cierre, presupuestos, activos fijos,
-  provisiones, exportación fiscal, modelos 303/347 y **aging DSO/DPO** están
-  sobre datos reales; queda un hueco puntual (`VatController.DeclareModelo330`,
-  ISP sin controller dedicado).
+  provisiones, exportación fiscal, modelos 303/347, **declaración IVA trimestral**
+  (`DeclareModelo330Command` → `VatLiquidations`) y **aging DSO/DPO** están
+  sobre datos reales; `FacturaEService` usa `invoice.CurrencyCode` en XML FacturaE
+  (ver ADR-0005 multi-moneda).
 - **Corregido (ADR-0018 #14):** las entidades núcleo (`Account`,
   `JournalEntry`, `FiscalPeriod`, etc.) viven en
   `Modules/Accounting/Domain/Entities/`, no en `Erp.Domain`.

@@ -3,6 +3,7 @@ using Erp.Application.Features.Company.Commands;
 using Erp.Application.Features.Company.Handlers;
 using Erp.Domain.Entities.Core;
 using Erp.Infrastructure.Data;
+using Erp.Infrastructure.Services;
 using Erp.Tests.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -27,7 +28,7 @@ public class Phase13SubscriptionHandlerTests
         ctx.Companies.Add(new Company { Id = companyId, Name = "Co", TaxId = "B12345674", IsActive = true, Country = "ES" });
         await ctx.SaveChangesAsync();
 
-        var handler = new GetBillingHistoryHandler(ctx, new FakeSubscriptionBillingService(), tenant);
+        var handler = new GetBillingHistoryHandler(ctx, new FakeSubscriptionBillingService(), tenant, new GestoriaBillingBreakdownService(ctx));
         var invoices = await handler.Handle(new GetBillingHistoryQuery(), CancellationToken.None);
 
         Assert.Empty(invoices);
@@ -53,7 +54,7 @@ public class Phase13SubscriptionHandlerTests
         await ctx.SaveChangesAsync();
 
         var billing = new FakeSubscriptionBillingService();
-        var handler = new GetBillingHistoryHandler(ctx, billing, tenant);
+        var handler = new GetBillingHistoryHandler(ctx, billing, tenant, new GestoriaBillingBreakdownService(ctx));
         var invoices = await handler.Handle(new GetBillingHistoryQuery(), CancellationToken.None);
 
         Assert.Single(invoices);

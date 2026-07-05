@@ -40,13 +40,15 @@ PermissionsController,CompanyController}.cs`,
 | Fase | Alcance | Estado |
 |---|---|---|
 | **1** | `UserCompany`, `switch-company`, `add-company`, `TenantMembershipMiddleware`, `CompanySwitcher` en frontend | ✅ Implementado |
-| **2** | UI gestoría: dashboard multi-empresa (KPIs agregados, alertas por cliente) | 🟡 Diseño — requiere OK UX |
-| **3** | Roles por membresía (`UserCompany.RoleId`) refinados para operador gestoría vs admin cliente | 🟡 Parcial — modelo existe, UX pendiente |
+| **2** | UI gestoría: dashboard multi-empresa (KPIs agregados, alertas por cliente) | ✅ Implementado jul 2026 — `GET /api/gestoria/dashboard`, `/gestoria` |
+| **3** | Roles por membresía (`UserCompany.RoleId`) refinados para operador gestoría vs admin cliente | ✅ Implementado jul 2026 — `PUT /api/gestoria/memberships/{id}/role`, selector Admin/Contable en `/gestoria` |
 | **4** | **Suscripción gestoría:** plan que cubre N `Company` bajo una cuenta (`Plan.MaxCompanies`, plan Gestoría) | ✅ Implementado jul 2026 — validación `AddCompanyFromAccount`, UI límites en suscripción |
-| **5** | Facturación consolidada SaaS (una factura Stripe por gestoría con desglose por empresa cliente) | ❌ Bloqueado — depende contrato Stripe multi-tenant |
+| **5** | Facturación consolidada SaaS (una factura Stripe por gestoría, line item por empresa activa) | ✅ Avanzado jul 2026 — subscription items por empresa, sync webhooks, desglose UI/historial alineado con PDF Stripe |
 
-No implementar Fases 4–5 sin decisión de negocio sobre modelo de suscripción.
-Fase 1 es suficiente para operar varias empresas con el mismo login.
+Fases 4–5: Fase 4 cerrada; Fase 5 avanzada con **un subscription item por empresa**
+(`GestoriaStripeBilling`, metadata `gestoriaCompanyId`/`gestoriaBreakdownJson`,
+`IGestoriaBillingBreakdownService`, desglose en `settings/subscription` e
+historial con `lineItems`). El PDF Stripe muestra una línea por empresa (precio unitario × 1 c/u).
 
 - `LoginCommand` → `LoginCommandHandler`: busca usuario por email con
   `IgnoreQueryFilters()`, verifica BCrypt, soporta 2FA, resuelve empresa
@@ -276,7 +278,9 @@ bootstrap de desarrollo en `Program.cs` creaba estas filas antes (ADR-0018
 > Metodología en `ADR-0018`.
 
 - **Multi-empresa Fase 1:** ✅ `UserCompany`, switch-company, middleware (#42a).
-- **Fases 2–5:** documentadas en Decisión; Fase 4–5 bloqueadas por modelo suscripción gestoría.
+- **Fases 2–3:** documentadas en Decisión; dashboard multi-empresa UX y roles por membresía pendientes de OK producto.
+- **Fases 4–5:** ✅ implementadas jul 2026 — `Plan.MaxCompanies`, plan Gestoría, `GestoriaStripeBilling` con line items por empresa (ver tabla de fases en Decisión).
+- **Notificaciones push (#42):** suscripciones Web Push por usuario (`PushSubscriptions`), endpoints en `NotificationsController`, envío paralelo a email en `ProactiveNotificationsJob`.
 - **Seguridad:** validación JWT↔tenant reforzada vía `TenantMembershipMiddleware`;
   API pública sigue requiriendo revisión (ADR-0016).
 - **RBAC/ABAC (#42c):** ✅ Corregido — `[RequiredModule]`/`[RequirePermission]`
@@ -315,10 +319,11 @@ bootstrap de desarrollo en `Program.cs` creaba estas filas antes (ADR-0018
 ## Consecuencias
 - El aislamiento multi-tenant depende de `X-Tenant-Id` correcto y de
   `TenantMembershipMiddleware` (#42a) que cruza JWT con tenant resuelto.
-- **Multi-empresa (Fase 1 ✅, fases 2–5 documentadas):** un usuario puede acceder a
+- **Multi-empresa (Fase 1 ✅, Fases 4–5 ✅, Fases 2–3 documentadas):** un usuario puede acceder a
   varias `Company` vía `UserCompany`, cambiar empresa activa en sesión y
   dar de alta empresas adicionales. **Fases 4–5** (suscripción gestoría N empresas,
-  facturación consolidada) requieren OK de producto — ver tabla de fases en Decisión.
+  facturación Stripe por `quantity`) están implementadas — ver tabla de fases en Decisión.
+  **Fases 2–3** (dashboard multi-empresa UX, roles por membresía refinados) requieren OK de producto.
 - La resolución por subdominio existe pero el frontend usa `X-Tenant-Id`.
 - Tests de aislamiento multi-tenant: parcialmente cubiertos (#32); conviene
   smoke manual con dos tenants antes de desplegar cambios en auth.

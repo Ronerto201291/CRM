@@ -1,7 +1,6 @@
 using System.Text;
 using Erp.Application.Common.Interfaces;
 using Erp.Infrastructure.Services.Sii;
-using Erp.Modules.Billing.Application.Interfaces;
 using MediatR;
 
 namespace Erp.Infrastructure.Features.Sii;

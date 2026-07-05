@@ -41,6 +41,14 @@ public class InvoiceApprovedInventoryHandler : INotificationHandler<InvoiceAppro
             return;
         }
 
+        if (notification.SalesOrderId.HasValue)
+        {
+            _logger.LogInformation(
+                "Skipping stock decrement for invoice {InvoiceId}: sales order {SalesOrderId} already decremented stock on delivery.",
+                notification.InvoiceId, notification.SalesOrderId);
+            return;
+        }
+
         var productLines = notification.Lines
             .Where(l => l.ProductId.HasValue && l.Quantity > 0)
             .ToList();

@@ -218,7 +218,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 | Puertos backend/frontend | No expuestos al host; solo nginx `:80`/`:443` |
 | Nginx | `deploy/nginx/erp.conf` + volumen `deploy/nginx/ssl` (Let's Encrypt) |
 | Certificados SII | Ruta servidor `/opt/erp/certs` montada en backend (base `docker-compose.yml`) |
-| RLS piloto | `Postgres__RlsEnabled` por defecto `false` (configurable en `.env`) |
+| RLS piloto | `Postgres__RlsEnabled` por defecto `true` (`docker-compose.prod.yml`, `appsettings.json`, `k8s/deployment.yaml`; ADR-0018 #70) |
 | Migraciones | Igual que local: automáticas al arrancar backend, fail-fast |
 
 En Development el backend usa `sk_test_...` de `appsettings.Development.json` si no se sobreescribe en env.
@@ -257,7 +257,7 @@ Copiar desde `.env.example`. **Nunca** commitear `.env`.
 |----------|-------|------------|
 | `ASPNETCORE_ENVIRONMENT` | `Development` (override fuerza) | `Production` (prod.yml fuerza) |
 | `Seed__AdminPassword` | `DevChangeMe2026!!` (override) | Omitir salvo bootstrap intencional |
-| `Postgres__RlsEnabled` | `true` (override) | `false` por defecto |
+| `Postgres__RlsEnabled` | `true` (override) | `true` por defecto (`docker-compose.prod.yml`: `${Postgres__RlsEnabled:-true}`; `appsettings.json` y `k8s/deployment.yaml` también `true`, ADR-0018 #70) |
 | `SII_CERT_PATH` / `SII_CERT_PASS` | Opcional; cert en `./deploy/certs` | `/app/certs/fnmt.pfx` en servidor |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://otel-collector:4317` | Según stack observabilidad |
 | `BACKUP_RETENTION_DAYS` | 30 (cron backup en servidor) | Igual |

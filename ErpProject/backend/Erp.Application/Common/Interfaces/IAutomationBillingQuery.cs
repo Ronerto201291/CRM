@@ -8,6 +8,9 @@ public interface IAutomationBillingQuery
 
     Task<IReadOnlyList<AutomationInvoiceSnapshot>> GetInvoicesForRuleAsync(
         Guid companyId, string triggerEvent, DateTime today, CancellationToken ct = default);
+
+    Task<IReadOnlyList<AutomationInvoiceSnapshot>> GetPendingReceivablesAsync(
+        Guid companyId, DateTime horizonEnd, CancellationToken ct = default);
 }
 
 public record AutomationInvoiceSnapshot(

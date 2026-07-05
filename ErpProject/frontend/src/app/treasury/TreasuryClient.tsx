@@ -5,7 +5,7 @@ import AccessibleModal from '@/components/AccessibleModal';
 import { parseListResponse } from '@/lib/parseListResponse';
 import type { BankAccount } from './page';
 
-type TreasuryTab = 'accounts' | 'movements' | 'effects' | 'orders' | 'forecast' | 'cash';
+type TreasuryTab = 'accounts' | 'movements' | 'effects' | 'orders' | 'forecast' | 'cash' | 'pos';
 
 interface BankMovement {
     id: string; bankAccountId: string; date: string; reference: string;
@@ -23,10 +23,22 @@ interface ForecastItem {
     id: string; forecastDate: string; expectedInflow: number; expectedOutflow: number;
     expectedBalance: number; source: string; isActual: boolean; notes?: string;
 }
+interface LiquidityHorizon {
+    days: number; horizonDate: string; expectedInflow: number; expectedOutflow: number;
+    recurringInflow: number; recurringOutflow: number; projectedBalance: number;
+}
+interface LiquidityForecast {
+    currentBankBalance: number;
+    horizons: LiquidityHorizon[];
+    aiInsight?: string;
+}
 interface CashSession {
     id: string; openedAt: string; openingBalance: number;
     closedAt?: string; expectedClosingBalance?: number; countedClosingBalance?: number;
     difference?: number; status: 'Open' | 'Closed'; notes?: string;
+}
+interface PosTerminal {
+    id: string; name: string; terminalCode: string; isActive: boolean; lastPaymentAt?: string;
 }
 
 const EMPTY_ACCOUNT = { name: '', iban: '', bic: '', bankName: '', notes: '', accountingAccountCode: '' };
@@ -55,6 +67,7 @@ export default function TreasuryClient({ initialAccounts }: TreasuryClientProps)
     const [effects, setEffects] = useState<CashEffect[]>([]);
     const [orders, setOrders] = useState<PaymentOrder[]>([]);
     const [forecast, setForecast] = useState<ForecastItem[]>([]);
+    const [liquidityForecast, setLiquidityForecast] = useState<LiquidityForecast | null>(null);
     const [loading, setLoading] = useState(false);
     const [showModal, setShowModal] = useState<string | null>(null);
     const [form, setForm] = useState<TreasuryForm>({});
@@ -68,6 +81,13 @@ export default function TreasuryClient({ initialAccounts }: TreasuryClientProps)
     const [cashCountedBalance, setCashCountedBalance] = useState('');
     const [cashSaving, setCashSaving] = useState(false);
     const [cashMessage, setCashMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+    const [posTerminals, setPosTerminals] = useState<PosTerminal[]>([]);
+    const [posName, setPosName] = useState('');
+    const [posCode, setPosCode] = useState('');
+    const [posPaymentTerminalId, setPosPaymentTerminalId] = useState('');
+    const [posPaymentInvoiceId, setPosPaymentInvoiceId] = useState('');
+    const [posPaymentAmount, setPosPaymentAmount] = useState('');
+    const [posMessage, setPosMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
     const fmt = (n: number) => `€ ${(n || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}`;
     const fmtDate = (d?: string) => d ? new Date(d).toLocaleDateString('es-ES') : '—';
@@ -100,8 +120,12 @@ export default function TreasuryClient({ initialAccounts }: TreasuryClientProps)
     }, []);
     const loadForecast = useCallback(async () => {
         const d = new Date();
-        const r = await fetch(`/api/proxy/treasury/forecasts?year=${d.getFullYear()}&month=${d.getMonth() + 1}`);
-        if (r.ok) setForecast(await r.json());
+        const [monthlyRes, liquidityRes] = await Promise.all([
+            fetch(`/api/proxy/treasury/forecasts?year=${d.getFullYear()}&month=${d.getMonth() + 1}`),
+            fetch('/api/proxy/treasury/liquidity-forecast'),
+        ]);
+        if (monthlyRes.ok) setForecast(await monthlyRes.json());
+        if (liquidityRes.ok) setLiquidityForecast(await liquidityRes.json());
     }, []);
     const loadCashSession = useCallback(async () => {
         const [openRes, allRes] = await Promise.all([
@@ -111,6 +135,14 @@ export default function TreasuryClient({ initialAccounts }: TreasuryClientProps)
         setOpenCashSessionData(openRes.ok ? await openRes.json() : null);
         if (allRes.ok) setCashSessions(await allRes.json());
     }, []);
+    const loadPosTerminals = useCallback(async () => {
+        const r = await fetch('/api/proxy/treasury/pos-terminals');
+        if (r.ok) {
+            const data = await r.json();
+            setPosTerminals(data);
+            if (!posPaymentTerminalId && data.length > 0) setPosPaymentTerminalId(data[0].id);
+        }
+    }, [posPaymentTerminalId]);
 
     useEffect(() => {
         queueMicrotask(() => {
@@ -119,8 +151,9 @@ export default function TreasuryClient({ initialAccounts }: TreasuryClientProps)
             if (tab === 'orders') void loadOrders();
             if (tab === 'forecast') void loadForecast();
             if (tab === 'cash') void loadCashSession();
+            if (tab === 'pos') void loadPosTerminals();
         });
-    }, [tab, selectedAccount, loadMovements, loadEffects, loadOrders, loadForecast, loadCashSession]);
+    }, [tab, selectedAccount, loadMovements, loadEffects, loadOrders, loadForecast, loadCashSession, loadPosTerminals]);
 
     const openCashSession = async () => {
         setCashSaving(true);
@@ -158,6 +191,60 @@ export default function TreasuryClient({ initialAccounts }: TreasuryClientProps)
             } else {
                 const err = await res.json().catch(() => ({}));
                 setCashMessage({ type: 'error', text: err.error || err.title || 'Error al cerrar la caja.' });
+            }
+        } finally {
+            setCashSaving(false);
+        }
+    };
+
+    const createPosTerminal = async () => {
+        if (!posName.trim() || !posCode.trim()) return;
+        setCashSaving(true);
+        setPosMessage(null);
+        try {
+            const res = await fetch('/api/proxy/treasury/pos-terminals', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: posName.trim(), terminalCode: posCode.trim() }),
+            });
+            if (res.ok) {
+                setPosName('');
+                setPosCode('');
+                setPosMessage({ type: 'success', text: 'Terminal TPV creado.' });
+                await loadPosTerminals();
+            } else {
+                const err = await res.json().catch(() => ({}));
+                setPosMessage({ type: 'error', text: err.error || err.title || 'Error al crear terminal.' });
+            }
+        } finally {
+            setCashSaving(false);
+        }
+    };
+
+    const registerPosPayment = async () => {
+        if (!posPaymentTerminalId || !posPaymentInvoiceId.trim()) return;
+        setCashSaving(true);
+        setPosMessage(null);
+        try {
+            const body: { invoiceId: string; amount?: number; externalReference?: string } = {
+                invoiceId: posPaymentInvoiceId.trim(),
+            };
+            const amount = parseFloat(posPaymentAmount);
+            if (!Number.isNaN(amount) && amount > 0) body.amount = amount;
+
+            const res = await fetch(`/api/proxy/treasury/pos-terminals/${posPaymentTerminalId}/payments`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            if (res.ok) {
+                setPosPaymentInvoiceId('');
+                setPosPaymentAmount('');
+                setPosMessage({ type: 'success', text: 'Pago TPV registrado (dispara cobro en Billing).' });
+                await loadPosTerminals();
+            } else {
+                const err = await res.json().catch(() => ({}));
+                setPosMessage({ type: 'error', text: err.error || err.title || 'Error al registrar pago TPV.' });
             }
         } finally {
             setCashSaving(false);
@@ -227,6 +314,7 @@ export default function TreasuryClient({ initialAccounts }: TreasuryClientProps)
         { key: 'orders', label: 'Órdenes de Pago' },
         { key: 'forecast', label: 'Previsión de Caja' },
         { key: 'cash', label: 'Arqueo de Caja' },
+        { key: 'pos', label: 'TPV' },
     ];
 
     return (
@@ -478,7 +566,34 @@ export default function TreasuryClient({ initialAccounts }: TreasuryClientProps)
 
             {/* ── TAB: FORECAST ── */}
             {tab === 'forecast' && (
-                forecast.length === 0 ? (
+                <>
+                {liquidityForecast && (
+                    <div className="erp-card" style={{ padding: '20px', marginBottom: '20px' }}>
+                        <h2 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '12px' }}>Previsión liquidez 30/60/90 días (#40)</h2>
+                        <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '12px' }}>
+                            Saldo bancario actual: <strong>{fmt(liquidityForecast.currentBankBalance)}</strong>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+                            {liquidityForecast.horizons.map(h => (
+                                <div key={h.days} style={{ padding: '14px', borderRadius: '8px', background: 'var(--surface-2)' }}>
+                                    <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '4px' }}>{h.days} DÍAS</div>
+                                    <div style={{ fontSize: '20px', fontWeight: 800, color: h.projectedBalance >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                                        {fmt(h.projectedBalance)}
+                                    </div>
+                                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '6px' }}>
+                                        +{fmt(h.expectedInflow + h.recurringInflow)} / −{fmt(h.expectedOutflow + h.recurringOutflow)}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        {liquidityForecast.aiInsight && (
+                            <p style={{ marginTop: '12px', fontSize: '13px', fontStyle: 'italic', color: 'var(--text-secondary)' }}>
+                                {liquidityForecast.aiInsight}
+                            </p>
+                        )}
+                    </div>
+                )}
+                {forecast.length === 0 ? (
                     <div className="erp-card" style={{ padding: '56px', textAlign: 'center' }}>
                         <div style={{ fontSize: '36px', marginBottom: '12px' }}>📈</div>
                         <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Sin previsiones para este período.</p>
@@ -508,7 +623,8 @@ export default function TreasuryClient({ initialAccounts }: TreasuryClientProps)
                             </tbody>
                         </table>
                     </div>
-                )
+                )}
+                </>
             )}
 
             {/* ── TAB: CASH SESSIONS (Arqueo de Caja) ── */}
@@ -590,6 +706,94 @@ export default function TreasuryClient({ initialAccounts }: TreasuryClientProps)
                                                 {s.difference != null ? fmt(s.difference) : '—'}
                                             </td>
                                             <td><span className={`badge ${s.status === 'Open' ? 'badge-info' : 'badge-gray'}`}>{s.status === 'Open' ? 'Abierta' : 'Cerrada'}</span></td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* ── TAB: POS TERMINALS (TPV) ── */}
+            {tab === 'pos' && (
+                <div>
+                    {posMessage && (
+                        <div style={{
+                            marginBottom: '16px', padding: '12px 16px', borderRadius: '6px',
+                            background: posMessage.type === 'success' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+                            border: `1px solid ${posMessage.type === 'success' ? '#22c55e' : '#ef4444'}`,
+                            color: posMessage.type === 'success' ? '#15803d' : '#991b1b',
+                            fontSize: '13px',
+                        }}>
+                            {posMessage.text}
+                        </div>
+                    )}
+
+                    <div className="erp-card" style={{ padding: '20px', marginBottom: '20px' }}>
+                        <h2 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '12px' }}>Nuevo terminal TPV</h2>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '12px', alignItems: 'flex-end' }}>
+                            <div>
+                                <label className="erp-label">NOMBRE</label>
+                                <input className="erp-input" value={posName} onChange={e => setPosName(e.target.value)} placeholder="Mostrador principal" />
+                            </div>
+                            <div>
+                                <label className="erp-label">CÓDIGO TERMINAL</label>
+                                <input className="erp-input" value={posCode} onChange={e => setPosCode(e.target.value)} placeholder="TPV-01" />
+                            </div>
+                            <button className="btn btn-primary" onClick={createPosTerminal} disabled={cashSaving}>
+                                {cashSaving ? 'Guardando...' : '+ Crear terminal'}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="erp-card" style={{ padding: '20px', marginBottom: '20px' }}>
+                        <h2 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '12px' }}>Registrar cobro con tarjeta</h2>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '12px', alignItems: 'flex-end' }}>
+                            <div>
+                                <label className="erp-label">TERMINAL</label>
+                                <select className="erp-input" value={posPaymentTerminalId} onChange={e => setPosPaymentTerminalId(e.target.value)}>
+                                    <option value="">Seleccionar...</option>
+                                    {posTerminals.filter(t => t.isActive).map(t => (
+                                        <option key={t.id} value={t.id}>{t.name} ({t.terminalCode})</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="erp-label">ID FACTURA (GUID)</label>
+                                <input className="erp-input" value={posPaymentInvoiceId} onChange={e => setPosPaymentInvoiceId(e.target.value)} placeholder="uuid de factura bloqueada" />
+                            </div>
+                            <div>
+                                <label className="erp-label">IMPORTE (opcional)</label>
+                                <input type="number" step="0.01" className="erp-input" value={posPaymentAmount} onChange={e => setPosPaymentAmount(e.target.value)} placeholder="Total factura" />
+                            </div>
+                            <button className="btn btn-primary" onClick={registerPosPayment} disabled={cashSaving || !posPaymentTerminalId}>
+                                {cashSaving ? 'Procesando...' : '💳 Cobrar'}
+                            </button>
+                        </div>
+                    </div>
+
+                    {posTerminals.length === 0 ? (
+                        <div className="erp-card" style={{ padding: '56px', textAlign: 'center' }}>
+                            <div style={{ fontSize: '36px', marginBottom: '12px' }}>💳</div>
+                            <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Sin terminales TPV configurados.</p>
+                        </div>
+                    ) : (
+                        <div className="erp-card" style={{ overflow: 'hidden' }}>
+                            <table className="erp-table">
+                                <thead><tr>
+                                    <th>Nombre</th>
+                                    <th>Código</th>
+                                    <th>Estado</th>
+                                    <th>Último cobro</th>
+                                </tr></thead>
+                                <tbody>
+                                    {posTerminals.map(t => (
+                                        <tr key={t.id}>
+                                            <td style={{ fontWeight: 600 }}>{t.name}</td>
+                                            <td style={{ fontFamily: 'monospace', fontSize: '12px' }}>{t.terminalCode}</td>
+                                            <td><span className={`badge ${t.isActive ? 'badge-success' : 'badge-gray'}`}>{t.isActive ? 'Activo' : 'Inactivo'}</span></td>
+                                            <td style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{t.lastPaymentAt ? fmtDate(t.lastPaymentAt) : '—'}</td>
                                         </tr>
                                     ))}
                                 </tbody>

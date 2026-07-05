@@ -61,8 +61,10 @@ más abajo).
   `Erp.Application.Features.Subscriptions` (`GetCurrentSubscriptionQuery`,
   `CreateCheckoutSessionCommand`, etc.); facturación Stripe delegada en
   `ISubscriptionBillingService` (implementado por `StripeService`).
-  Endpoints: `GET` (plan/estado actual), `GET /plans`, `POST /checkout`,
-  `POST /portal`, `GET /invoices` (últimas 12 vía Stripe API).
+  Endpoints: `GET` (plan/estado actual, incluye `gestoriaCompanies` si
+  `MaxCompanies>1`), `GET /plans`, `POST /checkout`, `POST /portal`,
+  `GET /invoices` (últimas 12 vía Stripe API, con `companyBreakdown` para
+  cuentas gestoría).
 - `StripeWebhookController` (`api/stripe/webhook`, `[AllowAnonymous]`,
   excluido de autenticación y de resolución de tenant — ver
   `TenantResolverMiddleware.IsProtectedRoute`): recibe eventos de
@@ -75,10 +77,16 @@ centraliza toda la integración con Stripe:
 - `CreateCheckoutSessionAsync` — crea/reutiliza el `Customer` de Stripe
   para la `Company`, resuelve el `Price` desde `StripeOptions.PriceIds`
   (configurado por variables de entorno `Stripe__PriceIds__<Plan>`, nunca
-  hardcodeado) y crea la sesión de Checkout en modo `subscription`.
+  hardcodeado) y crea la sesión de Checkout en modo `subscription`. Para
+  planes con `MaxCompanies>1` (Gestoría), usa **un subscription item por empresa activa**
+  (metadata `gestoriaCompanyId`; sync en checkout, `subscription.updated` e
+  `invoice.created` con prorrateo), metadata agregada
+  `gestoriaCompanyCount`/`gestoriaBreakdownJson` y sincroniza cantidad en
+  webhooks `checkout.session.completed`, `customer.subscription.updated` e
+  `invoice.created`.
 - `HandleWebhookAsync` procesa: `checkout.session.completed`,
   `customer.subscription.updated`, `customer.subscription.deleted`,
-  `invoice.payment_succeeded`, `invoice.payment_failed`. Cada handler
+  `invoice.created`, `invoice.payment_succeeded`, `invoice.payment_failed`. Cada handler
   actualiza `Subscription` (estado, fecha de expiración, plan) y, en los
   casos de alta/renovación/cambio de plan, llama a
   `SyncTenantModulesAsync`.

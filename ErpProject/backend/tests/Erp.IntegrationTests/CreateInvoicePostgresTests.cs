@@ -120,4 +120,63 @@ public class CreateInvoicePostgresTests : IClassFixture<PostgresWebApplicationFa
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
+    [Fact]
+    public async Task PostInvoice_WithUsdCurrency_PopulatesMultiCurrencyFields()
+    {
+        if (!_factory.DockerAvailable)
+            return;
+
+        var client = (await IntegrationTestAuth.RegisterEnterpriseAsync(
+            _factory, $"usd-inv-{Guid.NewGuid():N}"[..18], withApiKey: true)).Client;
+
+        // ECB-style rates: ExchangeRate = foreign per 1 EUR (1 EUR ≈ 1.087 USD → 1 USD ≈ 0.92 EUR)
+        var eurCurrency = await client.PostAsJsonAsync("/api/v1/treasury/currencies", new
+        {
+            code = "EUR",
+            name = "Euro",
+            exchangeRate = 1m,
+        });
+        Assert.Equal(HttpStatusCode.Created, eurCurrency.StatusCode);
+
+        var usdCurrency = await client.PostAsJsonAsync("/api/v1/treasury/currencies", new
+        {
+            code = "USD",
+            name = "US Dollar",
+            exchangeRate = 1.08695652m,
+        });
+        Assert.Equal(HttpStatusCode.Created, usdCurrency.StatusCode);
+
+        var createResponse = await client.PostAsJsonAsync("/api/invoices", new
+        {
+            clientType = "Manual",
+            clientName = "Cliente USD",
+            clientTaxId = "12345678Z",
+            series = "A",
+            currencyCode = "USD",
+            dueDate = DateTime.UtcNow.AddDays(30).ToString("O"),
+            irpfRate = 0,
+            invoiceType = "Normal",
+            lines = new[]
+            {
+                new
+                {
+                    description = "Servicio USD",
+                    quantity = 1,
+                    unitPrice = 100,
+                    taxRate = 21,
+                    surchargeRate = 0,
+                    tipoOperacion = "Nacional",
+                },
+            },
+        });
+
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+
+        var created = await createResponse.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("USD", created.GetProperty("currencyCode").GetString());
+        Assert.Equal(121m, created.GetProperty("total").GetDecimal());
+        Assert.InRange(created.GetProperty("exchangeRateToEur").GetDecimal(), 0.919m, 0.921m);
+        Assert.InRange(created.GetProperty("totalEur").GetDecimal(), 111.30m, 111.34m);
+    }
+
 }

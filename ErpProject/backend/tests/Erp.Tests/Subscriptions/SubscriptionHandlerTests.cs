@@ -24,7 +24,7 @@ public class SubscriptionHandlerTests
 
         await using var ctx = new ErpDbContext(options, tenant);
         var handler = new GetCurrentSubscriptionHandler(
-            ctx, tenant, new FakeCurrentUserAccessor(), new CompanyMembershipLimitService(ctx));
+            ctx, tenant, new FakeCurrentUserAccessor(), new CompanyMembershipLimitService(ctx), new GestoriaBillingBreakdownService(ctx));
 
         var result = await handler.Handle(new GetCurrentSubscriptionQuery(), CancellationToken.None);
 
@@ -67,7 +67,7 @@ public class SubscriptionHandlerTests
         await ctx.SaveChangesAsync();
 
         var handler = new GetCurrentSubscriptionHandler(
-            ctx, tenant, new FakeCurrentUserAccessor(), new CompanyMembershipLimitService(ctx));
+            ctx, tenant, new FakeCurrentUserAccessor(), new CompanyMembershipLimitService(ctx), new GestoriaBillingBreakdownService(ctx));
         var result = await handler.Handle(new GetCurrentSubscriptionQuery(), CancellationToken.None);
 
         Assert.Equal("Pro", result!.Plan);

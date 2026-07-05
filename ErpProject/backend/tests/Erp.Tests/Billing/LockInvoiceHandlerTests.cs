@@ -81,6 +81,7 @@ public class LockInvoiceHandlerTests
             gateway,
             new FakeVerifactuModeSettings { RealtimeSubmissionEnabled = false },
             new FakeCurrentUserAccessor(),
+            new FakeBillingInvoiceSalesLinkQuery(),
             NullLogger<LockInvoiceHandler>.Instance);
 
         var result = await handler.Handle(new LockInvoiceCommand { Id = invoiceId }, CancellationToken.None);
@@ -118,6 +119,7 @@ public class LockInvoiceHandlerTests
             new FakeVerifactuSubmissionGateway(),
             new FakeVerifactuModeSettings(),
             new FakeCurrentUserAccessor(),
+            new FakeBillingInvoiceSalesLinkQuery(),
             NullLogger<LockInvoiceHandler>.Instance);
 
         var result = await handler.Handle(new LockInvoiceCommand { Id = Guid.NewGuid() }, CancellationToken.None);
@@ -170,6 +172,7 @@ public class LockInvoiceHandlerTests
             new FakeVerifactuSubmissionGateway(),
             new FakeVerifactuModeSettings(),
             new FakeCurrentUserAccessor(),
+            new FakeBillingInvoiceSalesLinkQuery(),
             NullLogger<LockInvoiceHandler>.Instance);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>

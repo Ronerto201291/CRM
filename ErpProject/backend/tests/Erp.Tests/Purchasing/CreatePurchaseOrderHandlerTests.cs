@@ -26,7 +26,7 @@ public class CreatePurchaseOrderHandlerTests
         var result = await handler.Handle(new CreatePurchaseOrderCommand(
             "PO-2026-001",
             orderDate,
-            [new PurchaseOrderLineDto(null, 10m, 25m)]), CancellationToken.None);
+            [new PurchaseOrderLineDto(Guid.NewGuid(), null, 10m, 25m)]), CancellationToken.None);
 
         Assert.Equal("PO-2026-001", result.Number);
         Assert.Single(result.Lines);

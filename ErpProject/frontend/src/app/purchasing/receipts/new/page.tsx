@@ -7,15 +7,30 @@ import { updateLineAt } from "@/lib/lineForm";
 import { goodsReceiptCreateSchema } from "@/lib/schemas/purchasingSalesCreateSchemas";
 import { PurchaseOrder } from "@/types/api";
 
+interface PurchaseOrderLine {
+    id: string;
+    productId?: string;
+    quantity: number;
+    unitPrice: number;
+}
+
+interface PurchaseOrderDetail extends PurchaseOrder {
+    lines: PurchaseOrderLine[];
+}
+
 interface ReceiptLine {
-    purchaseOrderLineId?: string;
+    purchaseOrderLineId: string;
     productId?: string;
     description: string;
     quantityReceived: number;
+    unitPrice: number;
 }
 
 const emptyLine = (): ReceiptLine => ({
-    description: '', quantityReceived: 0,
+    purchaseOrderLineId: '',
+    description: '',
+    quantityReceived: 0,
+    unitPrice: 0,
 });
 
 export default function NewReceiptPage() {
@@ -36,8 +51,30 @@ export default function NewReceiptPage() {
             .catch(() => {});
     }, []);
 
-    const selectOrder = (orderId: string) => {
-        setForm(f => ({ ...f, purchaseOrderId: orderId }));
+    const selectOrder = async (orderId: string) => {
+        if (!orderId) {
+            setForm(f => ({ ...f, purchaseOrderId: '', lines: [emptyLine()] }));
+            return;
+        }
+        const res = await fetch(`/api/proxy/v1/purchasing/orders/${orderId}`);
+        if (!res.ok) {
+            setFormError('No se pudo cargar el pedido de compra');
+            return;
+        }
+        const order = (await res.json()) as PurchaseOrderDetail;
+        setForm(f => ({
+            ...f,
+            purchaseOrderId: orderId,
+            lines: order.lines.length > 0
+                ? order.lines.map(l => ({
+                    purchaseOrderLineId: l.id,
+                    productId: l.productId,
+                    description: l.productId ? `Producto ${l.productId}` : `Línea pedido ${l.id.slice(0, 8)}`,
+                    quantityReceived: l.quantity,
+                    unitPrice: l.unitPrice,
+                }))
+                : [emptyLine()],
+        }));
     };
 
     const updateLine = <K extends keyof ReceiptLine>(i: number, key: K, val: ReceiptLine[K]) =>
@@ -54,10 +91,21 @@ export default function NewReceiptPage() {
         }
         setSaving(true);
         try {
+            const body = {
+                purchaseOrderId: form.purchaseOrderId,
+                number: form.number,
+                receiptDate: form.receiptDate,
+                lines: form.lines.map(l => ({
+                    purchaseOrderLineId: l.purchaseOrderLineId,
+                    productId: l.productId || null,
+                    quantityReceived: l.quantityReceived,
+                    unitPrice: l.unitPrice,
+                })),
+            };
             const res = await fetch('/api/proxy/v1/purchasing/receipts', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(form),
+                body: JSON.stringify(body),
             });
             if (res.ok) {
                 window.location.href = '/purchasing/receipts';
@@ -81,11 +129,13 @@ export default function NewReceiptPage() {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '20px' }}>
                 <div className="form-group">
-                    <label className="erp-label">PEDido de COMPRA</label>
+                    <label className="erp-label">PEDIDO DE COMPRA *</label>
                     <select className="erp-input" value={form.purchaseOrderId}
                         onChange={e => selectOrder(e.target.value)}>
                         <option value="">Seleccionar pedido...</option>
-                        {orders.map(o => <option key={o.id} value={o.id}>{o.number} — {o.supplierName}</option>)}
+                        {orders.filter(o => o.status === 'Approved').map(o => (
+                            <option key={o.id} value={o.id}>{o.number} — {o.supplierName ?? 'Sin proveedor'}</option>
+                        ))}
                     </select>
                 </div>
                 <div className="form-group">
@@ -104,7 +154,7 @@ export default function NewReceiptPage() {
             <div style={{ marginBottom: '16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                     <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Líneas de Recepción</label>
-                    <button className="btn btn-secondary btn-sm" onClick={addLine}>+ Añadir línea</button>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={addLine}>+ Añadir línea</button>
                 </div>
                 <div style={{ border: '1px solid var(--border)', borderRadius: '8px', overflow: 'hidden' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -131,7 +181,7 @@ export default function NewReceiptPage() {
                                     </td>
                                     <td style={{ padding: '6px 4px', textAlign: 'center' }}>
                                         {form.lines.length > 1 && (
-                                            <button onClick={() => removeLine(i)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--danger)', fontSize: '16px' }}>✕</button>
+                                            <button type="button" onClick={() => removeLine(i)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--danger)', fontSize: '16px' }}>✕</button>
                                         )}
                                     </td>
                                 </tr>
@@ -143,7 +193,7 @@ export default function NewReceiptPage() {
 
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
                 <a href="/purchasing/receipts" className="btn btn-secondary">Cancelar</a>
-                <button className="btn btn-primary" onClick={submit} disabled={saving}>
+                <button type="button" className="btn btn-primary" onClick={submit} disabled={saving}>
                     {saving ? 'Creando...' : '✓ Crear Recepción'}
                 </button>
             </div>

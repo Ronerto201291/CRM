@@ -23,19 +23,22 @@ public class StripeService : ISubscriptionBillingService, IInvoicePaymentGateway
     private readonly ILogger<StripeService> _logger;
     private readonly StripeOptions _options;
     private readonly IPublisher _publisher;
+    private readonly IGestoriaBillingBreakdownService _gestoriaBreakdown;
 
     public StripeService(
         IApplicationDbContext ctx,
         ILicensingDbContext licensing,
         ILogger<StripeService> logger,
         IOptions<StripeOptions> options,
-        IPublisher publisher)
+        IPublisher publisher,
+        IGestoriaBillingBreakdownService gestoriaBreakdown)
     {
         _ctx     = ctx;
         _licensing = licensing;
         _logger  = logger;
         _options = options.Value;
         _publisher = publisher;
+        _gestoriaBreakdown = gestoriaBreakdown;
         StripeConfiguration.ApiKey = _options.SecretKey;
     }
 
@@ -124,29 +127,35 @@ public class StripeService : ISubscriptionBillingService, IInvoicePaymentGateway
         // Lookup Stripe Price ID from config or use plan metadata
         var priceId = GetStripePriceId(planName);
 
+        var companies = plan.MaxCompanies > 1
+            ? await _gestoriaBreakdown.GetCompaniesForBillingAccountAsync(companyId, ct)
+            : Array.Empty<GestoriaCompanyBillingLine>();
+
+        var subscriptionMetadata = GestoriaStripeBilling.BuildSubscriptionMetadata(companyId, planName, companies);
+
+        var lineItems = plan.MaxCompanies > 1 && companies.Count > 0
+            ? companies.Select(c => new SessionLineItemOptions
+            {
+                Price = priceId,
+                Quantity = 1,
+            }).ToList()
+            : new List<SessionLineItemOptions> { new() { Price = priceId, Quantity = 1 } };
+
         var options = new SessionCreateOptions
         {
             Customer = customerId,
             PaymentMethodTypes = new List<string> { "card" },
-            LineItems = new List<SessionLineItemOptions>
-            {
-                new() { Price = priceId, Quantity = 1 }
-            },
+            LineItems = lineItems,
             Mode = "subscription",
             SuccessUrl = successUrl,
             CancelUrl = cancelUrl,
-            Metadata = new Dictionary<string, string>
-            {
-                ["companyId"] = companyId.ToString(),
-                ["planName"] = planName
-            },
+            Metadata = subscriptionMetadata,
             SubscriptionData = new SessionSubscriptionDataOptions
             {
-                Metadata = new Dictionary<string, string>
-                {
-                    ["companyId"] = companyId.ToString(),
-                    ["planName"] = planName
-                }
+                Metadata = subscriptionMetadata,
+                Description = plan.MaxCompanies > 1
+                    ? GestoriaStripeBilling.BuildCheckoutDescription(companies)
+                    : null,
             }
         };
 
@@ -226,6 +235,10 @@ public class StripeService : ISubscriptionBillingService, IInvoicePaymentGateway
                 await HandlePaymentSucceeded((Invoice)stripeEvent.Data.Object, ct);
                 break;
 
+            case "invoice.created":
+                await HandleInvoiceCreated((Invoice)stripeEvent.Data.Object, ct);
+                break;
+
             default:
                 _logger.LogInformation("Unhandled Stripe event: {Type}", stripeEvent.Type);
                 break;
@@ -287,6 +300,9 @@ public class StripeService : ISubscriptionBillingService, IInvoicePaymentGateway
         await _ctx.SaveChangesAsync(ct);
         await SyncTenantModulesAsync(companyId, planName, ct);
         _logger.LogInformation("Subscription activated for company {CompanyId}, plan {Plan}", companyId, planName);
+
+        if (!string.IsNullOrEmpty(session.SubscriptionId))
+            await SyncGestoriaSubscriptionQuantityAsync(session.SubscriptionId, companyId, planName, ct);
     }
 
     private async Task HandleSubscriptionUpdated(Stripe.Subscription stripeSubscription, CancellationToken ct)
@@ -313,6 +329,9 @@ public class StripeService : ISubscriptionBillingService, IInvoicePaymentGateway
 
         if (sub.IsActive)
             await SyncTenantModulesAsync(sub.CompanyId, sub.PlanName, ct);
+
+        if (!string.IsNullOrEmpty(stripeSubscription.Id))
+            await SyncGestoriaSubscriptionQuantityAsync(stripeSubscription.Id, sub.CompanyId, sub.PlanName, ct);
     }
 
     private async Task HandlePaymentSucceeded(Invoice stripeInvoice, CancellationToken ct)
@@ -333,6 +352,128 @@ public class StripeService : ISubscriptionBillingService, IInvoicePaymentGateway
 
         await SyncTenantModulesAsync(sub.CompanyId, sub.PlanName, ct);
         _logger.LogInformation("Payment succeeded — subscription renewed for company {CompanyId}", sub.CompanyId);
+    }
+
+    private async Task HandleInvoiceCreated(Invoice stripeInvoice, CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(stripeInvoice.SubscriptionId)) return;
+
+        var sub = await _ctx.Subscriptions
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(s => s.StripeSubscriptionId == stripeInvoice.SubscriptionId, ct);
+
+        if (sub == null) return;
+
+        await SyncGestoriaSubscriptionQuantityAsync(stripeInvoice.SubscriptionId!, sub.CompanyId, sub.PlanName, ct);
+    }
+
+    private async Task SyncGestoriaSubscriptionQuantityAsync(
+        string stripeSubscriptionId,
+        Guid billingCompanyId,
+        string planName,
+        CancellationToken ct)
+    {
+        var plan = await _ctx.Plans
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Name == planName && p.IsActive, ct);
+
+        if (plan is null || plan.MaxCompanies <= 1)
+            return;
+
+        var companies = await _gestoriaBreakdown.GetCompaniesForBillingAccountAsync(billingCompanyId, ct);
+        if (companies.Count == 0)
+        {
+            var billingCo = await _ctx.Companies.IgnoreQueryFilters()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Id == billingCompanyId, ct);
+            if (billingCo is not null)
+                companies = [new GestoriaCompanyBillingLine(billingCo.Id, billingCo.Name, billingCo.TaxId)];
+        }
+
+        var priceId = GetStripePriceId(planName);
+        var metadata = GestoriaStripeBilling.BuildSubscriptionMetadata(billingCompanyId, planName, companies);
+
+        try
+        {
+            var subService = new SubscriptionService();
+            var stripeSub = await subService.GetAsync(stripeSubscriptionId, cancellationToken: ct);
+            var itemService = new SubscriptionItemService();
+
+            var existingByCompany = stripeSub.Items.Data
+                .Where(i => i.Metadata?.ContainsKey(GestoriaStripeBilling.CompanyIdMetadataKey) == true)
+                .ToDictionary(
+                    i => Guid.Parse(i.Metadata[GestoriaStripeBilling.CompanyIdMetadataKey]),
+                    i => i);
+
+            var legacySingleItem = stripeSub.Items.Data.Count == 1
+                && !existingByCompany.Any()
+                && stripeSub.Items.Data[0].Quantity > 1;
+
+            if (legacySingleItem)
+            {
+                await itemService.DeleteAsync(stripeSub.Items.Data[0].Id, cancellationToken: ct);
+                existingByCompany = new Dictionary<Guid, SubscriptionItem>();
+            }
+
+            foreach (var company in companies)
+            {
+                var itemMeta = GestoriaStripeBilling.BuildCompanyItemMetadata(company);
+                if (existingByCompany.TryGetValue(company.CompanyId, out var existing))
+                {
+                    if (existing.Quantity != 1)
+                    {
+                        await itemService.UpdateAsync(existing.Id, new SubscriptionItemUpdateOptions
+                        {
+                            Quantity = 1,
+                            Metadata = itemMeta,
+                        }, cancellationToken: ct);
+                    }
+                }
+                else
+                {
+                    await itemService.CreateAsync(new SubscriptionItemCreateOptions
+                    {
+                        Subscription = stripeSubscriptionId,
+                        Price = priceId,
+                        Quantity = 1,
+                        Metadata = itemMeta,
+                    }, cancellationToken: ct);
+                }
+            }
+
+            foreach (var orphan in existingByCompany.Values)
+            {
+                var companyId = Guid.Parse(orphan.Metadata[GestoriaStripeBilling.CompanyIdMetadataKey]);
+                if (companies.All(c => c.CompanyId != companyId))
+                    await itemService.DeleteAsync(orphan.Id, cancellationToken: ct);
+            }
+
+            await subService.UpdateAsync(stripeSubscriptionId, new SubscriptionUpdateOptions
+            {
+                Metadata = metadata,
+                ProrationBehavior = "create_prorations",
+            }, cancellationToken: ct);
+
+            _logger.LogInformation(
+                "Gestoría subscription {SubId} synced to {Qty} line items for company {CompanyId}",
+                stripeSubscriptionId, companies.Count, billingCompanyId);
+        }
+        catch (StripeException ex)
+        {
+            _logger.LogWarning(ex,
+                "No se pudo sincronizar line items Gestoría en Stripe para suscripción {SubId}",
+                stripeSubscriptionId);
+        }
+    }
+
+    private static bool MetadataMatches(
+        IReadOnlyDictionary<string, string> current,
+        IReadOnlyDictionary<string, string> expected,
+        string key)
+    {
+        if (!expected.TryGetValue(key, out var expectedVal))
+            return true;
+        return current.TryGetValue(key, out var currentVal) && currentVal == expectedVal;
     }
 
     private async Task HandleSubscriptionCanceled(Stripe.Subscription stripeSubscription, CancellationToken ct)
@@ -440,14 +581,22 @@ public class StripeService : ISubscriptionBillingService, IInvoicePaymentGateway
             Limit = 12
         }, cancellationToken: ct);
 
-        return list.Select(i => new SubscriptionInvoiceDto(
-            i.Id,
-            i.Created,
-            i.Total / 100m,
-            i.Currency?.ToUpperInvariant(),
-            i.Status,
-            i.InvoicePdf,
-            i.Description ?? i.Lines.FirstOrDefault()?.Description
-        )).ToList();
+        return list.Select(i =>
+        {
+            var breakdown = GestoriaStripeBilling.ParseBreakdownFromInvoice(i);
+            var lineItems = GestoriaStripeBilling.ParseLineItemsFromInvoice(i);
+            var qty = lineItems.Count > 1 ? lineItems.Count : (int)(i.Lines?.Data?.FirstOrDefault()?.Quantity ?? 1);
+            return new SubscriptionInvoiceDto(
+                i.Id,
+                i.Created,
+                i.Total / 100m,
+                i.Currency?.ToUpperInvariant(),
+                i.Status,
+                i.InvoicePdf,
+                GestoriaStripeBilling.BuildInvoiceDescription(i, breakdown),
+                breakdown,
+                qty > 1 ? qty : null,
+                lineItems.Count > 0 ? lineItems : null);
+        }).ToList();
     }
 }

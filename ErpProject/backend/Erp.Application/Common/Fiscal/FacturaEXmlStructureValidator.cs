@@ -80,7 +80,37 @@ public static class FacturaEXmlStructureValidator
         if (root.Descendants().FirstOrDefault(e => e.Name.LocalName == "TaxesOutputs") is null)
             warnings.Add("Sin TaxesOutputs (factura sin IVA desglosado).");
 
+        ValidateSignedProfile(root, errors, warnings);
+
         return new FacturaEValidationResult(errors.Count == 0, errors, warnings);
+    }
+
+    private static void ValidateSignedProfile(XElement root, List<string> errors, List<string> warnings)
+    {
+        var signature = root.Descendants()
+            .FirstOrDefault(e => e.Name.LocalName == "Signature");
+        if (signature is null)
+            return;
+
+        var policyId = signature.Descendants()
+            .FirstOrDefault(e => e.Name.LocalName == "SignaturePolicyIdentifier");
+        if (policyId is null)
+        {
+            errors.Add(
+                "Firma presente sin SignaturePolicyIdentifier — FACe exige XAdES-EPES, no XAdES-BES.");
+            return;
+        }
+
+        var identifier = policyId.Descendants()
+            .FirstOrDefault(e => e.Name.LocalName == "Identifier");
+        if (identifier?.Value != FacturaEConstants.SignaturePolicyUrl)
+            warnings.Add(
+                $"SignaturePolicyIdentifier distinto al oficial Facturae v3.1: {identifier?.Value ?? "(vacío)"}");
+
+        var policyHash = policyId.Descendants()
+            .FirstOrDefault(e => e.Name.LocalName == "SigPolicyHash");
+        if (policyHash is null)
+            warnings.Add("SignaturePolicyIdentifier sin SigPolicyHash.");
     }
 
     private static void ValidateExtensions(XElement header, List<string> errors, List<string> warnings)

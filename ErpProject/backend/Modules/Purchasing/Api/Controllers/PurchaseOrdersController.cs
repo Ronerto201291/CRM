@@ -38,7 +38,7 @@ public class PurchaseOrdersController : ControllerBase
         var result = await _mediator.Send(new CreatePurchaseOrderCommand(
             dto.Number,
             dto.OrderDate,
-            dto.Lines.Select(l => new PurchaseOrderLineDto(l.ProductId, l.Quantity, l.UnitPrice)).ToList()), ct);
+            dto.Lines.Select(l => new PurchaseOrderLineDto(Guid.Empty, l.ProductId, l.Quantity, l.UnitPrice)).ToList()), ct);
         return CreatedAtAction(nameof(Get), new { id = result.Id }, result);
     }
 
@@ -50,7 +50,7 @@ public class PurchaseOrdersController : ControllerBase
             id,
             dto.Number,
             dto.OrderDate,
-            dto.Lines.Select(l => new PurchaseOrderLineDto(l.ProductId, l.Quantity, l.UnitPrice)).ToList()), ct);
+            dto.Lines.Select(l => new PurchaseOrderLineDto(Guid.Empty, l.ProductId, l.Quantity, l.UnitPrice)).ToList()), ct);
         return result == null ? NotFound() : Ok(result);
     }
 

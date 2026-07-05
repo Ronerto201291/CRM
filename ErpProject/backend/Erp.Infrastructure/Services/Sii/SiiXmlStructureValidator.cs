@@ -41,8 +41,23 @@ public static class SiiXmlStructureValidator
         var cabecera = root.Elements().FirstOrDefault(e => e.Name.LocalName == "Cabecera");
         if (cabecera is null)
             errors.Add("Falta elemento Cabecera.");
-        else if (cabecera.Name.NamespaceName != SiiNamespaces.Info)
-            errors.Add($"Cabecera debe estar en namespace Info ({SiiNamespaces.Info}).");
+        else
+        {
+            if (cabecera.Name.NamespaceName != SiiNamespaces.Info)
+                errors.Add($"Cabecera debe estar en namespace Info ({SiiNamespaces.Info}).");
+
+            var titular = cabecera.Descendants()
+                .FirstOrDefault(e => e.Name.LocalName == "Titular");
+            if (titular is null)
+                errors.Add("Cabecera sin Titular.");
+            else if (titular.Descendants().All(e => e.Name.LocalName != "NIF"))
+                errors.Add("Titular sin NIF.");
+
+            var periodo = cabecera.Descendants()
+                .FirstOrDefault(e => e.Name.LocalName == "PeriodoLiquidacion");
+            if (periodo is null)
+                warnings.Add("Cabecera sin PeriodoLiquidacion (puede ser alta inicial).");
+        }
 
         var registros = root.Elements()
             .Where(e => e.Name.LocalName.StartsWith("RegistroLR", StringComparison.Ordinal))

@@ -19,7 +19,12 @@ public static class PostgresRlsBootstrap
         CancellationToken ct = default)
     {
         if (!configuration.GetValue("Postgres:RlsEnabled", false))
+        {
+            logger.LogWarning(
+                "Postgres:RlsEnabled=false — RLS pilot policies NOT applied. " +
+                "Multi-tenant isolation relies only on EF global query filters (ADR-0018 #70).");
             return;
+        }
 
         const string sql = """
             DO $rls$

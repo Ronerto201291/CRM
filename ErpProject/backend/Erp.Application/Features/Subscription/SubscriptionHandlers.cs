@@ -16,6 +16,7 @@ public sealed class CurrentSubscriptionDto
     public string? Message { get; init; }
     public int MaxCompanies { get; init; }
     public int CompaniesUsed { get; init; }
+    public IReadOnlyList<GestoriaCompanyBillingLine> GestoriaCompanies { get; init; } = Array.Empty<GestoriaCompanyBillingLine>();
 }
 
 public class GetCurrentSubscriptionHandler : IRequestHandler<GetCurrentSubscriptionQuery, CurrentSubscriptionDto?>
@@ -24,17 +25,20 @@ public class GetCurrentSubscriptionHandler : IRequestHandler<GetCurrentSubscript
     private readonly ITenantContext _tenant;
     private readonly IHttpContextCurrentUserAccessor _currentUser;
     private readonly ICompanyMembershipLimitService _companyLimits;
+    private readonly IGestoriaBillingBreakdownService _gestoriaBreakdown;
 
     public GetCurrentSubscriptionHandler(
         IApplicationDbContext ctx,
         ITenantContext tenant,
         IHttpContextCurrentUserAccessor currentUser,
-        ICompanyMembershipLimitService companyLimits)
+        ICompanyMembershipLimitService companyLimits,
+        IGestoriaBillingBreakdownService gestoriaBreakdown)
     {
         _ctx = ctx;
         _tenant = tenant;
         _currentUser = currentUser;
         _companyLimits = companyLimits;
+        _gestoriaBreakdown = gestoriaBreakdown;
     }
 
     public async Task<CurrentSubscriptionDto?> Handle(GetCurrentSubscriptionQuery request, CancellationToken ct)
@@ -44,6 +48,10 @@ public class GetCurrentSubscriptionHandler : IRequestHandler<GetCurrentSubscript
         var (companiesUsed, maxCompanies) = _currentUser.UserId is Guid userId
             ? await _companyLimits.GetUsageForUserAsync(userId, ct)
             : (0, 1);
+
+        var gestoriaCompanies = maxCompanies > 1
+            ? await _gestoriaBreakdown.GetCompaniesForBillingAccountAsync(tenantId, ct)
+            : Array.Empty<GestoriaCompanyBillingLine>();
 
         var sub = await _ctx.Subscriptions.FirstOrDefaultAsync(s => s.CompanyId == tenantId, ct);
         if (sub == null)
@@ -55,6 +63,7 @@ public class GetCurrentSubscriptionHandler : IRequestHandler<GetCurrentSubscript
                 Message = "No active subscription.",
                 CompaniesUsed = companiesUsed,
                 MaxCompanies = maxCompanies,
+                GestoriaCompanies = gestoriaCompanies,
             };
         }
 
@@ -73,6 +82,7 @@ public class GetCurrentSubscriptionHandler : IRequestHandler<GetCurrentSubscript
                 ?? new List<string>(),
             CompaniesUsed = companiesUsed,
             MaxCompanies = plan?.MaxCompanies > 0 ? plan.MaxCompanies : maxCompanies,
+            GestoriaCompanies = gestoriaCompanies,
         };
     }
 }
@@ -124,15 +134,18 @@ public class GetBillingHistoryHandler : IRequestHandler<GetBillingHistoryQuery, 
     private readonly IApplicationDbContext _ctx;
     private readonly ISubscriptionBillingService _billing;
     private readonly ITenantContext _tenant;
+    private readonly IGestoriaBillingBreakdownService _gestoriaBreakdown;
 
     public GetBillingHistoryHandler(
         IApplicationDbContext ctx,
         ISubscriptionBillingService billing,
-        ITenantContext tenant)
+        ITenantContext tenant,
+        IGestoriaBillingBreakdownService gestoriaBreakdown)
     {
         _ctx = ctx;
         _billing = billing;
         _tenant = tenant;
+        _gestoriaBreakdown = gestoriaBreakdown;
     }
 
     public async Task<IReadOnlyList<SubscriptionInvoiceDto>> Handle(GetBillingHistoryQuery request, CancellationToken ct)
@@ -143,7 +156,19 @@ public class GetBillingHistoryHandler : IRequestHandler<GetBillingHistoryQuery, 
         if (string.IsNullOrEmpty(company?.StripeCustomerId))
             return Array.Empty<SubscriptionInvoiceDto>();
 
-        return await _billing.ListInvoicesAsync(tenantId, ct);
+        var invoices = await _billing.ListInvoicesAsync(tenantId, ct);
+        if (invoices.All(i => i.CompanyBreakdown is { Count: > 0 }))
+            return invoices;
+
+        var breakdown = await _gestoriaBreakdown.GetCompaniesForBillingAccountAsync(tenantId, ct);
+        if (breakdown.Count <= 1)
+            return invoices;
+
+        return invoices
+            .Select(i => i.CompanyBreakdown is { Count: > 0 }
+                ? i
+                : i with { CompanyBreakdown = breakdown })
+            .ToList();
     }
 }
 

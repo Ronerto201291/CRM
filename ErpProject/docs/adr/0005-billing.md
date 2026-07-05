@@ -117,8 +117,10 @@ pageSize }`) con header `X-Total-Count`; parámetros `page` (default 1) y
 - **FacturaE 3.2.2**: `FacturaEController`
   (`/api/v1/billing/facturae/{invoiceId}`) despacha `GenerateFacturaEQuery` →
   `IFacturaEService` genera el XML bajo demanda (requiere factura bloqueada).
+  ABAC (ADR-0018 #42c): `FacturaE.Read`/`FacturaE.Export`/`FacturaE.Manage`.
   Es un servicio sin estado: genera el XML a partir del `Invoice` en cada llamada.
-  **Nota (ADR-0018 #0c):** `GET .../signed` (XAdES si cert SII); `GET .../validate`
+  **Nota (ADR-0018 #0c):** `GET .../signed` (XAdES-EPES con `SignaturePolicyIdentifier`
+  en `FacturaESigningService`); `GET .../validate`
   (`FacturaEXmlStructureValidator` offline); `POST .../submit-face` (SOAP validado
   con `FaceSoapStructureValidator` + HTTP opcional `Face:SendEnabled`); `.xml` sin
   firmar en descarga estándar.
@@ -139,7 +141,12 @@ pageSize }`) con header `X-Total-Count`; parámetros `page` (default 1) y
   Selector de divisa real en `BillingClient.tsx` (recalcula el equivalente
   EUR en el propio formulario antes de enviar, aunque el backend vuelve a
   calcular la conversión de forma independiente — el frontend no puede
-  falsear el tipo de cambio).
+  falsear el tipo de cambio). Migración `20260705130000_AddInvoiceMultiCurrency`
+  (atributo `[Migration]` presente; snapshot actualizado). Test real:
+  `CreateInvoicePostgresTests.PostInvoice_WithUsdCurrency_PopulatesMultiCurrencyFields`.
+  `FacturaEService` emite `InvoiceCurrencyCode` desde `invoice.CurrencyCode`
+  (`TaxCurrencyCode` sigue en EUR para IVA español).
+  hasta cablear `invoice.CurrencyCode`.
 
 **Nota sobre entidades no conectadas**: `Domain/Entities/FacturaE.cs`
 (`FacturaEDocument`, `VerifactuDeclaration`, `FacturaEGraphic`) y

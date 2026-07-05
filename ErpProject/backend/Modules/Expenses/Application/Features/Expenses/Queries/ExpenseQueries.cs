@@ -95,3 +95,32 @@ public class GetSupplierExpensesQuery : IRequest<List<SupplierExpenseDto>>
 {
     public Guid SupplierId { get; set; }
 }
+
+public record ExpenseAnomalyItemDto(
+    Guid ExpenseId,
+    string? InvoiceNumber,
+    string? SupplierName,
+    decimal Amount,
+    DateTime? IssueDate,
+    string Type,
+    string Message);
+
+public record ExpenseAnomaliesDto(
+    IReadOnlyList<ExpenseAnomalyItemDto> Outliers,
+    IReadOnlyList<ExpenseAnomalyItemDto> Duplicates,
+    string? AiSummary = null);
+
+public record ExpenseCategorySuggestionDto(
+    string AccountCode,
+    string AccountName,
+    string Reason,
+    decimal Confidence);
+
+public class GetExpenseAnomaliesQuery : IRequest<ExpenseAnomaliesDto> { }
+
+public class SuggestExpenseCategoryQuery : IRequest<ExpenseCategorySuggestionDto?>
+{
+    public Guid? SupplierId { get; set; }
+    public string? SupplierTaxId { get; set; }
+    public string? Description { get; set; }
+}

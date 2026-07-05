@@ -155,6 +155,19 @@ public class ExpensesController : ControllerBase
     public async Task<IActionResult> GetStats(CancellationToken ct)
         => Ok(await _mediator.Send(new GetExpenseStatsQuery(), ct));
 
+    [HttpGet("anomalies"), Authorize, RequiredModule("Expenses"), RequirePermission(Permissions.Expense.Read)]
+    public async Task<IActionResult> GetAnomalies(CancellationToken ct)
+        => Ok(await _mediator.Send(new GetExpenseAnomaliesQuery(), ct));
+
+    [HttpGet("suggest-category"), Authorize, RequiredModule("Expenses"), RequirePermission(Permissions.Expense.Read)]
+    public async Task<IActionResult> SuggestCategory(
+        [FromQuery] Guid? supplierId, [FromQuery] string? supplierTaxId, [FromQuery] string? description,
+        CancellationToken ct)
+        => Ok(await _mediator.Send(new SuggestExpenseCategoryQuery
+        {
+            SupplierId = supplierId, SupplierTaxId = supplierTaxId, Description = description
+        }, ct));
+
     private static bool IsValidFileSignature(IFormFile file)
     {
         using var stream = file.OpenReadStream();

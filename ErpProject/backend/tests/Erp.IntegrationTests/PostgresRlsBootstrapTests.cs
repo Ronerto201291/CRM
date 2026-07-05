@@ -8,7 +8,7 @@ using Xunit;
 
 namespace Erp.IntegrationTests;
 
-/// <summary>ADR-0018 #34 — RLS piloto aplicado tras migraciones.</summary>
+/// <summary>ADR-0018 #34 / #70 — RLS piloto aplicado tras migraciones.</summary>
 public class PostgresRlsBootstrapTests
 {
     [Fact]
@@ -59,14 +59,9 @@ public class PostgresRlsBootstrapTests
             var count = Convert.ToInt32(await cmd.ExecuteScalarAsync());
             Assert.Equal(3, count);
         }
-        catch (Exception ex) when (IsDockerUnavailable(ex))
+        catch (Exception ex)
         {
-            Assert.True(true);
+            IntegrationTestDocker.HandleDockerUnavailable(ex);
         }
     }
-
-    private static bool IsDockerUnavailable(Exception ex) =>
-        ex.Message.Contains("Docker", StringComparison.OrdinalIgnoreCase)
-        || ex.GetType().FullName?.Contains("Docker", StringComparison.OrdinalIgnoreCase) == true
-        || ex.InnerException is not null && IsDockerUnavailable(ex.InnerException);
 }

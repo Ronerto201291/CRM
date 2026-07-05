@@ -1,11 +1,13 @@
 using Erp.Application.Common.Certificates;
 using Erp.Application.Common.Interfaces;
 using Erp.Application.Features.Auth.Commands;
+using Erp.Application.Options;
 using Erp.Infrastructure.Automation;
 using Erp.Infrastructure.Data;
 using Erp.Infrastructure.Messaging;
 using Erp.Infrastructure.Security;
 using Erp.Infrastructure.Services;
+using Erp.Infrastructure.Services.Ai;
 using Erp.Infrastructure.Services.Sii;
 using Erp.Infrastructure.Services.Storage;
 using Microsoft.Extensions.Configuration;
@@ -42,6 +44,32 @@ public static class DependencyInjection
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<Erp.Application.Common.Interfaces.IPortalUrlProvider, PortalUrlProvider>();
 
+        // AI (#40): LLM OpenAI-compatible, deshabilitado por defecto.
+        services.AddOptions<AiOptions>().BindConfiguration(AiOptions.SectionName);
+        services.AddHttpClient<OpenAiCompatibleExpenseAiAssistant>();
+        services.AddScoped<DisabledExpenseAiAssistant>();
+        services.AddScoped<IExpenseAiAssistant>(sp =>
+        {
+            var opts = sp.GetRequiredService<IOptions<AiOptions>>().Value;
+            return opts.Enabled && !string.IsNullOrWhiteSpace(opts.ApiKey)
+                ? sp.GetRequiredService<OpenAiCompatibleExpenseAiAssistant>()
+                : sp.GetRequiredService<DisabledExpenseAiAssistant>();
+        });
+
+        // Web Push (#42): VAPID, deshabilitado por defecto; email como fallback.
+        services.AddOptions<WebPushOptions>().BindConfiguration(WebPushOptions.SectionName);
+        services.AddScoped<DisabledWebPushService>();
+        services.AddScoped<WebPushService>();
+        services.AddScoped<IWebPushService>(sp =>
+        {
+            var opts = sp.GetRequiredService<IOptions<WebPushOptions>>().Value;
+            return opts.Enabled
+                && !string.IsNullOrWhiteSpace(opts.VapidPublicKey)
+                && !string.IsNullOrWhiteSpace(opts.VapidPrivateKey)
+                ? sp.GetRequiredService<WebPushService>()
+                : sp.GetRequiredService<DisabledWebPushService>();
+        });
+
         services.AddScoped<IJwtProvider, JwtProvider>();
         services.AddScoped<IApplicationDbContext>(provider => provider.GetRequiredService<ErpDbContext>());
         services.AddScoped<Erp.Application.Common.Interfaces.ILicensingDbContext>(
@@ -51,6 +79,7 @@ public static class DependencyInjection
         // own Infrastructure DI (AddBillingInfrastructure, AddCrmInfrastructure, etc.).
         services.AddScoped<IPlanLimitService, PlanLimitService>();
         services.AddScoped<ICompanyMembershipLimitService, CompanyMembershipLimitService>();
+        services.AddScoped<IGestoriaBillingBreakdownService, GestoriaBillingBreakdownService>();
         services.AddScoped<OutboxProcessorJob>();
         services.AddScoped<ITotpService, TotpService>();
         services.AddScoped<StripeService>();
@@ -144,6 +173,8 @@ public static class DependencyInjection
         services.AddScoped<IFiscalCalendarService, FiscalCalendarService>();
         services.AddScoped<FiscalReminderJob>();
         services.AddScoped<RuleEvaluatorJob>();
+        services.AddScoped<Erp.Infrastructure.Jobs.ProactiveNotificationsJob>();
+        services.AddScoped<IGestoriaDashboardDataQuery, GestoriaDashboardDataQuery>();
         services.AddScoped<RealtimeRuleEvaluator>();
 
         return services;

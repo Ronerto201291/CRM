@@ -1,3 +1,4 @@
+using Erp.Application.Common.Events;
 using Erp.Domain.Entities.Core;
 using Erp.Infrastructure.Data;
 using Erp.Modules.Purchasing.Application.Features.Invoices.Commands;
@@ -28,7 +29,7 @@ public class CreateSupplierInvoiceHandlerTests
         await using var purch = new PurchasingDbContext(purchOptions, tenant);
         await using var app = new ErpDbContext(appOptions, tenant);
 
-        var handler = new CreateSupplierInvoiceHandler(purch, app, tenant);
+        var handler = new CreateSupplierInvoiceHandler(purch, app, tenant, new FakePublisher());
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             handler.Handle(new CreateSupplierInvoiceCommand
             {
@@ -70,7 +71,7 @@ public class CreateSupplierInvoiceHandlerTests
         });
         await purch.SaveChangesAsync();
 
-        var handler = new CreateSupplierInvoiceHandler(purch, app, tenant);
+        var handler = new CreateSupplierInvoiceHandler(purch, app, tenant, new FakePublisher());
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             handler.Handle(new CreateSupplierInvoiceCommand
             {
@@ -116,7 +117,7 @@ public class CreateSupplierInvoiceHandlerTests
         purch.GoodsReceiptLines.Add(new GoodsReceiptLine { PurchaseOrderLineId = lineId, QuantityReceived = 10m, UnitPrice = 5m });
         await purch.SaveChangesAsync();
 
-        var handler = new CreateSupplierInvoiceHandler(purch, app, tenant);
+        var handler = new CreateSupplierInvoiceHandler(purch, app, tenant, new FakePublisher());
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             handler.Handle(new CreateSupplierInvoiceCommand
             {
@@ -162,7 +163,8 @@ public class CreateSupplierInvoiceHandlerTests
         purch.GoodsReceiptLines.Add(new GoodsReceiptLine { PurchaseOrderLineId = lineId, QuantityReceived = 10m, UnitPrice = 5m });
         await purch.SaveChangesAsync();
 
-        var handler = new CreateSupplierInvoiceHandler(purch, app, tenant);
+        var publisher = new FakePublisher();
+        var handler = new CreateSupplierInvoiceHandler(purch, app, tenant, publisher);
         var invoiceId = await handler.Handle(new CreateSupplierInvoiceCommand
         {
             PurchaseOrderId = poId,
@@ -183,5 +185,10 @@ public class CreateSupplierInvoiceHandlerTests
         var saved = await purch.SupplierInvoices.Include(i => i.Lines).SingleAsync(i => i.Id == invoiceId);
         Assert.Equal("SI-OK", saved.Number);
         Assert.Single(saved.Lines);
+
+        var evt = Assert.Single(publisher.Published.OfType<SupplierInvoiceCreatedEvent>());
+        Assert.Equal(invoiceId, evt.SupplierInvoiceId);
+        Assert.Equal(50m, evt.TaxBase);
+        Assert.Equal(50m, evt.Total);
     }
 }

@@ -384,6 +384,11 @@ for (int attempt = 1; attempt <= 10; attempt++)
             job => job.EvaluateRulesAsync(CancellationToken.None),
             "0 9 * * *"); // Diario a las 9:00 — facturas vencidas + stock bajo
 
+        RecurringJob.AddOrUpdate<Erp.Infrastructure.Jobs.ProactiveNotificationsJob>(
+            "proactive-notifications",
+            job => job.ExecuteAsync(CancellationToken.None),
+            "0 8 * * *"); // Diario a las 8:00 — #42 notificaciones proactivas
+
         Erp.Modules.Accounting.Infrastructure.DependencyInjection.RegisterAccountingRecurringJobs();
         break;
     }

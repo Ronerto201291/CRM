@@ -20,6 +20,6 @@ public class ExportLibroIvaRecibidasHandler : IRequestHandler<ExportLibroIvaReci
     public async Task<FiscalCsvExportResult> Handle(ExportLibroIvaRecibidasQuery request, CancellationToken ct)
     {
         var tenantId = _tenant.TenantId ?? throw new InvalidOperationException("Tenant not resolved");
-        return await _exporter.ExportAsync(tenantId, request.Year, ct);
+        return await _exporter.ExportAsync(tenantId, FiscalExportPeriod.FullYear(request.Year), ct);
     }
 }

@@ -66,6 +66,9 @@ const navGroups = [
             { href: '/settings/audit-logs', label: '📋 Auditoría', icon: <IconAudit /> },
             { href: '/settings/documents', label: '📁 Documentos', icon: <IconDocuments /> },
             { href: '/settings/empresas', label: '🏢 Empresas', icon: <IconCompanies /> },
+            { href: '/gestoria', label: '📊 Panel gestoría', icon: <IconCompanies /> },
+            { href: '/settings/onboarding', label: '🚀 Onboarding', icon: <IconSettings /> },
+            { href: '/settings/notifications', label: '🔔 Notificaciones', icon: <IconSettings /> },
         ]
     },
 ];

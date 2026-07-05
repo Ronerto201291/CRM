@@ -17,4 +17,7 @@ public sealed record SubscriptionInvoiceDto(
     string? Currency,
     string? Status,
     string? PdfUrl,
-    string? Description);
+    string? Description,
+    IReadOnlyList<GestoriaCompanyBillingLine>? CompanyBreakdown = null,
+    int? BilledCompanyCount = null,
+    IReadOnlyList<GestoriaInvoiceLineDto>? LineItems = null);

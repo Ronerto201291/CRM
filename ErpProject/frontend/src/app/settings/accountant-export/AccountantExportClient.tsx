@@ -76,7 +76,7 @@ export default function AccountantExportClient() {
             <div className="page-header">
                 <div>
                     <h1 className="page-title">Export a gestoría</h1>
-                    <p className="page-subtitle">ZIP periódico: libro IVA emitidas + recibidas (ADR-0018 #42e)</p>
+                    <p className="page-subtitle">ZIP periódico: libros IVA, asientos contables, PDFs facturas emitidas y documentos de gastos (ADR-0018 #42e)</p>
                 </div>
             </div>
 

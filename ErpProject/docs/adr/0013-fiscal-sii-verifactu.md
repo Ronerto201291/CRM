@@ -1,7 +1,7 @@
 # ADR-0013: Fiscal — SII y VeriFactu
 
 ## Estado
-Aceptado — refleja la implementación actual del código en `main`. **Actualización (re-verificada tras una ronda de correcciones)**: la auditoría original encontró que VeriFactu y SII serían rechazados por la AEAT tal como estaban. Tras una ronda de correcciones, **se ha vuelto a verificar el código real** (no solo se ha confiado en que "se corrigió"): **VeriFactu y SII están ahora corregidos de verdad** (hash de 8 campos con formato `clave=valor`, XML con la forma real de VeriFactu, namespaces duales de SII, sobre SOAP sin anidar dos veces, `Contraparte`/`CuotaSoportada` correctos, orden de firma XAdES arreglado). **FacturaE sigue con un problema real de namespace** y su nuevo validador de estructura lo valida contra la misma constante equivocada (validación circular que no protege de nada). Ver la sección "Auditoría de corrección frente a especificación externa" para el detalle verificado de cada uno.
+Aceptado — refleja la implementación actual del código en `main`. **Actualización (re-verificada tras una ronda de correcciones)**: la auditoría original encontró que VeriFactu y SII serían rechazados por la AEAT tal como estaban. Tras una ronda de correcciones, **se ha vuelto a verificar el código real** (no solo se ha confiado en que "se corrigió"): **VeriFactu y SII están ahora corregidos de verdad** (hash de 8 campos con formato `clave=valor`, XML con la forma real de VeriFactu, namespaces duales de SII, sobre SOAP sin anidar dos veces, `Contraparte`/`CuotaSoportada` correctos, orden de firma XAdES arreglado). **FacturaE:** namespace 3.2.2 unificado y validador circular corregidos; firma **XAdES-EPES** implementada en `FacturaESigningService` (`SignaturePolicyIdentifier` + política Facturae v3.1). Pendiente: homologación FACe entorno test (certificado + envío real) y bloque `Extensions`. Ver la sección "Auditoría de corrección frente a especificación externa" para el detalle verificado de cada uno.
 
 ## Contexto
 Esta ADR documenta el cumplimiento de dos obligaciones fiscales españolas
@@ -25,7 +25,9 @@ asume alcance normativo más allá de lo que el código cubre.
 - `SiiController` (`api/sii`, `[Authorize]`) — controller delgado con
   `IMediator`; handlers en `Erp.Infrastructure.Features.Sii` delegan en
   `SiiXmlGenerator`, `SiiSigningService`, `SiiSubmissionService`,
-  `IVerifactuXmlGenerator` y `VerifactuSubmissionService`. Endpoints:
+  `IVerifactuXmlGenerator` (puerto en `Erp.Application/Common/Interfaces/`,
+  implementación en `Billing.Infrastructure`) y `VerifactuSubmissionService`.
+  Endpoints:
   `GET emitidas`/`GET recibidas`, `GET validate`, `GET preview`,
   `POST submit`, `GET verifactu`, `POST verifactu/submit`.
 - `TaxController` (`api/tax`) — controller delgado con `IMediator`; despacha
@@ -247,7 +249,7 @@ por motivos propios y confirmados leyendo el código exacto citado.
   hace POST crudo), Polly retry/circuit-breaker, algoritmos RSA-SHA256/C14N
   correctos, fechas `dd-MM-yyyy` correctas, filtro por facturas bloqueadas.
 
-### FacturaE — namespace y validador circular ya corregidos; firma ya real
+### FacturaE — namespace y validador circular ya corregidos; firma XAdES-EPES implementada
 - **Firma real**: ~~sin `ds:Signature`~~ **✅ Corregido, re-verificado directamente**
   — `GenerateSignedAsync` → `GenerateCoreAsync(sign: true)` llama a
   `_signer.Sign(xmlString)` (`FacturaEService.cs:43-80`), el mismo firmante
@@ -255,8 +257,10 @@ por motivos propios y confirmados leyendo el código exacto citado.
   archivo solo se nombra `.xsig` cuando `sign=true` (línea 78); si no, `.xml`.
   El texto anterior de esta sección decía "sigue sin generarse ds:Signature",
   lo cual ya no es cierto tras la última ronda de correcciones — corregido
-  aquí. Nota: el perfil de firma es XAdES-**BES**; FACe exige XAdES-**EPES**
-  con `SignaturePolicyIdentifier` — pendiente ese detalle de perfil.
+  aquí. **Perfil XAdES-EPES:** ✅ implementado en `FacturaESigningService`
+  (`SignaturePolicyIdentifier` + política Facturae v3.1); `FacturaEXmlStructureValidator`
+  rechaza firmas sin política. **Pendiente:** homologación FACe entorno test
+  (certificado + envío real contra plataforma FACe).
 - **Namespace incorrecto**: ~~`FacturaEService.cs:20` usaba
   `http://www.facturae.gob.es/formato/Version3.2.2/Facturae32.xsd`~~
   **✅ Corregido** — ahora usa
@@ -286,8 +290,8 @@ por motivos propios y confirmados leyendo el código exacto citado.
   /api/v1/billing/facturae/{id}/submit-face` + `IFaceSubmissionService`: SOAP
   validado con `FaceSoapStructureValidator` y POST HTTP opcional (`Face:SendEnabled=true`).
   Homologación offline: `GET .../validate` + `FacturaEXmlStructureValidator`
-  (namespace y circularidad ya corregidos, ver arriba). Pendiente: perfil
-  XAdES-EPES, bloque `Extensions`, homologación entorno test.
+  (namespace y circularidad ya corregidos, ver arriba). Firma XAdES-EPES ya
+  implementada (ver arriba). Pendiente: bloque `Extensions`, homologación entorno test FACe.
 - Lo que sí está bien: la aritmética de IVA/IRPF por línea y su agregación
   (`FacturaEService.cs:65-71,151,163`) es correcta; el orden general de
   bloques sigue razonablemente la forma del estándar.

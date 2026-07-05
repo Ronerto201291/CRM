@@ -46,7 +46,7 @@ public sealed class FakeModelo303Exporter : IModelo303Exporter
         });
 }
 
-public sealed class FakeVerifactuXmlGenerator : Erp.Modules.Billing.Application.Interfaces.IVerifactuXmlGenerator
+public sealed class FakeVerifactuXmlGenerator : Erp.Application.Common.Interfaces.IVerifactuXmlGenerator
 {
     public Task<string> GenerateRegistroAsync(Guid tenantId, int year, int month, CancellationToken ct = default)
         => Task.FromResult("<Verifactu>test</Verifactu>");
@@ -111,22 +111,22 @@ public sealed class FakeModelo349Exporter : IModelo349Exporter
 
 public sealed class FakeLibroIvaRecibidasExporter : ILibroIvaRecibidasExporter
 {
-    public Task<FiscalCsvExportResult> ExportAsync(Guid tenantId, int year, CancellationToken ct)
+    public Task<FiscalCsvExportResult> ExportAsync(Guid tenantId, FiscalExportPeriod period, CancellationToken ct)
         => Task.FromResult(new FiscalCsvExportResult
         {
             Content = System.Text.Encoding.UTF8.GetBytes("libro,recibidas"),
-            FileName = $"LibroIvaRecibidas_{year}.csv",
+            FileName = $"LibroIvaRecibidas_{period.FileSuffix}.csv",
             Disclaimer = "Libro IVA recibidas",
         });
 }
 
 public sealed class FakeLibroIvaEmitidasExporter : ILibroIvaEmitidasExporter
 {
-    public Task<FiscalCsvExportResult> ExportAsync(Guid tenantId, int year, CancellationToken ct)
+    public Task<FiscalCsvExportResult> ExportAsync(Guid tenantId, FiscalExportPeriod period, CancellationToken ct)
         => Task.FromResult(new FiscalCsvExportResult
         {
             Content = System.Text.Encoding.UTF8.GetBytes("libro,emitidas"),
-            FileName = $"LibroIvaEmitidas_{year}.csv",
+            FileName = $"LibroIvaEmitidas_{period.FileSuffix}.csv",
             Disclaimer = "Libro IVA emitidas",
         });
 }

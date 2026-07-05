@@ -44,6 +44,7 @@ public class ErpDbContext : DbContext, IApplicationDbContext, ILicensingDbContex
     public DbSet<RolePermission> RolePermissions { get; set; } = null!;
     public DbSet<UserPermission> UserPermissions { get; set; } = null!;
     public DbSet<UserCompany> UserCompanies { get; set; } = null!;
+    public DbSet<PushSubscription> PushSubscriptions { get; set; } = null!;
     public DbSet<RefreshToken> RefreshTokens { get; set; } = null!;
     public DbSet<Document> Documents { get; set; } = null!;
 
@@ -101,6 +102,10 @@ public class ErpDbContext : DbContext, IApplicationDbContext, ILicensingDbContex
         modelBuilder.Ignore<Warehouse>();
         modelBuilder.Ignore<Stock>();
         modelBuilder.Ignore<StockMovement>();
+
+        modelBuilder.Entity<PushSubscription>()
+            .HasIndex(p => p.Endpoint)
+            .IsUnique();
 
         // Composite Keys
         modelBuilder.Entity<RolePermission>().HasKey(rp => new { rp.RoleId, rp.PermissionId });

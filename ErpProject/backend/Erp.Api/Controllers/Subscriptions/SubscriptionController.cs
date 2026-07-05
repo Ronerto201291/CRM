@@ -31,6 +31,12 @@ public class SubscriptionController : ControllerBase
             message = sub?.Message,
             maxCompanies = sub?.MaxCompanies,
             companiesUsed = sub?.CompaniesUsed,
+            gestoriaCompanies = sub?.GestoriaCompanies?.Select(c => new
+            {
+                c.CompanyId,
+                c.Name,
+                c.TaxId,
+            }),
         });
     }
 
@@ -76,19 +82,36 @@ public class SubscriptionController : ControllerBase
     public async Task<IActionResult> GetBillingHistory(CancellationToken ct)
     {
         var invoices = await _mediator.Send(new GetBillingHistoryQuery(), ct);
-        return Ok(new
+        return Ok(invoices.Select(i => new
         {
-            invoices = invoices.Select(i => new
+            i.Id,
+            Date = i.Date,
+            created = i.Date,
+            amount = (long)Math.Round(i.AmountEur * 100m),
+            AmountEur = i.AmountEur,
+            i.Currency,
+            currency = i.Currency?.ToLowerInvariant() ?? "eur",
+            i.Status,
+            status = i.Status,
+            PdfUrl = i.PdfUrl,
+            invoiceUrl = i.PdfUrl,
+            i.Description,
+            billedCompanyCount = i.BilledCompanyCount,
+            companyBreakdown = i.CompanyBreakdown?.Select(c => new
             {
-                i.Id,
-                Date = i.Date,
-                AmountEur = i.AmountEur,
-                i.Currency,
-                i.Status,
-                PdfUrl = i.PdfUrl,
-                i.Description
-            })
-        });
+                c.CompanyId,
+                c.Name,
+                c.TaxId,
+            }),
+            lineItems = i.LineItems?.Select(l => new
+            {
+                l.CompanyId,
+                companyName = l.CompanyName,
+                l.TaxId,
+                amountEur = l.AmountEur,
+                l.Description,
+            }),
+        }));
     }
 }
 

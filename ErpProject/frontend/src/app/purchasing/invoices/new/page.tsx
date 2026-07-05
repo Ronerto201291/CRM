@@ -6,12 +6,22 @@ import PageListLayout from "@/components/PageListLayout";
 import FormErrorBanner from "@/components/FormErrorBanner";
 import FormLabel from "@/components/FormLabel";
 import { updateLineAt } from "@/lib/lineForm";
-import { parseListResponse } from "@/lib/parseListResponse";
 import { supplierInvoiceCreateSchema } from "@/lib/schemas/purchasingSalesCreateSchemas";
-import { Supplier } from "@/types/api";
+import { PurchaseOrder } from "@/types/api";
+
+interface PurchaseOrderLine {
+    id: string;
+    productId?: string;
+    quantity: number;
+    unitPrice: number;
+}
+
+interface PurchaseOrderDetail extends PurchaseOrder {
+    lines: PurchaseOrderLine[];
+}
 
 interface InvoiceLine {
-    purchaseOrderLineId?: string;
+    purchaseOrderLineId: string;
     productId?: string;
     description: string;
     quantity: number;
@@ -20,13 +30,17 @@ interface InvoiceLine {
 }
 
 const emptyLine = (): InvoiceLine => ({
-    description: '', quantity: 1, unitPrice: 0, taxRate: 21,
+    purchaseOrderLineId: '',
+    description: '',
+    quantity: 1,
+    unitPrice: 0,
+    taxRate: 21,
 });
 
 export default function NewSupplierInvoicePage() {
-    const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+    const [orders, setOrders] = useState<PurchaseOrder[]>([]);
     const [form, setForm] = useState({
-        supplierId: '',
+        purchaseOrderId: '',
         number: '',
         invoiceDate: new Date().toISOString().slice(0, 10),
         lines: [emptyLine()] as InvoiceLine[],
@@ -35,11 +49,38 @@ export default function NewSupplierInvoicePage() {
     const [formError, setFormError] = useState<string | null>(null);
 
     React.useEffect(() => {
-        fetch('/api/proxy/suppliers?pageSize=500')
+        fetch('/api/proxy/v1/purchasing/orders')
             .then(r => r.ok ? r.json() : [])
-            .then(data => setSuppliers(parseListResponse<Supplier>(data)))
+            .then(data => setOrders(Array.isArray(data) ? data : (data.items ?? [])))
             .catch(() => {});
     }, []);
+
+    const selectOrder = async (orderId: string) => {
+        if (!orderId) {
+            setForm(f => ({ ...f, purchaseOrderId: '', lines: [emptyLine()] }));
+            return;
+        }
+        const res = await fetch(`/api/proxy/v1/purchasing/orders/${orderId}`);
+        if (!res.ok) {
+            setFormError('No se pudo cargar el pedido de compra');
+            return;
+        }
+        const order = (await res.json()) as PurchaseOrderDetail;
+        setForm(f => ({
+            ...f,
+            purchaseOrderId: orderId,
+            lines: order.lines.length > 0
+                ? order.lines.map(l => ({
+                    purchaseOrderLineId: l.id,
+                    productId: l.productId,
+                    description: l.productId ? `Producto ${l.productId}` : `Línea pedido ${l.id.slice(0, 8)}`,
+                    quantity: l.quantity,
+                    unitPrice: l.unitPrice,
+                    taxRate: 21,
+                }))
+                : [emptyLine()],
+        }));
+    };
 
     const updateLine = <K extends keyof InvoiceLine>(i: number, key: K, val: InvoiceLine[K]) =>
         setForm({ ...form, lines: updateLineAt(form.lines, i, key, val) });
@@ -53,12 +94,7 @@ export default function NewSupplierInvoicePage() {
 
     const submit = async () => {
         setFormError(null);
-        const parsed = supplierInvoiceCreateSchema.safeParse({
-            supplierId: form.supplierId,
-            number: form.number,
-            invoiceDate: form.invoiceDate,
-            lines: form.lines,
-        });
+        const parsed = supplierInvoiceCreateSchema.safeParse(form);
         if (!parsed.success) {
             setFormError(parsed.error.issues[0]?.message ?? 'Revisa el formulario');
             return;
@@ -66,10 +102,16 @@ export default function NewSupplierInvoicePage() {
         setSaving(true);
         try {
             const body = {
-                supplierId: form.supplierId,
+                purchaseOrderId: form.purchaseOrderId,
                 number: form.number,
                 invoiceDate: form.invoiceDate,
-                lines: form.lines,
+                totalAmount: total,
+                lines: form.lines.map(l => ({
+                    purchaseOrderLineId: l.purchaseOrderLineId,
+                    productId: l.productId || null,
+                    quantity: l.quantity,
+                    unitPrice: l.unitPrice,
+                })),
             };
             const res = await fetch('/api/proxy/v1/purchasing/invoices', {
                 method: 'POST',
@@ -90,18 +132,20 @@ export default function NewSupplierInvoicePage() {
     return (
         <PageListLayout
             title="Nueva Factura de Proveedor"
-            subtitle="Registrar factura de compra"
+            subtitle="Registrar factura de compra contra un pedido aprobado"
             actions={<Link href="/purchasing/invoices" className="btn btn-secondary">← Volver</Link>}
         >
             <FormErrorBanner message={formError} />
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
                 <div className="form-group">
-                    <FormLabel htmlFor="pi-supplier" required>Proveedor</FormLabel>
-                    <select id="pi-supplier" className="erp-input" value={form.supplierId}
-                        onChange={e => setForm({ ...form, supplierId: e.target.value })}>
-                        <option value="">Seleccionar proveedor...</option>
-                        {suppliers.map(s => <option key={s.id} value={s.id}>{s.name} {s.taxId ? `(${s.taxId})` : ''}</option>)}
+                    <FormLabel htmlFor="pi-order" required>Pedido de compra</FormLabel>
+                    <select id="pi-order" className="erp-input" value={form.purchaseOrderId}
+                        onChange={e => selectOrder(e.target.value)}>
+                        <option value="">Seleccionar pedido...</option>
+                        {orders.filter(o => o.status === 'Approved').map(o => (
+                            <option key={o.id} value={o.id}>{o.number}</option>
+                        ))}
                     </select>
                 </div>
                 <div className="form-group">
@@ -122,7 +166,7 @@ export default function NewSupplierInvoicePage() {
             <div style={{ marginBottom: '16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                     <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Líneas</label>
-                    <button className="btn btn-secondary btn-sm" onClick={addLine}>+ Añadir línea</button>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={addLine}>+ Añadir línea</button>
                 </div>
                 <div style={{ border: '1px solid var(--border)', borderRadius: '8px', overflow: 'hidden' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -170,7 +214,7 @@ export default function NewSupplierInvoicePage() {
                                     </td>
                                     <td style={{ padding: '6px 4px', textAlign: 'center' }}>
                                         {form.lines.length > 1 && (
-                                            <button onClick={() => removeLine(i)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--danger)', fontSize: '16px' }}>✕</button>
+                                            <button type="button" onClick={() => removeLine(i)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--danger)', fontSize: '16px' }}>✕</button>
                                         )}
                                     </td>
                                 </tr>
@@ -195,7 +239,7 @@ export default function NewSupplierInvoicePage() {
 
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
                 <Link href="/purchasing/invoices" className="btn btn-secondary">Cancelar</Link>
-                <button className="btn btn-primary" onClick={submit} disabled={saving}>
+                <button type="button" className="btn btn-primary" onClick={submit} disabled={saving}>
                     {saving ? 'Creando...' : '✓ Crear Factura'}
                 </button>
             </div>

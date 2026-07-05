@@ -1,3 +1,4 @@
+using Erp.Application.Common.Events;
 using Erp.Modules.Purchasing.Application.Features.Invoices.Commands;
 using Erp.Modules.Purchasing.Application.Interfaces;
 using Erp.Modules.Purchasing.Application.Validators;
@@ -12,12 +13,18 @@ public class CreateSupplierInvoiceHandler : IRequestHandler<CreateSupplierInvoic
     private readonly IPurchasingDbContext _context;
     private readonly IApplicationDbContext _appContext;
     private readonly Erp.Application.Common.Interfaces.ITenantContext _tenant;
+    private readonly IPublisher _publisher;
 
-    public CreateSupplierInvoiceHandler(IPurchasingDbContext context, IApplicationDbContext appContext, Erp.Application.Common.Interfaces.ITenantContext tenant)
+    public CreateSupplierInvoiceHandler(
+        IPurchasingDbContext context,
+        IApplicationDbContext appContext,
+        Erp.Application.Common.Interfaces.ITenantContext tenant,
+        IPublisher publisher)
     {
         _context = context;
         _appContext = appContext;
         _tenant = tenant;
+        _publisher = publisher;
     }
 
     public async Task<Guid> Handle(CreateSupplierInvoiceCommand request, CancellationToken cancellationToken)
@@ -60,6 +67,24 @@ public class CreateSupplierInvoiceHandler : IRequestHandler<CreateSupplierInvoic
 
         _context.SupplierInvoices.Add(invoice);
         await _context.SaveChangesAsync(cancellationToken);
+
+        var taxBase = invoice.Lines.Sum(l => l.Quantity * l.UnitPrice);
+        var total = request.TotalAmount;
+        var vatAmount = total > taxBase ? total - taxBase : 0m;
+        if (vatAmount <= 0m && total > 0m && taxBase <= 0m)
+            taxBase = total;
+
+        await _publisher.Publish(new SupplierInvoiceCreatedEvent
+        {
+            SupplierInvoiceId = invoice.Id,
+            CompanyId = invoice.CompanyId,
+            PurchaseOrderId = invoice.PurchaseOrderId,
+            InvoiceNumber = invoice.Number,
+            TaxBase = taxBase,
+            VATAmount = vatAmount,
+            Total = total,
+            InvoiceDate = invoice.InvoiceDate,
+        }, cancellationToken);
 
         return invoice.Id;
     }

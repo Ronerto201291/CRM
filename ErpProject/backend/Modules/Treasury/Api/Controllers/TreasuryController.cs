@@ -332,6 +332,11 @@ public class TreasuryController : ControllerBase
             f.Source, f.SourceId, f.IsActual, f.Notes
         }));
     }
+
+    [HttpGet("liquidity-forecast")]
+    [RequirePermission(Permissions.BankAccount.Read)]
+    public async Task<IActionResult> GetLiquidityForecast(CancellationToken ct)
+        => Ok(await _mediator.Send(new GetTreasuryLiquidityForecastQuery(), ct));
 }
 
 // ─── Request DTOs ────────────────────────────────────────────────────────────

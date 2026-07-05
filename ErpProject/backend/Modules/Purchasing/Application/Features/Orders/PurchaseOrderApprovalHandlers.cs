@@ -109,5 +109,5 @@ internal static class PurchaseOrderMapper
             po.OrderDate,
             po.Status,
             po.TotalAmount,
-            po.Lines.Select(l => new PurchaseOrderLineDto(l.ProductId, l.Quantity, l.UnitPrice)).ToList());
+            po.Lines.Select(l => new PurchaseOrderLineDto(l.Id, l.ProductId, l.Quantity, l.UnitPrice)).ToList());
 }

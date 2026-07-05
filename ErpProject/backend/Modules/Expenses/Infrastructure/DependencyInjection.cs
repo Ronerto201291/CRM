@@ -1,4 +1,5 @@
 using Erp.Application.Common.Interfaces;
+using Erp.Application.Common.Interfaces;
 using Erp.Modules.Expenses.Application.Interfaces;
 using Erp.Modules.Expenses.Application.Validators;
 using FluentValidation;
@@ -24,6 +25,7 @@ public static class DependencyInjection
                .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
 
         services.AddScoped<IExpensesDbContext>(p => p.GetRequiredService<ExpensesDbContext>());
+        services.AddScoped<IAutomationExpensesQuery, Services.AutomationExpensesQuery>();
         services.AddScoped<ISiiRecibidasExpenseSource, Services.SiiRecibidasExpenseSource>();
         services.AddHostedService<Services.OcrBackgroundService>();
         services.AddValidatorsFromAssembly(typeof(CreateExpenseDocumentCommandValidator).Assembly);

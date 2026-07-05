@@ -34,7 +34,10 @@ Mapeadas en `ErpDbContext` con `HasQueryFilter` por `CompanyId` en `Rule`.
 **Job programado:** `RuleEvaluatorJob`
 (`backend/Erp.Infrastructure/Automation/RuleEvaluatorJob.cs`), registrado en
 `Program.cs` como recurring job `rule-evaluator` (cron `0 9 * * *` — diario
-9:00 UTC). Ejecuta:
+9:00 UTC). **`ProactiveNotificationsJob`** (`Erp.Infrastructure/Jobs/`, cron
+`0 8 * * *`, ADR-0018 #42) envuelve el evaluador + aprobaciones pendientes
+(gastos `PendingApproval`, PO `PendingApproval`) respetando
+`Company.ProactiveNotificationsFrequency` (`disabled|daily|weekly`). Ejecuta:
 
 1. Reglas fijas en código: facturas vencidas (`CheckOverdueInvoicesAsync`) y
    stock bajo punto de reorden (`CheckStockReorderPointsAsync`), leyendo

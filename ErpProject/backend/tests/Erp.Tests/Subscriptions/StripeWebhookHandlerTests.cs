@@ -150,7 +150,8 @@ public class StripeWebhookHandlerTests
                 SecretKey = "sk_test_dummy",
                 WebhookSecret = WebhookSecret,
             }),
-            new FakePublisher());
+            new FakePublisher(),
+            new GestoriaBillingBreakdownService(ctx));
     }
 
     private static ErpDbContext CreateContext(string dbName)

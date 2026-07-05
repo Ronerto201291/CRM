@@ -113,6 +113,9 @@ public sealed class FacturaEService : IFacturaEService
         var buyerNif      = invoice.ClientNif  ?? string.Empty;
         var buyerName     = invoice.ClientName ?? string.Empty;
         var buyerAddress  = invoice.ClientAddress ?? string.Empty;
+        var currencyCode  = string.IsNullOrWhiteSpace(invoice.CurrencyCode)
+            ? "EUR"
+            : invoice.CurrencyCode.Trim().ToUpperInvariant();
 
         return new XDocument(
             new XDeclaration("1.0", "UTF-8", null),
@@ -133,7 +136,7 @@ public sealed class FacturaEService : IFacturaEService
                             new XElement(FE + "TotalAmount", Fmt(invoice.Total))),
                         new XElement(FE + "TotalExecutableAmount",
                             new XElement(FE + "TotalAmount", Fmt(invoice.Total))),
-                        new XElement(FE + "InvoiceCurrencyCode", "EUR")),
+                        new XElement(FE + "InvoiceCurrencyCode", currencyCode)),
                     RepresentacionGraficaExtension(invoice, Fmt)),
 
                 new XElement(FE + "Parties",
@@ -156,7 +159,7 @@ public sealed class FacturaEService : IFacturaEService
                                 ? new XElement(FE + "OperationDate",
                                     invoice.OperationDate.Value.ToString("yyyy-MM-dd"))
                                 : null,
-                            new XElement(FE + "InvoiceCurrencyCode", "EUR"),
+                            new XElement(FE + "InvoiceCurrencyCode", currencyCode),
                             new XElement(FE + "TaxCurrencyCode", "EUR"),
                             new XElement(FE + "LanguageName", "es")),
 

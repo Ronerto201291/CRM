@@ -19,13 +19,16 @@ public class GetUserCompaniesHandler : IRequestHandler<GetUserCompaniesQuery, IR
             .IgnoreQueryFilters()
             .Where(uc => uc.UserId == request.UserId)
             .Include(uc => uc.Company)
+            .Include(uc => uc.Role)
             .OrderByDescending(uc => uc.IsDefault)
             .ThenBy(uc => uc.Company!.Name)
             .Select(uc => new CompanyMembershipDto
             {
                 CompanyId = uc.CompanyId.ToString(),
                 CompanyName = uc.Company!.Name,
-                IsDefault = uc.IsDefault
+                IsDefault = uc.IsDefault,
+                RoleId = uc.RoleId.HasValue ? uc.RoleId.Value.ToString() : null,
+                RoleName = uc.Role != null ? uc.Role.Name : null,
             })
             .ToListAsync(ct);
 

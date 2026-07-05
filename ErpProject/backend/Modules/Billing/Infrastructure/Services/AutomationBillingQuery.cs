@@ -48,4 +48,21 @@ public sealed class AutomationBillingQuery : IAutomationBillingQuery
             .AsNoTracking()
             .ToListAsync(ct);
     }
+
+    public async Task<IReadOnlyList<AutomationInvoiceSnapshot>> GetPendingReceivablesAsync(
+        Guid companyId, DateTime horizonEnd, CancellationToken ct = default)
+    {
+        return await _billing.Invoices
+            .IgnoreQueryFilters()
+            .Where(i => i.CompanyId == companyId
+                && i.Status != "Paid"
+                && i.Status != "Cancelled"
+                && i.Status != "Draft"
+                && i.DueDate.Date <= horizonEnd.Date)
+            .Select(i => new AutomationInvoiceSnapshot(
+                i.Id, i.CompanyId, i.Number, i.ClientName,
+                i.Total, i.Subtotal, i.TaxAmount, i.Status, i.DueDate, i.CreatedAt))
+            .AsNoTracking()
+            .ToListAsync(ct);
+    }
 }
