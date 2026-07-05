@@ -1,5 +1,7 @@
+using Erp.Application.Common.Interfaces;
 using Erp.Modules.Payroll.Application.Interfaces;
 using Erp.Modules.Payroll.Infrastructure.Data;
+using Erp.Modules.Payroll.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,6 +23,7 @@ public static class DependencyInjection
                .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
 
         services.AddScoped<IPayrollDbContext>(p => p.GetRequiredService<PayrollDbContext>());
+        services.AddScoped<IAutomationPayrollQuery, AutomationPayrollQuery>();
         return services;
     }
 }

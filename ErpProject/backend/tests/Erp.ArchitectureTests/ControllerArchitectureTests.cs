@@ -6,7 +6,7 @@ using Xunit;
 
 namespace Erp.ArchitectureTests;
 
-/// <summary>ADR-0018 #35 / #42c � reglas arquitect�nicas en CI.</summary>
+/// <summary>ADR-0018 #35 / #42c — reglas arquitectónicas en CI.</summary>
 public class ControllerArchitectureTests
 {
     private static readonly HashSet<string> ExemptModuleControllers =
@@ -26,7 +26,7 @@ public class ControllerArchitectureTests
             .ToList();
 
         Assert.True(violations.Count == 0,
-            "Controllers de m�dulo deben tener [RequiredModule] a nivel clase (ADR-0018 #42c):\n"
+            "Controllers de módulo deben tener [RequiredModule] a nivel clase (ADR-0018 #42c):\n"
             + string.Join("\n", violations));
     }
 
@@ -55,7 +55,7 @@ public class ControllerArchitectureTests
         }
 
         Assert.True(violations.Count == 0,
-            "Acciones HTTP de controllers de m�dulo deben tener [RequirePermission] (clase o m�todo):\n"
+            "Acciones HTTP de controllers de módulo deben tener [RequirePermission] (clase o método):\n"
             + string.Join("\n", violations));
     }
 
@@ -119,18 +119,8 @@ public class ControllerArchitectureTests
         catch (ReflectionTypeLoadException ex) { return ex.Types.Where(t => t != null)!; }
     }
 
-    [Fact]
-    public void ErpInfrastructure_DoesNotReferenceModuleApplicationLayers()
-    {
-        var infra = typeof(Erp.Infrastructure.DependencyInjection).Assembly;
-        var violations = infra.GetReferencedAssemblies()
-            .Where(r => r.Name?.Contains(".Modules.", StringComparison.Ordinal) == true
-                     && r.Name.EndsWith(".Application", StringComparison.Ordinal))
-            .Select(r => r.Name!)
-            .ToList();
-
-        Assert.True(violations.Count == 0,
-            "Erp.Infrastructure no debe referenciar *.Modules.*.Application (ADR-0018 #13):\n"
-            + string.Join("\n", violations));
-    }
+    // La comprobación de "Erp.Infrastructure no debe referenciar Modules/*/Application"
+    // (ADR-0018 #13) vive ahora en DependencyDirectionArchitectureTests, ampliada a los
+    // tres ensamblados core y reforzada con una comprobación adicional a nivel de .csproj
+    // — ver ese archivo para el porqué (regresión real detectada en contra-auditoría).
 }

@@ -111,6 +111,29 @@ importe exacto + referencia de factura detectada por regex
 anterior) — es decir, la conciliación depende directamente del DbContext de
 Accounting (`IAccountingDbContext`), no solo del propio módulo.
 
+**Previsión de liquidez 30/60/90 días (#40, jul 2026)**: `GET
+api/treasury/liquidity-forecast` → `GetTreasuryLiquidityForecastHandler`
+(`Application/Features/Treasury/Handlers/TreasuryLiquidityForecastHandler.cs`).
+Heurística (no IA) que parte del saldo bancario actual
+(`BankAccounts.Where(IsActive).Sum(CurrentBalance)`) y, para cada horizonte
+(30/60/90 días), suma: cobros pendientes reales dentro del horizonte
+(`IAutomationBillingQuery.GetPendingReceivablesAsync`, puerto de Billing),
+pagos pendientes reales (`IAutomationExpensesQuery.GetPendingPayablesAsync`,
+puerto de Expenses), más una entrada/salida recurrente prorrateada
+linealmente (`ingreso mensual recurrente × días/30` desde
+`IAutomationRecurringQuery` de CRM — servicios contratados #42f, ver
+ADR-0004; `coste mensual de nómina × días/30` desde `IAutomationPayrollQuery`
+de Payroll — última liquidación con `Status=="Final"`, ver ADR-0009). Todos
+estos son puertos en `Erp.Application/Common/Interfaces`, implementados en
+la capa Infrastructure de cada módulo de origen — Treasury no referencia
+`Billing.Application`, `Expenses.Application`, `Crm.Application` ni
+`Payroll.Application` (mismo patrón de puertos que evitó la violación de
+dependencias corregida en ADR-0018 ítem 13). Si `IExpenseAiAssistant.IsEnabled`
+(ver ADR-0007), añade un `AiInsight` textual opcional resumiendo la
+previsión; sin IA habilitada, el campo queda `null` y el resto del cálculo
+es idéntico. Frontend conectado: `TreasuryClient.tsx` hace `fetch` a
+`/api/proxy/treasury/liquidity-forecast` y renderiza los tres horizontes.
+
 ### Frontend
 `frontend/src/app/treasury/page.tsx` (RSC) + `TreasuryClient.tsx` — panel
 principal con pestañas `accounts | movements | effects | orders | forecast | cash | pos`,
@@ -209,6 +232,15 @@ contabilidad:
   genérico pensado para enlazar con facturas de proveedor o gastos, pero no
   se detectó lógica automática que cree órdenes de pago desde esos módulos —
   la creación es manual vía `POST payment-orders`.
+- **Billing, Expenses, CRM, Payroll — previsión de liquidez (#40):**
+  `GetTreasuryLiquidityForecastHandler` es el único punto del módulo que lee
+  datos de otros cuatro módulos a la vez, y lo hace exclusivamente a través
+  de puertos (`IAutomationBillingQuery`, `IAutomationExpensesQuery`,
+  `IAutomationRecurringQuery`, `IAutomationPayrollQuery`) — sin
+  `ProjectReference` de `Treasury.Application` hacia ninguno de ellos. Es el
+  mismo motor de puertos que ya usa `RuleEvaluatorJob` (ver ADR-0015) para
+  las reglas de automatización; reutilizarlo aquí evitó crear una cuarta
+  variante de acoplamiento cruzado.
 
 ## Evaluación de calidad arquitectónica
 > Metodología completa y hallazgos transversales en `ADR-0018`.

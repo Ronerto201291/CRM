@@ -56,16 +56,41 @@ Todo ADR incluye una sección **"Evaluación de calidad arquitectónica"**
 de considerar terminada una implementación en un módulo:
 - Los controllers nuevos/modificados son delgados: construyen un
   Command/Query y llaman a `_mediator.Send(...)`, sin lógica de negocio ni
-  acceso a datos inline (24 de 43 controllers todavía incumplen esto — no
-  sumar más; ver backlog de remediación en ADR-0018).
+  acceso a datos inline (0 de 71 controllers incumplen esto a día de hoy —
+  no reintroducir ninguno; ver ADR-0018 §5).
 - No se duplica lógica que ya existe en un Command/Handler (patrón repetido
   y ya corregido en VIES, VAT y Prorrata — ver ADR-0018 §4 antes de crear un
   segundo cálculo/consulta que ya exista).
 - Si el módulo usa CQRS, cualquier flujo nuevo pasa por MediatR; si el
   módulo no tiene CQRS (caso Payroll), no asumir que existe sin comprobar.
 - Los endpoints de listado paginan; no se añaden queries dentro de bucles.
-- Las referencias de proyecto nuevas respetan la dirección de dependencias
-  (Api→Application→Domain; el core no depende de módulos).
+- **Regla estricta de dirección de dependencias — el core NUNCA depende de
+  un módulo (obligatorio, con test que lo hace fallar en CI, no solo una
+  convención escrita)**: ningún archivo nuevo en `Erp.Domain/`,
+  `Erp.Application/` o `Erp.Infrastructure/` puede importar/inyectar un tipo
+  de `Modules/*/Application/` (ni de su `.csproj` vía `<ProjectReference>`).
+  Si un servicio del core necesita datos de un módulo (facturas, gastos,
+  stock...), la única forma correcta es:
+  1. Definir el contrato en `Erp.Application/Common/Interfaces/` (un
+     `IAutomationXxxQuery`, o análogo) con sus propios DTOs — nunca
+     reutilizar `IXxxDbContext` del módulo como parámetro.
+  2. Implementarlo dentro del módulo (`Modules/<Módulo>/Infrastructure/Services/`),
+     donde sí es legítimo usar su propio `IXxxDbContext`.
+  3. Registrar la implementación en el `DependencyInjection.cs` del módulo,
+     no en el del core.
+  Antes de dar por cerrado cualquier cambio que toque `Erp.Infrastructure`,
+  `Erp.Application` o `Erp.Domain`, ejecuta
+  `dotnet test backend/tests/Erp.ArchitectureTests/Erp.ArchitectureTests.csproj --filter DependencyDirectionArchitectureTests`
+  (o el suite completo) — este test falla explícitamente citando el archivo
+  y la referencia exacta si se viola la regla, tanto a nivel de `.csproj`
+  como de ensamblado compilado. **Caso real que motivó este endurecimiento**:
+  un commit (jul 2026) declaró en ADR-0018 que esta violación estaba
+  "✅ Corregido", y en el mismo cambio añadió un archivo nuevo en
+  `Erp.Infrastructure` que volvía a inyectar `IBillingDbContext`/
+  `IExpensesDbContext` directamente — nadie lo detectó porque el test de
+  arquitectura no se ejecutó antes de comitear. No repetir ese patrón: si
+  tocas el core, corre el test de arquitectura tú mismo antes de dar el
+  cambio por terminado, no asumas que CI lo hará por ti.
 - **El frontend de la página tocada queda conectado de verdad al backend**:
   si arreglas o implementas un endpoint, confirma que la página que lo usa
   hace `fetch`/`onClick` real contra él (no lo des por hecho — hay páginas

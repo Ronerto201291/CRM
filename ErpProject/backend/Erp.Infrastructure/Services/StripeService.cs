@@ -415,37 +415,39 @@ public class StripeService : ISubscriptionBillingService, IInvoicePaymentGateway
                 existingByCompany = new Dictionary<Guid, SubscriptionItem>();
             }
 
-            foreach (var company in companies)
+            // Decisión de qué crear/actualizar/borrar es una función pura y testeable
+            // (GestoriaStripeBilling.PlanSubscriptionItemSync) — aquí solo se ejecuta el plan
+            // contra el SDK de Stripe. Antes esta decisión y las llamadas al SDK estaban
+            // entremezcladas en un único bloque sin ningún test para MaxCompanies>1.
+            var existingForPlan = existingByCompany.ToDictionary(
+                kv => kv.Key,
+                kv => new ExistingSubscriptionItem(kv.Value.Id, kv.Value.Quantity ?? 0));
+            var syncPlan = GestoriaStripeBilling.PlanSubscriptionItemSync(existingForPlan, companies);
+
+            foreach (var action in syncPlan)
             {
-                var itemMeta = GestoriaStripeBilling.BuildCompanyItemMetadata(company);
-                if (existingByCompany.TryGetValue(company.CompanyId, out var existing))
+                switch (action.Kind)
                 {
-                    if (existing.Quantity != 1)
-                    {
-                        await itemService.UpdateAsync(existing.Id, new SubscriptionItemUpdateOptions
+                    case SubscriptionItemSyncKind.Create:
+                        await itemService.CreateAsync(new SubscriptionItemCreateOptions
+                        {
+                            Subscription = stripeSubscriptionId,
+                            Price = priceId,
+                            Quantity = 1,
+                            Metadata = GestoriaStripeBilling.BuildCompanyItemMetadata(action.Company!),
+                        }, cancellationToken: ct);
+                        break;
+                    case SubscriptionItemSyncKind.UpdateQuantity:
+                        await itemService.UpdateAsync(action.ItemId!, new SubscriptionItemUpdateOptions
                         {
                             Quantity = 1,
-                            Metadata = itemMeta,
+                            Metadata = GestoriaStripeBilling.BuildCompanyItemMetadata(action.Company!),
                         }, cancellationToken: ct);
-                    }
+                        break;
+                    case SubscriptionItemSyncKind.Delete:
+                        await itemService.DeleteAsync(action.ItemId!, cancellationToken: ct);
+                        break;
                 }
-                else
-                {
-                    await itemService.CreateAsync(new SubscriptionItemCreateOptions
-                    {
-                        Subscription = stripeSubscriptionId,
-                        Price = priceId,
-                        Quantity = 1,
-                        Metadata = itemMeta,
-                    }, cancellationToken: ct);
-                }
-            }
-
-            foreach (var orphan in existingByCompany.Values)
-            {
-                var companyId = Guid.Parse(orphan.Metadata[GestoriaStripeBilling.CompanyIdMetadataKey]);
-                if (companies.All(c => c.CompanyId != companyId))
-                    await itemService.DeleteAsync(orphan.Id, cancellationToken: ct);
             }
 
             await subService.UpdateAsync(stripeSubscriptionId, new SubscriptionUpdateOptions

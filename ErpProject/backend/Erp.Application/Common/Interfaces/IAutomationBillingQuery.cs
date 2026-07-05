@@ -11,6 +11,10 @@ public interface IAutomationBillingQuery
 
     Task<IReadOnlyList<AutomationInvoiceSnapshot>> GetPendingReceivablesAsync(
         Guid companyId, DateTime horizonEnd, CancellationToken ct = default);
+
+    /// <summary>Facturas emitidas (no Draft/Cancelled) desde una fecha, para KPIs mensuales (p. ej. dashboard de gestoría).</summary>
+    Task<IReadOnlyList<AutomationInvoiceSnapshot>> GetInvoicesIssuedSinceAsync(
+        Guid companyId, DateTime since, CancellationToken ct = default);
 }
 
 public record AutomationInvoiceSnapshot(

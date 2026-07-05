@@ -30,6 +30,7 @@ public sealed class GetTreasuryLiquidityForecastHandler
     private readonly IAutomationBillingQuery _billing;
     private readonly IAutomationExpensesQuery _expenses;
     private readonly IAutomationRecurringQuery _recurring;
+    private readonly IAutomationPayrollQuery _payroll;
     private readonly IExpenseAiAssistant? _ai;
 
     public GetTreasuryLiquidityForecastHandler(
@@ -38,6 +39,7 @@ public sealed class GetTreasuryLiquidityForecastHandler
         IAutomationBillingQuery billing,
         IAutomationExpensesQuery expenses,
         IAutomationRecurringQuery recurring,
+        IAutomationPayrollQuery payroll,
         IExpenseAiAssistant? ai = null)
     {
         _treasury = treasury;
@@ -45,6 +47,7 @@ public sealed class GetTreasuryLiquidityForecastHandler
         _billing = billing;
         _expenses = expenses;
         _recurring = recurring;
+        _payroll = payroll;
         _ai = ai;
     }
 
@@ -58,7 +61,7 @@ public sealed class GetTreasuryLiquidityForecastHandler
             .SumAsync(a => a.CurrentBalance, ct);
 
         var monthlyIn = await _recurring.GetMonthlyRecurringInflowAsync(companyId, ct);
-        var monthlyOut = await _recurring.GetMonthlyRecurringOutflowAsync(companyId, ct);
+        var monthlyOut = await _payroll.GetLatestMonthlyPayrollCostAsync(companyId, ct);
 
         var horizons = new List<LiquidityHorizonDto>();
         decimal cumulativeNet = 0m;

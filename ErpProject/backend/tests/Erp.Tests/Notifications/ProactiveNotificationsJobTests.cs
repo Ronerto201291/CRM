@@ -54,14 +54,13 @@ public class ProactiveNotificationsJobTests
         await ctx.SaveChangesAsync();
 
         var email = new FakeEmailService();
-        var expenses = new FakeAutomationExpensesQuery([
-            new AutomationPendingExpenseApproval(Guid.NewGuid(), companyId, "Prov", 200, DateTime.UtcNow)
-        ]);
-        var purchasing = new FakeAutomationPurchasingQuery([]);
+        var expenses = new FakeAutomationExpensesQuery();
+        expenses.PendingApprovals.Add(new AutomationPendingExpenseApproval(Guid.NewGuid(), companyId, "Prov", 200, DateTime.UtcNow));
+        var purchasing = new FakeAutomationPurchasingQuery();
         var ruleEvaluator = new Erp.Infrastructure.Automation.RuleEvaluatorJob(
-            new FakeAutomationBillingQuery([]),
+            new FakeAutomationBillingQuery(),
             new FakeAutomationInventoryQuery(),
-            email, ctx, NullLogger<Erp.Infrastructure.Automation.RuleEvaluatorJob>.Instance);
+            email, new DisabledWebPushService(), ctx, NullLogger<Erp.Infrastructure.Automation.RuleEvaluatorJob>.Instance);
 
         var job = new ProactiveNotificationsJob(
             ctx, expenses, purchasing, email, new DisabledWebPushService(), ruleEvaluator,
@@ -88,40 +87,4 @@ internal sealed class FakeEmailService : IEmailService
     public Task SendEmailConfirmationAsync(string toEmail, string toName, string confirmUrl, CancellationToken ct = default) => Task.CompletedTask;
     public Task SendQuoteAsync(string toEmail, string toName, string quoteNumber, DateTime issueDate, DateTime validUntil, decimal totalAmount, string companyName, string portalUrl, byte[]? pdfAttachment = null, CancellationToken ct = default) => Task.CompletedTask;
     public Task SendWithAttachmentsAsync(string to, string subject, string htmlBody, IReadOnlyList<EmailAttachment> attachments, CancellationToken ct = default) => Task.CompletedTask;
-}
-
-internal sealed class FakeAutomationExpensesQuery(IReadOnlyList<AutomationPendingExpenseApproval> pending) : IAutomationExpensesQuery
-{
-    public Task<IReadOnlyList<AutomationExpenseSnapshot>> GetPendingPayablesAsync(Guid companyId, DateTime horizonEnd, CancellationToken ct = default)
-        => Task.FromResult<IReadOnlyList<AutomationExpenseSnapshot>>([]);
-
-    public Task<IReadOnlyList<AutomationPendingExpenseApproval>> GetPendingExpenseApprovalsAsync(CancellationToken ct = default)
-        => Task.FromResult(pending);
-}
-
-internal sealed class FakeAutomationPurchasingQuery(IReadOnlyList<AutomationPendingPurchaseOrder> pending) : IAutomationPurchasingQuery
-{
-    public Task<IReadOnlyList<AutomationPendingPurchaseOrder>> GetPendingPurchaseOrderApprovalsAsync(CancellationToken ct = default)
-        => Task.FromResult(pending);
-}
-
-internal sealed class FakeAutomationBillingQuery(IReadOnlyList<AutomationInvoiceSnapshot> invoices) : IAutomationBillingQuery
-{
-    public Task<IReadOnlyList<AutomationInvoiceSnapshot>> GetOverdueInvoicesAsync(DateTime today, CancellationToken ct = default)
-        => Task.FromResult(invoices);
-
-    public Task<IReadOnlyList<AutomationInvoiceSnapshot>> GetInvoicesForRuleAsync(Guid companyId, string triggerEvent, DateTime today, CancellationToken ct = default)
-        => Task.FromResult<IReadOnlyList<AutomationInvoiceSnapshot>>([]);
-
-    public Task<IReadOnlyList<AutomationInvoiceSnapshot>> GetPendingReceivablesAsync(Guid companyId, DateTime horizonEnd, CancellationToken ct = default)
-        => Task.FromResult<IReadOnlyList<AutomationInvoiceSnapshot>>([]);
-}
-
-internal sealed class FakeAutomationInventoryQuery : IAutomationInventoryQuery
-{
-    public Task<IReadOnlyList<AutomationProductStockSnapshot>> GetProductsWithReorderPointAsync(CancellationToken ct = default)
-        => Task.FromResult<IReadOnlyList<AutomationProductStockSnapshot>>([]);
-
-    public Task<IReadOnlyList<AutomationProductStockSnapshot>> GetProductsBelowReorderForCompanyAsync(Guid companyId, CancellationToken ct = default)
-        => Task.FromResult<IReadOnlyList<AutomationProductStockSnapshot>>([]);
 }

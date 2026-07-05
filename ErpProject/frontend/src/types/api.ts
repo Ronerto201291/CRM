@@ -355,7 +355,7 @@ export interface PurchaseOrder {
     number: string;
     orderDate: string;
     supplierName: string;
-    status: 'Open' | 'PartiallyReceived' | 'Completed' | 'Cancelled';
+    status: 'Draft' | 'PendingApproval' | 'Approved' | 'Rejected';
     subtotal: number;
     taxAmount: number;
     total: number;

@@ -37,4 +37,19 @@ public sealed class AutomationExpensesQuery : IAutomationExpensesQuery
             .AsNoTracking()
             .ToListAsync(ct);
     }
+
+    public async Task<IReadOnlyList<AutomationExpenseSnapshot>> GetApprovedExpensesSinceAsync(
+        Guid companyId, DateTime since, CancellationToken ct = default)
+    {
+        return await _expenses.ExpenseDocuments
+            .IgnoreQueryFilters()
+            .Where(e => e.CompanyId == companyId
+                && e.Status == "Approved"
+                && e.IssueDate.HasValue
+                && e.IssueDate.Value >= since)
+            .Select(e => new AutomationExpenseSnapshot(
+                e.Id, e.CompanyId, e.SupplierName, e.Total ?? 0, e.IssueDate))
+            .AsNoTracking()
+            .ToListAsync(ct);
+    }
 }

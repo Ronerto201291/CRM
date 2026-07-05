@@ -21,13 +21,6 @@ public sealed class AutomationRecurringQuery : IAutomationRecurringQuery
         return contracts.Sum(c => NormalizeToMonthly(c.Price, c.TaxRate, c.Periodicity));
     }
 
-    public async Task<decimal> GetMonthlyRecurringOutflowAsync(Guid companyId, CancellationToken ct = default)
-    {
-        _ = companyId;
-        await Task.CompletedTask;
-        return 0m;
-    }
-
     private static decimal NormalizeToMonthly(decimal price, decimal taxRate, string periodicity)
     {
         var gross = price * (1 + taxRate / 100m);

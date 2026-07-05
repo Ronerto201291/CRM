@@ -90,6 +90,41 @@ también con su propio hash, y publica un `ExpenseApprovedEvent` vía MediatR
 además de los `INotificationHandler` en memoria, se emite al Outbox
 transaccional para distribución por RabbitMQ.
 
+**Detección de anomalías y sugerencia de cuenta contable (#40, jul 2026)**:
+dos endpoints adicionales bajo `api/expenses`, ambos `[Authorize]` +
+`[RequiredModule("Expenses")]` + `[RequirePermission(Permissions.Expense.Read)]`:
+
+- `GET /anomalies` → `GetExpenseAnomaliesHandler`
+  (`Application/Features/Expenses/Handlers/ExpenseAnomalyHandlers.cs`).
+  Heurística pura en memoria sobre `ExpenseDocuments` con `Total > 0`:
+  agrupa por proveedor (o, si no hay `SupplierName`, por la primera línea de
+  detalle) y marca como `AmountOutlier` cualquier documento cuyo importe
+  supere 2× la media de su grupo (mínimo 2 documentos en el grupo); marca
+  como `Duplicate` cualquier conjunto de documentos con el mismo proveedor
+  normalizado (CIF o nombre), misma fecha y mismo importe redondeado a 2
+  decimales. Sin llamada externa: es determinista y no requiere IA.
+- `GET /suggest-category` → `SuggestExpenseCategoryHandler` (mismo fichero).
+  Cascada de fuentes, de mayor a menor confianza: (1) si hay IA habilitada,
+  pregunta a `IExpenseAiAssistant.SuggestAccountCodeAsync` (confianza 0.85);
+  (2) histórico de asientos ya contabilizados para el mismo proveedor
+  (`AccountingEntries` del propio módulo, cuenta más frecuente, confianza
+  0.9 — nótese que esta es la única lectura real de esa tabla, aunque no
+  para *escribir*, ver "Entidad muerta" en Consecuencias); (3) diccionario de
+  palabras clave sobre el histórico (confianza 0.75); (4) diccionario de
+  palabras clave sobre la descripción del gasto actual (confianza 0.6); (5)
+  cuenta por defecto `629` (confianza 0.3). El diccionario de palabras clave
+  y de nombres de cuenta (PGC 6xx) está hardcodeado en el propio handler.
+- **`IExpenseAiAssistant`** (`Erp.Application/Common/Interfaces/IExpenseAiAssistant.cs`)
+  es un puerto opcional (`ai?.IsEnabled`, inyectado como nullable): cuando
+  `AiOptions.Enabled` es `false` (config `Ai:Enabled`, por defecto
+  deshabilitado), se registra `DisabledExpenseAiAssistant` (`IsEnabled =
+  false`, todos los métodos devuelven `null`); si está habilitado, se
+  registra `OpenAiCompatibleExpenseAiAssistant`, que llama a cualquier API
+  compatible con el formato de OpenAI (`AiOptions.BaseUrl`/`ApiKey`) — no
+  acopla el módulo a un proveedor concreto. El mismo puerto también sirve la
+  previsión de liquidez de Treasury (ver ADR-0012) — es un puerto
+  transversal en `Erp.Application`, no propio de Expenses.
+
 ### Frontend
 La parte autenticada vive bajo `frontend/src/app/expenses/`:
 
@@ -212,6 +247,11 @@ se protege indirectamente a través de su FK a `ExpenseDocument`.
   `backend/Modules/Purchasing`; el alta automática de proveedor descrita en el
   README ocurre contra la entidad `Supplier` del módulo **CRM**
   (`ICrmDbContext`), no contra Purchasing.
+- **ADR-0012 (Treasury)**: el puerto `IExpenseAiAssistant` que da soporte a
+  `/anomalies` y `/suggest-category` aquí es el mismo que usa
+  `GetTreasuryLiquidityForecastHandler` para su `AiInsight` opcional — puerto
+  compartido en `Erp.Application`, sin referencia de proyecto entre Expenses y
+  Treasury.
 
 ## Evaluación de calidad arquitectónica
 > Metodología en `ADR-0018`.

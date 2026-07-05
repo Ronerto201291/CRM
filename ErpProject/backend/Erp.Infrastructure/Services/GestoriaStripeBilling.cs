@@ -13,6 +13,43 @@ public static class GestoriaStripeBilling
     public static int ResolveBillableQuantity(IReadOnlyList<GestoriaCompanyBillingLine> companies)
         => Math.Max(1, companies.Count);
 
+    /// <summary>
+    /// Decide qué acción de Stripe (crear/actualizar cantidad/borrar) corresponde a cada
+    /// `SubscriptionItem` al sincronizar una suscripción Gestoría multi-empresa. Extraído como
+    /// función pura (sin llamadas a Stripe) precisamente porque antes esta lógica solo vivía
+    /// entremezclada con el SDK de Stripe dentro de `StripeService.SyncGestoriaSubscriptionQuantityAsync`,
+    /// y esa ruta (MaxCompanies&gt;1) no tenía ningún test — un fallo de orden de creación/borrado
+    /// no lo habría detectado nadie (contra-auditoría jul 2026).
+    /// </summary>
+    public static IReadOnlyList<SubscriptionItemSyncAction> PlanSubscriptionItemSync(
+        IReadOnlyDictionary<Guid, ExistingSubscriptionItem> existingByCompany,
+        IReadOnlyList<GestoriaCompanyBillingLine> targetCompanies)
+    {
+        var plan = new List<SubscriptionItemSyncAction>();
+
+        foreach (var company in targetCompanies)
+        {
+            if (existingByCompany.TryGetValue(company.CompanyId, out var existing))
+            {
+                if (existing.Quantity != 1)
+                    plan.Add(SubscriptionItemSyncAction.Update(company, existing.ItemId));
+            }
+            else
+            {
+                plan.Add(SubscriptionItemSyncAction.Create(company));
+            }
+        }
+
+        var targetIds = targetCompanies.Select(c => c.CompanyId).ToHashSet();
+        foreach (var (companyId, existing) in existingByCompany)
+        {
+            if (!targetIds.Contains(companyId))
+                plan.Add(SubscriptionItemSyncAction.Delete(companyId, existing.ItemId));
+        }
+
+        return plan;
+    }
+
     public static string BuildCompanyLineDescription(GestoriaCompanyBillingLine company)
         => $"Gestoría — {company.Name} ({company.TaxId})";
 
@@ -172,4 +209,26 @@ public static class GestoriaStripeBilling
         public string? Name { get; set; }
         public string? TaxId { get; set; }
     }
+}
+
+/// <summary>Proyección mínima de un `SubscriptionItem` de Stripe ya existente, sin acoplar
+/// la lógica de planificación al tipo concreto del SDK.</summary>
+public readonly record struct ExistingSubscriptionItem(string ItemId, long Quantity);
+
+public enum SubscriptionItemSyncKind { Create, UpdateQuantity, Delete }
+
+public sealed record SubscriptionItemSyncAction(
+    SubscriptionItemSyncKind Kind,
+    Guid CompanyId,
+    string? ItemId,
+    GestoriaCompanyBillingLine? Company)
+{
+    public static SubscriptionItemSyncAction Create(GestoriaCompanyBillingLine company) =>
+        new(SubscriptionItemSyncKind.Create, company.CompanyId, null, company);
+
+    public static SubscriptionItemSyncAction Update(GestoriaCompanyBillingLine company, string itemId) =>
+        new(SubscriptionItemSyncKind.UpdateQuantity, company.CompanyId, itemId, company);
+
+    public static SubscriptionItemSyncAction Delete(Guid companyId, string itemId) =>
+        new(SubscriptionItemSyncKind.Delete, companyId, itemId, null);
 }

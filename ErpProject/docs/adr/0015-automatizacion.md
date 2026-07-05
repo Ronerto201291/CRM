@@ -43,6 +43,13 @@ Mapeadas en `ErpDbContext` con `HasQueryFilter` por `CompanyId` en `Rule`.
    stock bajo punto de reorden (`CheckStockReorderPointsAsync`), leyendo
    `IBillingDbContext`/`IInventoryDbContext` vía puertos
    (`IAutomationBillingQuery`, `IAutomationInventoryQuery` — ADR-0018 #13).
+   Cada regla envía email siempre y, si `IWebPushService.IsEnabled` (VAPID
+   configurado), también push al admin de la empresa (best-effort, en un
+   `try/catch` separado del email — un fallo de push no bloquea el email ni
+   viceversa). Antes de jul 2026 el push solo cubría "aprobaciones
+   pendientes" (`ProactiveNotificationsJob`) pese a que el roadmap de
+   notificaciones proactivas (#42) las incluía a las tres por igual; ahora
+   las tres reglas fijas están alineadas.
 2. Reglas personalizadas de BD: `DatabaseRuleEvaluator` lee reglas activas,
    evalúa condiciones (`Field`/`Operator`/`Value`) y ejecuta acciones
    `SendEmail`/`NotifyAdmin`.

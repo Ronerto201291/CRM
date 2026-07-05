@@ -8,6 +8,10 @@ public interface IAutomationExpensesQuery
 
     Task<IReadOnlyList<AutomationPendingExpenseApproval>> GetPendingExpenseApprovalsAsync(
         CancellationToken ct = default);
+
+    /// <summary>Gastos aprobados desde una fecha, para KPIs mensuales (p. ej. dashboard de gestoría).</summary>
+    Task<IReadOnlyList<AutomationExpenseSnapshot>> GetApprovedExpensesSinceAsync(
+        Guid companyId, DateTime since, CancellationToken ct = default);
 }
 
 public record AutomationExpenseSnapshot(

@@ -7,9 +7,6 @@
     <ProjectReference Include="..\Modules\Crm\Domain\Erp.Modules.Crm.Domain.csproj" />
     <ProjectReference Include="..\Modules\Expenses\Domain\Erp.Modules.Expenses.Domain.csproj" />
     <ProjectReference Include="..\Modules\Inventory\Domain\Erp.Modules.Inventory.Domain.csproj" />
-    <ProjectReference Include="..\Modules\Billing\Application\Erp.Modules.Billing.Application.csproj" />
-    <ProjectReference Include="..\Modules\Expenses\Application\Erp.Modules.Expenses.Application.csproj" />
-    <ProjectReference Include="..\Modules\Purchasing\Application\Erp.Modules.Purchasing.Application.csproj" />
   </ItemGroup>
 
   <ItemGroup>

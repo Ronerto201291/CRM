@@ -147,6 +147,20 @@ el informe en vivo no persiste en cada consulta.
 real vía `EmailService`/MailKit. Frontend:
 `settings/accountant-export/AccountantExportClient.tsx`.
 
+**Onboarding: plan contable ampliado por sector (#41, jul 2026)**:
+`Erp.Api/Controllers/OnboardingController.cs` (compartido con CRM para el
+import de clientes, ver ADR-0004) expone `GET /api/onboarding/sectors` →
+`GetOnboardingSectorsHandler`
+(`Modules/Accounting/Application/Features/Onboarding/OnboardingHandlers.cs`),
+que devuelve una lista hardcodeada de 5 sectores (`comercio`, `servicios`,
+`construccion`, `hosteleria`, `industria`) con sus cuentas extra asociadas, y
+`POST /api/onboarding/sectors/{sectorId}/apply` → `ApplyOnboardingSectorHandler`,
+que añade a `Accounts` (PGC) las cuentas del sector que aún no existan para
+la empresa (comprobación por `Code` existente, sin duplicar altas si se
+aplica dos veces). No es IA ni configurable — es una tabla estática en
+código (`OnboardingSectorTemplates`); ampliar la cobertura de sectores
+requiere un cambio de código, no de datos.
+
 ### Frontend
 `frontend/src/app/accounting/` contiene subrutas para cada área: `aeat`,
 `aeat-models`, `aging`, `budgets`, `cash-flow`, `cierre`, `cost-centers`,

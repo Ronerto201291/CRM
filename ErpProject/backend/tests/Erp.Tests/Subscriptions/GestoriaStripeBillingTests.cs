@@ -56,6 +56,96 @@ public class GestoriaStripeBillingTests
         Assert.Equal(Co1.CompanyId.ToString(), meta[GestoriaStripeBilling.CompanyIdMetadataKey]);
         Assert.Equal("Alpha SL", meta["companyName"]);
     }
+
+    // La ruta multi-empresa (MaxCompanies>1) de StripeService.SyncGestoriaSubscriptionQuantityAsync
+    // no tenía ningún test — contra-auditoría jul 2026. La decisión de qué crear/actualizar/
+    // borrar se extrajo a PlanSubscriptionItemSync (función pura, sin llamadas a Stripe)
+    // precisamente para poder cubrirla aquí sin necesitar un fake del SDK de Stripe.
+
+    [Fact]
+    public void PlanSubscriptionItemSync_NewCompany_PlansCreate()
+    {
+        var plan = GestoriaStripeBilling.PlanSubscriptionItemSync(
+            existingByCompany: new Dictionary<Guid, ExistingSubscriptionItem>(),
+            targetCompanies: [Co1]);
+
+        var action = Assert.Single(plan);
+        Assert.Equal(SubscriptionItemSyncKind.Create, action.Kind);
+        Assert.Equal(Co1.CompanyId, action.CompanyId);
+        Assert.Null(action.ItemId);
+    }
+
+    [Fact]
+    public void PlanSubscriptionItemSync_ExistingWithWrongQuantity_PlansUpdate()
+    {
+        var existing = new Dictionary<Guid, ExistingSubscriptionItem>
+        {
+            [Co1.CompanyId] = new ExistingSubscriptionItem("si_123", Quantity: 2),
+        };
+
+        var plan = GestoriaStripeBilling.PlanSubscriptionItemSync(existing, [Co1]);
+
+        var action = Assert.Single(plan);
+        Assert.Equal(SubscriptionItemSyncKind.UpdateQuantity, action.Kind);
+        Assert.Equal("si_123", action.ItemId);
+    }
+
+    [Fact]
+    public void PlanSubscriptionItemSync_ExistingWithCorrectQuantity_PlansNothing()
+    {
+        var existing = new Dictionary<Guid, ExistingSubscriptionItem>
+        {
+            [Co1.CompanyId] = new ExistingSubscriptionItem("si_123", Quantity: 1),
+        };
+
+        var plan = GestoriaStripeBilling.PlanSubscriptionItemSync(existing, [Co1]);
+
+        Assert.Empty(plan);
+    }
+
+    [Fact]
+    public void PlanSubscriptionItemSync_CompanyRemovedFromGestoria_PlansDelete()
+    {
+        var existing = new Dictionary<Guid, ExistingSubscriptionItem>
+        {
+            [Co1.CompanyId] = new ExistingSubscriptionItem("si_keep", Quantity: 1),
+            [Co2.CompanyId] = new ExistingSubscriptionItem("si_orphan", Quantity: 1),
+        };
+
+        // Co2 ya no forma parte de la gestoría — solo se mantiene Co1.
+        var plan = GestoriaStripeBilling.PlanSubscriptionItemSync(existing, [Co1]);
+
+        var action = Assert.Single(plan);
+        Assert.Equal(SubscriptionItemSyncKind.Delete, action.Kind);
+        Assert.Equal("si_orphan", action.ItemId);
+        Assert.Equal(Co2.CompanyId, action.CompanyId);
+    }
+
+    [Fact]
+    public void PlanSubscriptionItemSync_MultiCompanyRealisticScenario_PlansAllThreeKinds()
+    {
+        var co3 = new GestoriaCompanyBillingLine(
+            Guid.Parse("33333333-3333-3333-3333-333333333333"), "Gamma SL", "B33333333");
+
+        // Co1 ya tiene item con cantidad correcta (nada que hacer), Co2 tiene cantidad
+        // desincronizada (2 -> debe pasar a 1), Co3 es nueva (crear), y hay un item huérfano
+        // de una empresa que ya no pertenece a la gestoría (borrar).
+        var orphanCompanyId = Guid.Parse("99999999-9999-9999-9999-999999999999");
+        var existing = new Dictionary<Guid, ExistingSubscriptionItem>
+        {
+            [Co1.CompanyId] = new ExistingSubscriptionItem("si_co1", Quantity: 1),
+            [Co2.CompanyId] = new ExistingSubscriptionItem("si_co2", Quantity: 2),
+            [orphanCompanyId] = new ExistingSubscriptionItem("si_orphan", Quantity: 1),
+        };
+
+        var plan = GestoriaStripeBilling.PlanSubscriptionItemSync(existing, [Co1, Co2, co3]);
+
+        Assert.Equal(3, plan.Count);
+        Assert.Contains(plan, a => a.Kind == SubscriptionItemSyncKind.Create && a.CompanyId == co3.CompanyId);
+        Assert.Contains(plan, a => a.Kind == SubscriptionItemSyncKind.UpdateQuantity && a.ItemId == "si_co2");
+        Assert.Contains(plan, a => a.Kind == SubscriptionItemSyncKind.Delete && a.ItemId == "si_orphan");
+        Assert.DoesNotContain(plan, a => a.CompanyId == Co1.CompanyId);
+    }
 }
 
 public class DisabledExpenseAiAssistantTests

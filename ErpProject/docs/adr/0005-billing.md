@@ -146,7 +146,6 @@ pageSize }`) con header `X-Total-Count`; parámetros `page` (default 1) y
   `CreateInvoicePostgresTests.PostInvoice_WithUsdCurrency_PopulatesMultiCurrencyFields`.
   `FacturaEService` emite `InvoiceCurrencyCode` desde `invoice.CurrencyCode`
   (`TaxCurrencyCode` sigue en EUR para IVA español).
-  hasta cablear `invoice.CurrencyCode`.
 
 **Nota sobre entidades no conectadas**: `Domain/Entities/FacturaE.cs`
 (`FacturaEDocument`, `VerifactuDeclaration`, `FacturaEGraphic`) y
