@@ -12,6 +12,7 @@
 *.suo
 .vs/
 *.DotSettings.user
+[Tt]est[Rr]esults/
 
 # ─────── Node (frontend) ───────
 node_modules/
