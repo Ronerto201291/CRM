@@ -2,6 +2,7 @@
 import { useActionState } from 'react';
 import { registerCompanyAction } from '../actions/auth';
 import Link from 'next/link';
+import Image from 'next/image';
 import FormLabel from '@/components/FormLabel';
 
 const PLANS = [
@@ -22,7 +23,7 @@ export default function SignupPage() {
         }}>
             {/* Header */}
             <div style={{ textAlign: 'center', marginBottom: '36px' }}>
-                <img src="/logo.png" alt="Orbital ERP" style={{ width: '48px', height: '48px', objectFit: 'contain', marginBottom: '12px' }} />
+                <Image src="/logo.png" alt="Orbital ERP" width={48} height={48} style={{ objectFit: 'contain', marginBottom: '12px' }} />
                 <h1 style={{ fontSize: '26px', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
                     Crea tu empresa en Orbital ERP
                 </h1>

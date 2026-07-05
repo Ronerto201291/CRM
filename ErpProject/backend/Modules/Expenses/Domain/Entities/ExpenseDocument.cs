@@ -38,7 +38,7 @@ public class ExpenseDocument : AuditableEntity
     public string? SupplierName { get; set; }
 
     // Workflow
-    public string Status { get; set; } = "Draft";     // Draft, Reviewed, Approved, Rejected
+    public string Status { get; set; } = "Draft";     // Draft, Reviewed, PendingApproval, Approved, Rejected
     public bool IsValidated { get; set; }
     public DateTime? ValidatedAt { get; set; }
     public bool IsLocked { get; set; }

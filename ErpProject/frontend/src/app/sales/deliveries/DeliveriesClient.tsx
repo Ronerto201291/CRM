@@ -1,9 +1,7 @@
 "use client";
 
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import PageContainer from "@/components/PageContainer";
-import { useCachedApi } from "@/hooks/useCachedApi";
-import { parseListResponse } from "@/lib/parseListResponse";
 
 interface DeliveryNote {
     id: string;
@@ -27,21 +25,8 @@ interface DeliveriesClientProps {
 }
 
 export default function DeliveriesClient({ initialDeliveries }: DeliveriesClientProps) {
-    const [deliveries, setDeliveries] = useState<DeliveryNote[]>(initialDeliveries);
-    const [loading, setLoading] = useState(false);
+    const deliveries = initialDeliveries;
     const [filter, setFilter] = useState('all');
-    const { fetchCached, invalidateCached } = useCachedApi();
-
-    const load = useCallback(async () => {
-        setLoading(true);
-        try {
-            invalidateCached('v1/sales/deliveries');
-            const data = await fetchCached<unknown>('v1/sales/deliveries');
-            if (data) setDeliveries(parseListResponse<DeliveryNote>(data));
-        } finally {
-            setLoading(false);
-        }
-    }, [fetchCached, invalidateCached]);
 
     const filtered = useMemo(
         () => (filter === 'all' ? deliveries : deliveries.filter(d => d.status === filter)),
@@ -92,8 +77,7 @@ export default function DeliveriesClient({ initialDeliveries }: DeliveriesClient
                         </tr>
                     </thead>
                     <tbody>
-                        {loading && <tr><td colSpan={5} style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>Cargando...</td></tr>}
-                        {!loading && filtered.length === 0 && (
+                        {filtered.length === 0 && (
                             <tr><td colSpan={5}>
                                 <div className="empty-state">
                                     <div className="empty-state-icon">🚚</div>

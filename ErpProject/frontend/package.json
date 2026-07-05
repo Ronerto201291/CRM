@@ -35,6 +35,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "jsdom": "^27.0.0",
+    "otplib": "^13.4.1",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^3.2.4"

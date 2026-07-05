@@ -58,6 +58,7 @@ public static class DependencyInjection
 
         // ABAC: Permission service (Redis-cached, role+user resolution)
         services.AddScoped<IPermissionService, PermissionService>();
+        services.AddScoped<IApprovalThresholdService, ApprovalThresholdService>();
 
         // ABAC: Current user accessor (reads UserId from JWT via IHttpContextAccessor)
         services.AddScoped<IHttpContextCurrentUserAccessor, HttpContextCurrentUserAccessor>();

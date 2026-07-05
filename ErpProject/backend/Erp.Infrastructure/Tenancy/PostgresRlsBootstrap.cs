@@ -26,6 +26,7 @@ public static class PostgresRlsBootstrap
             DECLARE
               t text;
               pol_name text;
+              rec record;
             BEGIN
               IF to_regclass('public."Companies"') IS NOT NULL THEN
                 EXECUTE 'ALTER TABLE "Companies" ENABLE ROW LEVEL SECURITY';
@@ -60,54 +61,42 @@ public static class PostgresRlsBootstrap
                 END IF;
               END LOOP;
 
-              -- Módulos billing/crm (defensa en profundidad, ADR-0018 #34)
-              IF to_regclass('billing."Invoices"') IS NOT NULL THEN
-                EXECUTE 'ALTER TABLE billing."Invoices" ENABLE ROW LEVEL SECURITY';
-                IF NOT EXISTS (
-                  SELECT 1 FROM pg_policies
-                  WHERE schemaname = 'billing' AND tablename = 'Invoices'
-                    AND policyname = 'billing_invoices_tenant_isolation'
-                ) THEN
-                  EXECUTE $policy$
-                    CREATE POLICY billing_invoices_tenant_isolation ON billing."Invoices"
-                      USING ("CompanyId" = NULLIF(current_setting('app.current_tenant', true), '')::uuid)
-                  $policy$;
+              -- Módulos con CompanyId (defensa en profundidad, ADR-0018 #34 ampliado)
+              FOR rec IN SELECT * FROM (VALUES
+                ('billing', 'Invoices'),
+                ('billing', 'Quotes'),
+                ('crm', 'Clients'),
+                ('crm', 'Suppliers'),
+                ('crm', 'Leads'),
+                ('crm', 'Contacts'),
+                ('expenses', 'ExpenseDocuments'),
+                ('sales', 'SalesOrders'),
+                ('purchasing', 'PurchaseOrders')
+              ) AS m(schema_name, table_name)
+              LOOP
+                IF to_regclass(format('%I.%I', rec.schema_name, rec.table_name)) IS NOT NULL THEN
+                  EXECUTE format(
+                    'ALTER TABLE %I.%I ENABLE ROW LEVEL SECURITY',
+                    rec.schema_name, rec.table_name);
+                  pol_name := rec.schema_name || '_' || lower(rec.table_name) || '_tenant_isolation';
+                  IF NOT EXISTS (
+                    SELECT 1 FROM pg_policies
+                    WHERE schemaname = rec.schema_name
+                      AND tablename = rec.table_name
+                      AND policyname = pol_name
+                  ) THEN
+                    EXECUTE format(
+                      'CREATE POLICY %I ON %I.%I USING ("CompanyId" = NULLIF(current_setting(''app.current_tenant'', true), '''')::uuid)',
+                      pol_name, rec.schema_name, rec.table_name);
+                  END IF;
                 END IF;
-              END IF;
-
-              IF to_regclass('crm."Clients"') IS NOT NULL THEN
-                EXECUTE 'ALTER TABLE crm."Clients" ENABLE ROW LEVEL SECURITY';
-                IF NOT EXISTS (
-                  SELECT 1 FROM pg_policies
-                  WHERE schemaname = 'crm' AND tablename = 'Clients'
-                    AND policyname = 'crm_clients_tenant_isolation'
-                ) THEN
-                  EXECUTE $policy$
-                    CREATE POLICY crm_clients_tenant_isolation ON crm."Clients"
-                      USING ("CompanyId" = NULLIF(current_setting('app.current_tenant', true), '')::uuid)
-                  $policy$;
-                END IF;
-              END IF;
-
-              IF to_regclass('crm."Suppliers"') IS NOT NULL THEN
-                EXECUTE 'ALTER TABLE crm."Suppliers" ENABLE ROW LEVEL SECURITY';
-                IF NOT EXISTS (
-                  SELECT 1 FROM pg_policies
-                  WHERE schemaname = 'crm' AND tablename = 'Suppliers'
-                    AND policyname = 'crm_suppliers_tenant_isolation'
-                ) THEN
-                  EXECUTE $policy$
-                    CREATE POLICY crm_suppliers_tenant_isolation ON crm."Suppliers"
-                      USING ("CompanyId" = NULLIF(current_setting('app.current_tenant', true), '')::uuid)
-                  $policy$;
-                END IF;
-              END IF;
+              END LOOP;
             END
             $rls$;
             """;
 
         await ctx.Database.ExecuteSqlRawAsync(sql, ct);
         logger.LogInformation(
-            "RLS pilot: políticas aplicadas (Companies + 9 tablas core + billing.Invoices + crm.Clients/Suppliers) — Postgres:RlsEnabled=true");
+            "RLS pilot: políticas aplicadas (Companies + 9 tablas core + 9 tablas módulo) — Postgres:RlsEnabled=true");
     }
 }

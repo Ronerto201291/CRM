@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Xml.Linq;
+using Erp.Application.Common.Interfaces;
 using Erp.Modules.Payroll.Application.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -13,6 +14,7 @@ public record PayrollFiscalExportResult(
 public record ExportTc1Query(int Year, int Month) : IRequest<PayrollFiscalExportResult>;
 public record ExportTc2Query(int Year, int Month) : IRequest<PayrollFiscalExportResult>;
 public record ExportTcRedOrientativoQuery(int Year, int Month) : IRequest<PayrollFiscalExportResult>;
+public record ExportRedQuery(int Year, int Month) : IRequest<PayrollFiscalExportResult>;
 
 internal static class PayrollExportLineLoader
 {
@@ -143,6 +145,40 @@ public class ExportTcRedOrientativoHandler : IRequestHandler<ExportTcRedOrientat
         return new PayrollFiscalExportResult(
             bytes, "application/xml", $"TC_RED_orientativo_{request.Year}_{request.Month:D2}.xml",
             "XML orientativo: no reemplaza el fichero RED oficial TGSS.");
+    }
+}
+
+public class ExportRedHandler : IRequestHandler<ExportRedQuery, PayrollFiscalExportResult>
+{
+    private readonly IPayrollDbContext _ctx;
+    private readonly IApplicationDbContext _app;
+    private readonly ITenantContext _tenant;
+
+    public ExportRedHandler(IPayrollDbContext ctx, IApplicationDbContext app, ITenantContext tenant)
+    {
+        _ctx = ctx;
+        _app = app;
+        _tenant = tenant;
+    }
+
+    public async Task<PayrollFiscalExportResult> Handle(ExportRedQuery request, CancellationToken ct)
+    {
+        PayrollExportValidators.ValidateMonth(request.Month);
+        var companyId = _tenant.TenantId ?? throw new InvalidOperationException("Tenant not resolved");
+        var company = await _app.Companies.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == companyId, ct)
+            ?? throw new InvalidOperationException("Empresa no encontrada.");
+
+        var lines = await PayrollExportLineLoader.LoadFinalLinesAsync(_ctx, request.Year, request.Month, ct);
+        var bytes = RedSiltraFileBuilder.Build(
+            company.TaxId, company.Name, request.Year, request.Month, lines);
+
+        return new PayrollFiscalExportResult(
+            bytes,
+            "text/plain",
+            $"RED_{request.Year}_{request.Month:D2}.txt",
+            "Fichero RED longitud fija 250: estructura orientativa SILTRA/TGSS. " +
+            "No homologado — validar con asesoría, SILTRA o RED oficial antes de remisión.");
     }
 }
 

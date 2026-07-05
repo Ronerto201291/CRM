@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using Erp.Application.Features.Auth.Commands;
 using Xunit;
 
 namespace Erp.IntegrationTests;
@@ -21,7 +20,7 @@ public class Phase17AccountingHttpTests : IClassFixture<PostgresWebApplicationFa
         if (!_factory.DockerAvailable)
             return;
 
-        var (client, companyId) = await RegisterAndAuthAsync($"acct-mayor-{Guid.NewGuid():N}"[..18]);
+        var (client, companyId) = await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"acct-mayor-{Guid.NewGuid():N}"[..18], withApiKey: true);
 
         var createResponse = await client.PostAsJsonAsync("/api/expenses", new
         {
@@ -59,7 +58,7 @@ public class Phase17AccountingHttpTests : IClassFixture<PostgresWebApplicationFa
         if (!_factory.DockerAvailable)
             return;
 
-        var (client, companyId) = await RegisterAndAuthAsync($"acct-tb-{Guid.NewGuid():N}"[..18]);
+        var (client, companyId) = await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"acct-tb-{Guid.NewGuid():N}"[..18], withApiKey: true);
         await SeedInvoiceAccountsAsync(companyId);
 
         var createResponse = await client.PostAsJsonAsync("/api/invoices", new
@@ -95,38 +94,6 @@ public class Phase17AccountingHttpTests : IClassFixture<PostgresWebApplicationFa
         Assert.True(balanceResponse.StatusCode == HttpStatusCode.OK, $"balance → {balanceResponse.StatusCode}: {balanceBody}");
     }
 
-    private async Task<(HttpClient Client, Guid CompanyId)> RegisterAndAuthAsync(string emailPrefix)
-    {
-        var client = _factory.CreatePostgresClient();
-        var suffix = Guid.NewGuid().ToString("N")[..8];
-
-        var registerResponse = await client.PostAsJsonAsync("/api/auth/register", new RegisterCompanyCommand
-        {
-            CompanyName = $"Phase17 Co {suffix}",
-            CompanyTaxId = IntegrationTestRegistration.NextTaxId(),
-            CompanyAddress = "Calle Test 1",
-            AdminEmail = $"{emailPrefix}-{suffix}@test.local",
-            AdminPassword = "SecurePass1!",
-            AdminFirstName = "Admin",
-            AdminLastName = "Test",
-        });
-
-        Assert.Equal(HttpStatusCode.OK, registerResponse.StatusCode);
-        var body = await registerResponse.Content.ReadFromJsonAsync<RegisterCompanyResponse>();
-
-        var authedClient = _factory.CreatePostgresClient();
-        TestAuthHelper.ApplyAuth(authedClient, body!.Token, body.CompanyId);
-
-        var keyResponse = await authedClient.PostAsJsonAsync("/api/apikeys", new Erp.Application.Features.ApiKeys.Commands.CreateApiKeyCommand
-        {
-            Name = "Phase17 Integration",
-            RateLimit = 500,
-        });
-        Assert.Equal(HttpStatusCode.OK, keyResponse.StatusCode);
-        var keyBody = await keyResponse.Content.ReadFromJsonAsync<Erp.Application.Features.ApiKeys.Commands.CreateApiKeyResult>();
-        authedClient.DefaultRequestHeaders.Add("X-Api-Key", keyBody!.RawKey);
-        return (authedClient, body.CompanyId);
-    }
 
     private async Task SeedExpenseAccountsAsync(Guid companyId)
     {

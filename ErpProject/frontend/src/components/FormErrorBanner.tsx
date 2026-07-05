@@ -1,5 +1,3 @@
-import { type ReactNode } from 'react';
-
 interface FormErrorBannerProps {
     message: string | null | undefined;
 }

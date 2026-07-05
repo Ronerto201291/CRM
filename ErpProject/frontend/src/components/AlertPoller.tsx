@@ -42,9 +42,12 @@ export default function AlertPoller() {
     }, []);
 
     useEffect(() => {
-        poll(); // immediate on mount
-        const interval = setInterval(poll, 60_000); // every minute
-        return () => clearInterval(interval);
+        const immediate = window.setTimeout(() => { void poll(); }, 0);
+        const interval = setInterval(poll, 60_000);
+        return () => {
+            clearTimeout(immediate);
+            clearInterval(interval);
+        };
     }, [poll]);
 
     const acknowledge = async () => {

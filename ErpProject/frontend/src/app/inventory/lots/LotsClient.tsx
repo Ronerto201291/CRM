@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React from "react";
 
 interface ProductLot {
   id: string;
@@ -10,22 +10,10 @@ interface ProductLot {
 }
 
 export default function LotsClient({ initialLots }: { initialLots: ProductLot[] }) {
-  const [lots, setLots] = useState<ProductLot[]>(initialLots);
-  const [loading, setLoading] = useState(false);
-  const fetchLots = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/proxy/v1/inventory/lots`);
-      const data = await res.json();
-      setLots(Array.isArray(data) ? data : (data.items ?? []));
-    } finally {
-      setLoading(false);
-    }
-  };
+  const lots = initialLots;
   return (
     <div>
       <h1 className="text-2xl font-bold mb-4">Product Lots</h1>
-      {loading && <p>Loading...</p>}
       <a href="/inventory/lots/new" className="px-4 py-2 bg-blue-600 text-white rounded">New Lot</a>
       <table className="w-full border mt-4">
         <thead>

@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 
 interface CrmNote {
     id: string;
@@ -30,14 +30,16 @@ export default function NotesPanel({ entityType, entityId }: Props) {
     const [editTitle, setEditTitle] = useState('');
     const [editContent, setEditContent] = useState('');
 
-    const load = async () => {
+    const load = useCallback(async () => {
         setLoading(true);
         const res = await fetch(`/api/proxy/crm/notes?entityType=${entityType}&entityId=${entityId}`);
         if (res.ok) setNotes(await res.json());
         setLoading(false);
-    };
+    }, [entityType, entityId]);
 
-    useEffect(() => { load(); }, [entityType, entityId]);
+    useEffect(() => {
+        queueMicrotask(() => { void load(); });
+    }, [load]);
 
     const handleAdd = async () => {
         if (!newContent.trim()) return;

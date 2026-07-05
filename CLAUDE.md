@@ -135,7 +135,7 @@ docker compose up -d --build        # local: override.yml se carga automáticame
 
 ## Huecos conocidos
 
-- Cobertura de tests **fase 17 (jul 2026, coverage gates)**: backend **613 tests**; frontend **123 Vitest** con gate **39%** líneas; **CI bloquea deploy** si cobertura < umbral (`scripts/check-coverage.py`, `coverage-thresholds.json`); merged XPlat **49%** mín / medido ~51%; unit **27%** mín / ~28.2%; plan `ErpProject/docs/testing-strategy.md`. Ver ADR-0018 ítem #32.
+- Cobertura de tests **fase 17 (jul 2026, coverage gates)**: backend **613 tests**; frontend **123 Vitest** con gate **39%** líneas; **CI bloquea deploy** si cobertura < umbral (`ErpProject/scripts/check-coverage.py`, `coverage-thresholds.json`); merged XPlat **49%** mín / medido ~51%; unit **27%** mín / ~28.2%; pipeline en **`.github/workflows/ci-cd.yml`** (raíz monorepo); plan `ErpProject/docs/testing-strategy.md`. Ver ADR-0018 ítem #32.
 - `ErpProject/backend/Erp.slnx` no registra explícitamente todos los
   módulos que sí están cableados en `Program.cs` (ver ADR-0001).
 - Varios módulos tienen partes construidas pero no conectadas end-to-end

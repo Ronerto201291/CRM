@@ -109,6 +109,11 @@ public class PayrollController : ControllerBase
     public async Task<IActionResult> ExportTcRedOrientativo([FromQuery] int year, [FromQuery] int month, CancellationToken ct)
         => await SendPayrollExport(new ExportTcRedOrientativoQuery(year, month), ct);
 
+    [HttpGet("export/red")]
+    [RequirePermission(Permissions.Settlement.Export)]
+    public async Task<IActionResult> ExportRed([FromQuery] int year, [FromQuery] int month, CancellationToken ct)
+        => await SendPayrollExport(new ExportRedQuery(year, month), ct);
+
     private async Task<IActionResult> SendPayrollExport<TQuery>(TQuery query, CancellationToken ct)
         where TQuery : IRequest<PayrollFiscalExportResult>
     {

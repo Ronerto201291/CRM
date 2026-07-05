@@ -3,6 +3,7 @@ import { useActionState, Suspense } from 'react';
 import { acceptInviteAction } from '../actions/auth';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import FormLabel from '@/components/FormLabel';
 
 const INIT = { error: undefined as string | undefined };
@@ -101,7 +102,7 @@ export default function RegisterPage() {
             <div style={{ width: '100%', maxWidth: '520px' }}>
                 <div style={{ textAlign: 'center', marginBottom: '32px' }}>
                     <div style={{ marginBottom: '16px' }}>
-                        <img src="/logo.png" alt="Orbital ERP" style={{ width: '52px', height: '52px', objectFit: 'contain' }} />
+                        <Image src="/logo.png" alt="Orbital ERP" width={52} height={52} style={{ objectFit: 'contain' }} />
                     </div>
                     <h1 style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '6px' }}>
                         Bienvenido a Orbital ERP

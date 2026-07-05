@@ -1,4 +1,5 @@
 using Erp.Application.Common.Attributes;
+using Erp.Modules.Treasury.Application.Features.OpenBanking;
 using Erp.Modules.Treasury.Application.Features.Treasury.Commands;
 using Erp.Modules.Treasury.Application.Features.Treasury.Handlers;
 using MediatR;
@@ -107,6 +108,28 @@ public class TreasuryController : ControllerBase
     {
         var result = await _mediator.Send(new ReconcileBankAccountCommand(id), ct);
         return Ok(new { matchedCount = result.MatchedCount, matchedAmount = result.MatchedAmount });
+    }
+
+    [HttpPost("bank-accounts/{id:guid}/sync-open-banking")]
+    [RequirePermission(Permissions.BankAccount.Manage)]
+    public async Task<IActionResult> SyncOpenBanking(Guid id, CancellationToken ct)
+    {
+        try
+        {
+            var result = await _mediator.Send(new SyncOpenBankingCommand(id), ct);
+            return Ok(new
+            {
+                provider = result.Provider,
+                imported = result.ImportedCount,
+                skippedDuplicates = result.SkippedDuplicates,
+                reconciledCount = result.ReconciledCount,
+                reconciledAmount = result.ReconciledAmount,
+            });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
     }
 
     // ─── Cash Effects ─────────────────────────────────────────────────────────

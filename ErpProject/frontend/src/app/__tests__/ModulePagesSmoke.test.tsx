@@ -7,23 +7,26 @@ import InventoryClient from '@/app/inventory/InventoryClient';
 import PurchasingOrdersClient from '@/app/purchasing/orders/PurchasingOrdersClient';
 import SalesOrdersClient from '@/app/sales/orders/SalesOrdersClient';
 import AccountingPage from '@/app/accounting/page';
+import { serverFetch, serverFetchList } from '@/lib/serverFetch';
+
+vi.mock('@/lib/serverFetch', () => ({
+    serverFetch: vi.fn(),
+    serverFetchList: vi.fn(),
+}));
 
 describe('SettingsPage smoke', () => {
     beforeEach(() => {
-        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-            ok: true,
-            json: async () => ({
-                id: '1',
-                name: 'Empresa Test',
-                taxId: 'B12345674',
-                publicUploadToken: 'token123',
-                qrUploadEnabled: true,
-            }),
-        }));
+        vi.mocked(serverFetch).mockResolvedValue({
+            id: '1',
+            name: 'Empresa Test',
+            taxId: 'B12345674',
+            publicUploadToken: 'token123',
+            qrUploadEnabled: true,
+        });
     });
 
     it('renderiza título de configuración', async () => {
-        render(<SettingsPage />);
+        render(await SettingsPage());
         await waitFor(() => {
             expect(screen.getByRole('heading', { name: 'Configuración' })).toBeInTheDocument();
         });
@@ -33,14 +36,11 @@ describe('SettingsPage smoke', () => {
 
 describe('TreasuryPage smoke', () => {
     beforeEach(() => {
-        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-            ok: true,
-            json: async () => [],
-        }));
+        vi.mocked(serverFetchList).mockResolvedValue([]);
     });
 
     it('renderiza módulo de tesorería', async () => {
-        render(<TreasuryPage />);
+        render(await TreasuryPage());
         await waitFor(() => {
             expect(screen.getByRole('heading', { name: 'Tesorería' })).toBeInTheDocument();
         });
@@ -91,14 +91,12 @@ describe('SalesOrdersClient smoke', () => {
 
 describe('AccountingPage smoke', () => {
     beforeEach(() => {
-        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-            ok: true,
-            json: async () => [],
-        }));
+        vi.mocked(serverFetchList).mockResolvedValue([]);
+        vi.mocked(serverFetch).mockResolvedValue({ total: 0, details: [] });
     });
 
     it('renderiza módulo de contabilidad', async () => {
-        render(<AccountingPage />);
+        render(await AccountingPage());
         await waitFor(() => {
             expect(screen.getByRole('heading', { name: 'Contabilidad' })).toBeInTheDocument();
         });

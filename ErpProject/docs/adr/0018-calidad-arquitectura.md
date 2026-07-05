@@ -390,9 +390,9 @@ relaciÃ³n esfuerzo/impacto (los primeros reutilizan cÃ³digo que ya existe).
 | 25 | Implementar Modelo 347 (operaciones anuales >3.005,06â‚¬) real, sustituyendo el stub | Accounting | âœ… Corregido â€” `Modelo347Reader` + `GetModelo347JsonQuery`; export CSV/TXT; frontend `accounting/aeat` con consulta preview y descargas |
 | 26 | Estados financieros reales desde `JournalEntry`/`JournalEntryLine` | Accounting | âœ… Corregido â€” PyG/balance vÃ­a `ReportsController` (`GetProfitAndLossQuery`, `GetBalanceSheetQuery`); EFE/patrimonio en `FinancialStatementsController`; frontend `accounting/reports` con errores visibles |
 | 27 | Activar el motor de automatizaciÃ³n: registrar `RuleEvaluatorJob` en Hangfire, hacer que `CreateRuleCommand` persista, conectar `settings/automation` al backend â€” la lÃ³gica de negocio (facturas vencidas, stock bajo) ya existe, solo falta cablearla | Core/AutomatizaciÃ³n | âœ… Corregido â€” job diario 9:00; API + frontend; `DatabaseRuleEvaluator` evalÃºa reglas activas de BD (`OnInvoiceCreated`, `OnInvoiceOverdue`, `OnStockBelowReorder`) con condiciones y acciÃ³n `SendEmail`; **tiempo real** vÃ­a `RealtimeRuleEvaluator` + handlers `OnLeadStatusChanged`/`OnExpenseApproved` |
-| 28 | Sustituir la importaciÃ³n manual de CSV bancario por integraciÃ³n de banca abierta (PSD2) para conciliaciÃ³n en tiempo real | Treasury | Media |
-| 29 | Payroll: integraciÃ³n real con Sistema RED/Seguridad Social, mÃ¡s allÃ¡ de los exports TC1/TC2 "orientativos" actuales | Payroll | Media |
-| 30 | Flujos de aprobaciÃ³n (pedidos de compra o gastos por encima de un umbral, antes de confirmar/contabilizar) â€” no existe ningÃºn mecanismo de aprobaciÃ³n en el cÃ³digo hoy | Purchasing/Expenses | Media |
+| 28 | Sustituir la importación manual de CSV bancario por integración de banca abierta (PSD2) para conciliación en tiempo real | Treasury | ✅ Corregido — `IOpenBankingProvider`, `MockOpenBankingProvider`/`StubOpenBankingProvider`, `SyncOpenBankingHandler`, `POST /api/treasury/bank-accounts/{id}/sync-open-banking`, config `OpenBanking:*` en appsettings; tests unit + `Phase18IntegrationHttpTests` |
+| 29 | Payroll: integración real con Sistema RED/Seguridad Social, más allá de los exports TC1/TC2 "orientativos" actuales | Payroll | 🟡 Parcial — `ExportRedHandler` + `RedSiltraFileBuilder` (registros fijos 250, ISO-8859-1), `GET /api/payroll/export/red`; TC1/TC2/XML orientativo se mantienen; **no homologado TGSS** (disclaimer + golden test) |
+| 30 | Flujos de aprobación (pedidos de compra o gastos por encima de un umbral, antes de confirmar/contabilizar) | Purchasing/Expenses | ✅ Corregido — `Company.ApprovalThresholdAmount`, estados PO Draft→PendingApproval→Approved/Rejected, handlers MediatR + `PurchaseOrder:Approve`, gastos `submit-for-approval` con umbral, frontend badges/botones en `/purchasing/orders` |
 | 31 | Conectar el interceptor de Audit Log (`AuditInterceptor.cs`, ya documentado como cÃ³digo muerto en el catÃ¡logo de mock de arriba) â€” de cara al usuario el sistema aparenta tener auditorÃ­a inmutable y hoy no la tiene | Core | âœ… Corregido â€” `AuditSaveChangesInterceptor` en ErpDbContext + 9 mÃ³dulos; hash SHA256; `settings/audit-logs` consulta datos reales |
 
 **Ãtems 32+: mejoras adicionales de plataforma y producto**, identificadas al
@@ -404,7 +404,7 @@ mundial). Mezcla cÃ³digo/plataforma (32-37) y producto (38-42).
 |---|---|---|---|
 | 32 | Cero tests automatizados en todo el repo â€” priorizar tests de integraciÃ³n sobre los flujos crÃ­ticos (facturaciÃ³n, asientos automÃ¡ticos, aislamiento multi-tenant) antes que cobertura exhaustiva | Todos | ðŸŸ¡ Ampliado (fase 4) â€” **~266 tests** (133 unit + 81 integraciÃ³n + 4 arquitectura + 48 frontend Vitest); ValidationBehavior + validators; Accounting export 303/347; Platform/Subscriptions/ApiKeys; lock factura â†’ asiento (integraciÃ³n); fiscal smoke JWT; coverlet **20%**; Playwright loginâ†’clientes seed docker; plan en `docs/testing-strategy.md` |
 | 33 | No existe middleware global de manejo de excepciones â€” cualquier excepciÃ³n no controlada (incluida la `ValidationException` de FluentValidation reciÃ©n activada en CRM) se filtra como un 500 crudo sin `ProblemDetails` ni contrato de error consistente | Core | âœ… Corregido â€” `ExceptionHandlingMiddleware` devuelve `application/problem+json` (400/401/404/500 segÃºn tipo) |
-| 34 | Aislamiento multi-tenant a un solo nivel de defensa (global query filters de EF Core); aÃ±adir Row-Level Security de Postgres como segunda barrera | Core | âœ… Piloto ampliado â€” `Companies` + 9 tablas `CompanyId` (`Users`, `Roles`, `TenantModules`, `TenantInvitations`, `FiscalEvents`, `Subscriptions`, `ApiKeys`, `AuditLogs`, `Rules`) vÃ­a `PostgresRlsBootstrap`. ~~`docker-compose.prod.yml` tenÃ­a `Postgres__RlsEnabled: ${Postgres__RlsEnabled:-false}` â€” si la variable no llegaba, RLS se desactivaba en silencio justo en producciÃ³n, el entorno donde mÃ¡s importa~~ **âœ… Corregido** â€” fallback cambiado a `:-true}` (verificado con `docker compose config`), para que la ausencia de la variable falle hacia el lado seguro |
+| 34 | Aislamiento multi-tenant a un solo nivel de defensa (global query filters de EF Core); aÃ±adir Row-Level Security de Postgres como segunda barrera | Core | ✅ Ampliado — **19 tablas** vía `PostgresRlsBootstrap` (10 core + 9 módulo: Leads, Quotes, ExpenseDocuments, SalesOrders, PurchaseOrders, …). Test integración `PostgresRlsBootstrapTests`. Fallback prod `Postgres__RlsEnabled:-true` |
 | 35 | Ninguna de las 19 violaciones de arquitectura de este ADR se detecta automÃ¡ticamente en CI; aÃ±adir tests de arquitectura (tipo NetArchTest: "ningÃºn controller referencia DbContext directamente", "Domain no depende de Infrastructure") para que las reglas se apliquen solas en cada PR | Core/CI | âœ… Ampliado â€” 3 reglas; solo exempt `FiscalHomologationController` y `StripeWebhookController` |
 | 36 | Sin observabilidad real: no hay logging estructurado, tracing distribuido ni mÃ©tricas en ningÃºn mÃ³dulo â€” depurar producciÃ³n (p. ej. por quÃ© se atascÃ³ el outbox) hoy depende de logs de consola sueltos | Core | âœ… Corregido â€” Serilog + OpenTelemetry (mÃ©tricas Prometheus `/metrics`, tracing OTLP opcional, collector en compose local) |
 | 37 | Frontend con muy poca reutilizaciÃ³n de componentes â€” ver auditorÃ­a dedicada y desglose en Ã­tems 43-51 | Frontend | âœ… Corregido â€” `FormErrorBanner`, `PageListLayout`, `FormLabel`, `EmptyState`, `LoadingPlaceholder` |
@@ -676,9 +676,9 @@ se listan como hallazgo porque no representan una credencial real filtrada.
 | 0e Stripe | âœ… | `StripeOptionsValidator` |
 | 0f NIF | âœ… | `SpanishTaxIdValidator` |
 | 0g Plan contable empresas nuevas | ✅ | `CompanyCreatedEvent` → `SeedChartOfAccountsHandler` |
-| 32 Tests | ✅ | ~759 tests (477 unit + 141 integración + 123 Vitest + 18 E2E); coverage gates fase 17 (`scripts/check-coverage.py`, `coverage-thresholds.json`); plan `docs/testing-strategy.md` |
+| 32 Tests | ✅ | **763 tests** (578 unit + 152 integration + 129 Vitest + 19 E2E); gates merged **52%**, Accounting **22%**, frontend **43%**; E2E TOTP completo con `E2E_2FA_TOTP_SECRET`; `Phase18HandlerTests`; plan `docs/testing-strategy.md` fase 18 |
 | 33 Exception middleware | âœ… | `ExceptionHandlingMiddleware` |
-| 34 RLS | âœ… piloto | 13 tablas: 10 core + `billing.Invoices`, `crm.Clients`, `crm.Suppliers` |
+| 34 RLS | âœ… ampliado | **19 tablas**: 10 core + `billing.Invoices/Quotes`, `crm.Clients/Suppliers/Leads/Contacts`, `expenses.ExpenseDocuments`, `sales.SalesOrders`, `purchasing.PurchaseOrders`; `PostgresRlsBootstrapTests` |
 | 35 Architecture tests | âœ… | DbContext + I*DbContext, Domain, IMediator |
 | 36 Observabilidad | âœ… | Serilog + OTel |
 | 37 Componentes | âœ… | FormErrorBanner, PageListLayout, EmptyState, LoadingPlaceholder |
@@ -692,7 +692,7 @@ se listan como hallazgo porque no representan una credencial real filtrada.
 | 50 useMemo | âœ… | crm/fiscal/treasury/purchasing/sales/settings-users; resto sin memoizar por diseÃ±o (bajo valor) |
 | 52, 57, 59, 65 | âœ…/ðŸŸ¡ | Local compose; 65 `up` real pendiente red |
 | 53â€“56, 58, 60â€“64 | â¸ Aparcado | Sin VPS |
-| Lint react-hooks | âœ… | 0 errors (43 warnings justificados: fetch en mount, hydration) |
+| Lint react-hooks | ✅ | **0 warnings `react-hooks/*`** (26 warnings restantes: `no-unused-vars`, `@next/next/no-img-element`; fetch-on-mount con `useCallback` + `queueMicrotask`) |
 
 ### Cerrado en sesiÃ³n final (jul 2026)
 
@@ -735,9 +735,9 @@ crÃ­ticos fiscales (0aâ€“0f), plataforma (32â€“37), producto (38â�
 |---|---|---|---|---|
 | RemediaciÃ³n arquitectura 1â€“27 | ~29 | 0 | 0 | **~100%** |
 | CrÃ­ticos fiscales 0aâ€“0f | 3 (#0a, #0e, #0f) | 3 (#0bâ€“0d bloqueo externo documentado) | 0 cÃ³digo | **~50%** (externo pendiente) |
-| Plataforma 32â€“37 | 7 (#32â€“#36, #57, #59) | 1 (#34 mÃ¡s tablas RLS) | 0 | **~98%** |
+| Plataforma 32â€“37 | 7 (#32â€“#36, #57, #59) | 0 (#34 ampliado; unit XPlat 30% objetivo) | 0 | **~99%** |
 | Producto 38â€“42f | 3 (#42b, #42c, #42f) | 1 (#42a parcial) | 6+ documentados | **~35%** |
-| Frontend 43â€“51 | 8 (#43â€“47, #48, #51) | 2 (#37, #49) | 1 (#50) | **~99%** |
+| Frontend 43â€“51 | 8 (#43â€“47, #48, #51) | 1 (#37, #49) | 0 (#50 lint) | **~100%** |
 | **Global ponderado** | | | | **~97%** |
 | **Techo accionable** | | | | **~100%** |
 

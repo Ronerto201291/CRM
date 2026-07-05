@@ -19,8 +19,7 @@ const STATUS_MAP: Record<string, { label: string; cls: string }> = {
 };
 
 export default function ReceiptsClient({ initialReceipts }: { initialReceipts: GoodsReceipt[] }) {
-    const [receipts, setReceipts] = useState<GoodsReceipt[]>(initialReceipts);
-    const [loading, setLoading] = useState(false);
+    const receipts = initialReceipts;
     const [filter, setFilter] = useState('all');
 
     const filtered = filter === 'all' ? receipts : receipts.filter(r => r.status === filter);
@@ -70,8 +69,7 @@ export default function ReceiptsClient({ initialReceipts }: { initialReceipts: G
                         </tr>
                     </thead>
                     <tbody>
-                        {loading && <tr><td colSpan={6} style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>Cargando...</td></tr>}
-                        {!loading && filtered.length === 0 && (
+                        {filtered.length === 0 && (
                             <tr><td colSpan={6}>
                                 <div className="empty-state">
                                     <div className="empty-state-icon">📦</div>

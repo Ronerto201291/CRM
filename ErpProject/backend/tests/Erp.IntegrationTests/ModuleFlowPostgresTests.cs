@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using Erp.Application.Features.Auth.Commands;
 using Xunit;
 
 namespace Erp.IntegrationTests;
@@ -21,7 +20,7 @@ public class ModuleFlowPostgresTests : IClassFixture<PostgresWebApplicationFacto
         if (!_factory.DockerAvailable)
             return;
 
-        var (client, _) = await RegisterAndAuthAsync($"purch-flow-{Guid.NewGuid():N}"[..18]);
+        var (client, companyId) = await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"purch-flow-{Guid.NewGuid():N}"[..18], withApiKey: true);
 
         var poResponse = await client.PostAsJsonAsync("/api/v1/purchasing/orders", new
         {
@@ -35,6 +34,12 @@ public class ModuleFlowPostgresTests : IClassFixture<PostgresWebApplicationFacto
 
         var poBody = await poResponse.Content.ReadFromJsonAsync<JsonElement>();
         var poId = poBody.GetProperty("id").GetGuid();
+
+        var submitResponse = await client.PostAsync($"/api/v1/purchasing/orders/{poId}/submit-for-approval", null);
+        Assert.True(
+            submitResponse.StatusCode == HttpStatusCode.OK,
+            $"submit-for-approval → {submitResponse.StatusCode}: {await submitResponse.Content.ReadAsStringAsync()}");
+
         var lineId = await GetFirstPurchaseOrderLineIdAsync(poId);
 
         var grResponse = await client.PostAsJsonAsync("/api/v1/purchasing/receipts", new
@@ -71,7 +76,7 @@ public class ModuleFlowPostgresTests : IClassFixture<PostgresWebApplicationFacto
         if (!_factory.DockerAvailable)
             return;
 
-        var (client, companyId) = await RegisterAndAuthAsync($"payroll-flow-{Guid.NewGuid():N}"[..18]);
+        var (client, companyId) = await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"payroll-flow-{Guid.NewGuid():N}"[..18], withApiKey: true);
 
         var empResponse = await client.PostAsJsonAsync("/api/payroll/employees", new
         {
@@ -121,7 +126,7 @@ public class ModuleFlowPostgresTests : IClassFixture<PostgresWebApplicationFacto
         if (!_factory.DockerAvailable)
             return;
 
-        var (client, _) = await RegisterAndAuthAsync($"exp-flow-{Guid.NewGuid():N}"[..18]);
+        var (client, _) = await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"exp-flow-{Guid.NewGuid():N}"[..18], withApiKey: true);
 
         var createResponse = await client.PostAsJsonAsync("/api/expenses", new
         {
@@ -150,38 +155,6 @@ public class ModuleFlowPostgresTests : IClassFixture<PostgresWebApplicationFacto
         Assert.True(stats.GetProperty("pending").GetInt32() >= 1);
     }
 
-    private async Task<(HttpClient Client, Guid CompanyId)> RegisterAndAuthAsync(string emailPrefix)
-    {
-        var client = _factory.CreatePostgresClient();
-        var suffix = Guid.NewGuid().ToString("N")[..8];
-
-        var registerResponse = await client.PostAsJsonAsync("/api/auth/register", new RegisterCompanyCommand
-        {
-            CompanyName = $"Flow Co {suffix}",
-            CompanyTaxId = IntegrationTestRegistration.NextTaxId(),
-            CompanyAddress = "Calle Test 1",
-            AdminEmail = $"{emailPrefix}-{suffix}@test.local",
-            AdminPassword = "SecurePass1!",
-            AdminFirstName = "Admin",
-            AdminLastName = "Test",
-        });
-
-        Assert.Equal(HttpStatusCode.OK, registerResponse.StatusCode);
-        var body = await registerResponse.Content.ReadFromJsonAsync<RegisterCompanyResponse>();
-
-        var authedClient = _factory.CreatePostgresClient();
-        TestAuthHelper.ApplyAuth(authedClient, body!.Token, body.CompanyId);
-
-        var keyResponse = await authedClient.PostAsJsonAsync("/api/apikeys", new Erp.Application.Features.ApiKeys.Commands.CreateApiKeyCommand
-        {
-            Name = "Module Flow Integration",
-            RateLimit = 500,
-        });
-        Assert.Equal(HttpStatusCode.OK, keyResponse.StatusCode);
-        var keyBody = await keyResponse.Content.ReadFromJsonAsync<Erp.Application.Features.ApiKeys.Commands.CreateApiKeyResult>();
-        authedClient.DefaultRequestHeaders.Add("X-Api-Key", keyBody!.RawKey);
-        return (authedClient, body.CompanyId);
-    }
 
     private async Task SeedAccountingAccountsAsync(Guid companyId)
     {

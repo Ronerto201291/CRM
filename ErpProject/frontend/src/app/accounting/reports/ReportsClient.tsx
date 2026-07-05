@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import PageContainer from '@/components/PageContainer';
 
 type ReportTab = 'diario' | 'mayor' | 'balance' | 'pyg';
@@ -68,7 +68,7 @@ export default function ReportsClient({
 
     const fmt = (n: number) => `€ ${(n || 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-    const loadReports = async () => {
+    const loadReports = useCallback(async () => {
         setLoading(true);
         setLoadError(null);
         try {
@@ -102,7 +102,7 @@ export default function ReportsClient({
             setLoadError('Error de conexión con el backend');
         }
         setLoading(false);
-    };
+    }, [tab, dateRange]);
 
     const skipInitialDiario = useRef(!!initialDiario);
 
@@ -111,8 +111,8 @@ export default function ReportsClient({
             skipInitialDiario.current = false;
             return;
         }
-        loadReports();
-    }, [tab, dateRange]);
+        queueMicrotask(() => { void loadReports(); });
+    }, [tab, dateRange, loadReports]);
 
     const tabs: { id: ReportTab; label: string; icon: string }[] = [
         { id: 'diario', label: 'Libro Diario', icon: '??' },

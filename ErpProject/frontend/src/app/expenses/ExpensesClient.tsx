@@ -42,7 +42,7 @@ export default function ExpensesClient({
     const [editing, setEditing] = useState<ExpenseDoc | null>(null);
     const [filter, setFilter] = useState('all');
     const [showCreateModal, setShowCreateModal] = useState(false);
-    const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<ExpenseCreateFormValues>({
+    const { register, handleSubmit, reset, setValue, getValues, formState: { errors } } = useForm<ExpenseCreateFormValues>({
         resolver: zodResolver(expenseCreateSchema),
         defaultValues: defaultCreateForm,
     });
@@ -259,7 +259,7 @@ export default function ExpensesClient({
                             <div className="form-group">
                                 <FormLabel htmlFor="exp-vatRate">% IVA</FormLabel>
                                 <select id="exp-vatRate" className="erp-input" {...register('vatRate', {
-                                    onChange: (e) => handleBaseOrRate(watch('taxBase') || '', e.target.value),
+                                    onChange: (e) => handleBaseOrRate(getValues('taxBase') || '', e.target.value),
                                 })}>
                                     <option value="21">21%</option>
                                     <option value="10">10%</option>
@@ -270,7 +270,7 @@ export default function ExpensesClient({
                             <div className="form-group">
                                 <FormLabel htmlFor="exp-base">Base imponible (€)</FormLabel>
                                 <input id="exp-base" type="number" step="0.01" className="erp-input" placeholder="0.00" {...register('taxBase', {
-                                    onChange: (e) => handleBaseOrRate(e.target.value, watch('vatRate') || '21'),
+                                    onChange: (e) => handleBaseOrRate(e.target.value, getValues('vatRate') || '21'),
                                 })} />
                             </div>
                             <div className="form-group">

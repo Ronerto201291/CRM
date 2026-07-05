@@ -12,10 +12,6 @@ interface RecargoItem {
   invoiceDate: string;
 }
 
-function currentQuarter(): number {
-  return Math.floor(new Date().getMonth() / 3) + 1;
-}
-
 interface RecargoClientProps {
     initialRecargoList: RecargoItem[];
     initialPeriod: string;

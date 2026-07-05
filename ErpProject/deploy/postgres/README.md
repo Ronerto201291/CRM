@@ -36,7 +36,8 @@ docker logs erpproject-backend-1 2>&1 | grep -E "All module migrations|Seed comp
 # 1. Levantar stack local (Postgres__RlsEnabled=true en docker-compose.override.yml)
 docker compose up -d --build
 
-# 2. El backend aplica migraciones EF y luego PostgresRlsBootstrap (Companies + 9 tablas CompanyId)
+# 2. El backend aplica migraciones EF y luego PostgresRlsBootstrap
+#    (Companies + 9 tablas core + 9 tablas módulo: Leads, Quotes, ExpenseDocuments, …)
 #    Ver log: "RLS pilot: políticas aplicadas"
 
 # 3. Re-aplicar manualmente si hace falta:
@@ -53,5 +54,5 @@ psql -h localhost -U erp_admin -d erp_saas_db -f deploy/postgres/rls-pilot.sql
 ## Notas
 
 - El rol de migraciones (`erp_migration`) debe tener bypass o `FORCE ROW LEVEL SECURITY` bloqueará migraciones.
-- Empezar por tablas core (`Companies`, `Users`, `ApiKeys`, `AuditLogs`, etc. — ver `rls-pilot.sql`).
+- Tablas cubiertas: core (`Companies`, `Users`, …) + módulos (`billing.Invoices/Quotes`, `crm.Clients/Suppliers/Leads/Contacts`, `expenses.ExpenseDocuments`, `sales.SalesOrders`, `purchasing.PurchaseOrders` — ver `rls-pilot.sql`).
 - No sustituye el filtro de tenant en aplicación; es capa adicional.

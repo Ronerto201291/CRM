@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using Erp.Application.Features.Auth.Commands;
 using Erp.Modules.Accounting.Domain.Entities;
 using Erp.Modules.Accounting.Infrastructure.Data;
 using Erp.Application.Common.Events;
@@ -27,7 +26,7 @@ public class QuoteFlowPostgresTests : IClassFixture<PostgresWebApplicationFactor
         if (!_factory.DockerAvailable)
             return;
 
-        var (client, companyId) = await RegisterAndAuthAsync($"quote-flow-{Guid.NewGuid():N}"[..18]);
+        var (client, companyId) = await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"quote-flow-{Guid.NewGuid():N}"[..18]);
         await SeedPgcAsync(companyId);
 
         var clientResponse = await client.PostAsJsonAsync("/api/clients", new
@@ -109,7 +108,7 @@ public class QuoteFlowPostgresTests : IClassFixture<PostgresWebApplicationFactor
         if (!_factory.DockerAvailable)
             return;
 
-        var (client, _) = await RegisterAndAuthAsync($"quote-send-400-{Guid.NewGuid():N}"[..18]);
+        var (client, _) = await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"quote-send-400-{Guid.NewGuid():N}"[..18]);
         var issueDate = DateTime.UtcNow;
 
         var createQuote = await client.PostAsJsonAsync("/api/quotes", new
@@ -140,27 +139,4 @@ public class QuoteFlowPostgresTests : IClassFixture<PostgresWebApplicationFactor
         await seeder.Handle(new CompanyCreatedEvent { CompanyId = companyId }, CancellationToken.None);
     }
 
-    private async Task<(HttpClient Client, Guid CompanyId)> RegisterAndAuthAsync(string emailPrefix)
-    {
-        var client = _factory.CreatePostgresClient();
-        var suffix = Guid.NewGuid().ToString("N")[..8];
-
-        var registerResponse = await client.PostAsJsonAsync("/api/auth/register", new RegisterCompanyCommand
-        {
-            CompanyName = $"Quote Co {suffix}",
-            CompanyTaxId = IntegrationTestRegistration.NextTaxId(),
-            CompanyAddress = "Calle Test 1",
-            AdminEmail = $"{emailPrefix}-{suffix}@test.local",
-            AdminPassword = "SecurePass1!",
-            AdminFirstName = "Admin",
-            AdminLastName = "Test",
-        });
-
-        Assert.Equal(HttpStatusCode.OK, registerResponse.StatusCode);
-        var body = await registerResponse.Content.ReadFromJsonAsync<RegisterCompanyResponse>();
-
-        var authedClient = _factory.CreatePostgresClient();
-        TestAuthHelper.ApplyAuth(authedClient, body!.Token, body.CompanyId);
-        return (authedClient, body.CompanyId);
-    }
 }

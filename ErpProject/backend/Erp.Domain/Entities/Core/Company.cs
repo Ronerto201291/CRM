@@ -21,6 +21,9 @@ public class Company : AuditableEntity
     // Purchase matching tolerance (per-tenant). Amount in currency units. If 0, no tolerance allowed.
     public decimal MatchingToleranceAmount { get; set; } = 0m;
 
+    /// <summary>Importe a partir del cual pedidos/gastos requieren aprobación manual (0 = desactivado).</summary>
+    public decimal ApprovalThresholdAmount { get; set; } = 0m;
+
     public ICollection<User> Users { get; set; } = new List<User>();
     public ICollection<Role> Roles { get; set; } = new List<Role>();
 }

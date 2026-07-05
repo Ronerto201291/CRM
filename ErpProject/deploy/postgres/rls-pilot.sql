@@ -8,7 +8,10 @@
 --   Users, Roles, TenantModules, TenantInvitations, FiscalEvents,
 --   Subscriptions, ApiKeys, AuditLogs, Rules
 --     → USING ("CompanyId" = app.current_tenant)
---   billing."Invoices", crm."Clients", crm."Suppliers"
+--   billing."Invoices", billing."Quotes"
+--   crm."Clients", crm."Suppliers", crm."Leads", crm."Contacts"
+--   expenses."ExpenseDocuments"
+--   sales."SalesOrders", purchasing."PurchaseOrders"
 --     → USING ("CompanyId" = app.current_tenant)
 --
 -- Ejemplo manual (Companies):

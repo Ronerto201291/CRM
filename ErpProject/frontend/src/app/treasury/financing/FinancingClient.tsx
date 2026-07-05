@@ -47,7 +47,6 @@ export default function FinancingClient({
     const [confirming, setConfirming] = useState<ConfirmingOp[]>(initialConfirming);
     const [factoring, setFactoring] = useState<FactoringOp[]>(initialFactoring);
     const [creditLines, setCreditLines] = useState<CreditLine[]>(initialCreditLines);
-    const [loading, setLoading] = useState(false);
     const [tab, setTab] = useState<'confirming' | 'factoring' | 'credit-lines'>('confirming');
     const [showCreate, setShowCreate] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -58,19 +57,14 @@ export default function FinancingClient({
     const [form, setForm] = useState<Record<string, string>>({});
 
     const load = useCallback(async () => {
-        setLoading(true);
-        try {
-            const [cRes, fRes, clRes] = await Promise.all([
-                fetch('/api/proxy/v1/treasury/financing/confirming'),
-                fetch('/api/proxy/v1/treasury/financing/factoring'),
-                fetch('/api/proxy/v1/treasury/financing/credit-lines'),
-            ]);
-            if (cRes.ok) { const d = await cRes.json(); setConfirming(Array.isArray(d) ? d : (d.items ?? [])); }
-            if (fRes.ok) { const d = await fRes.json(); setFactoring(Array.isArray(d) ? d : (d.items ?? [])); }
-            if (clRes.ok) { const d = await clRes.json(); setCreditLines(Array.isArray(d) ? d : (d.items ?? [])); }
-        } finally {
-            setLoading(false);
-        }
+        const [cRes, fRes, clRes] = await Promise.all([
+            fetch('/api/proxy/v1/treasury/financing/confirming'),
+            fetch('/api/proxy/v1/treasury/financing/factoring'),
+            fetch('/api/proxy/v1/treasury/financing/credit-lines'),
+        ]);
+        if (cRes.ok) { const d = await cRes.json(); setConfirming(Array.isArray(d) ? d : (d.items ?? [])); }
+        if (fRes.ok) { const d = await fRes.json(); setFactoring(Array.isArray(d) ? d : (d.items ?? [])); }
+        if (clRes.ok) { const d = await clRes.json(); setCreditLines(Array.isArray(d) ? d : (d.items ?? [])); }
     }, []);
 
     const submitConfirming = async () => {

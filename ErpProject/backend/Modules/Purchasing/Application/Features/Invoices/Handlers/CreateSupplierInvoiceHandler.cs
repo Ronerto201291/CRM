@@ -24,6 +24,8 @@ public class CreateSupplierInvoiceHandler : IRequestHandler<CreateSupplierInvoic
     {
         var po = await _context.PurchaseOrders.FindAsync(new object[] { request.PurchaseOrderId }, cancellationToken);
         if (po == null) throw new InvalidOperationException("Purchase order not found");
+        if (po.Status != PurchaseOrderStatuses.Approved)
+            throw new InvalidOperationException("El pedido debe estar aprobado antes de facturar.");
 
         // Determine tenant/company tolerance: prefer company's setting if available, otherwise 0
         var tenantId = _tenant.TenantId ?? po.CompanyId;

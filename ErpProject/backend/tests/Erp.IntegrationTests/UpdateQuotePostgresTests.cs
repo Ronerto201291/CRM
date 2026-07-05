@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using Erp.Application.Features.Auth.Commands;
 using Xunit;
 
 namespace Erp.IntegrationTests;
@@ -21,7 +20,7 @@ public class UpdateQuotePostgresTests : IClassFixture<PostgresWebApplicationFact
         if (!_factory.DockerAvailable)
             return;
 
-        var client = await RegisterAndAuthAsync($"quote-put-{Guid.NewGuid():N}"[..18]);
+        var client = (await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"quote-put-{Guid.NewGuid():N}"[..18])).Client;
         var issueDate = new DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc);
 
         var createQuote = await client.PostAsJsonAsync("/api/quotes", new
@@ -60,27 +59,4 @@ public class UpdateQuotePostgresTests : IClassFixture<PostgresWebApplicationFact
         Assert.Equal(2, detail.GetProperty("lines").GetArrayLength());
     }
 
-    private async Task<HttpClient> RegisterAndAuthAsync(string emailPrefix)
-    {
-        var client = _factory.CreatePostgresClient();
-        var suffix = Guid.NewGuid().ToString("N")[..8];
-
-        var registerResponse = await client.PostAsJsonAsync("/api/auth/register", new RegisterCompanyCommand
-        {
-            CompanyName = $"Quote PUT Co {suffix}",
-            CompanyTaxId = IntegrationTestRegistration.NextTaxId(),
-            CompanyAddress = "Calle Test 1",
-            AdminEmail = $"{emailPrefix}-{suffix}@test.local",
-            AdminPassword = "SecurePass1!",
-            AdminFirstName = "Admin",
-            AdminLastName = "Test",
-        });
-
-        Assert.Equal(HttpStatusCode.OK, registerResponse.StatusCode);
-        var body = await registerResponse.Content.ReadFromJsonAsync<RegisterCompanyResponse>();
-
-        var authedClient = _factory.CreatePostgresClient();
-        TestAuthHelper.ApplyAuth(authedClient, body!.Token, body.CompanyId);
-        return authedClient;
-    }
 }

@@ -23,6 +23,8 @@ public class CreateGoodsReceiptHandler : IRequestHandler<CreateGoodsReceiptComma
         var po = await _context.PurchaseOrders.FindAsync(new object[] { request.PurchaseOrderId }, cancellationToken);
         if (po == null)
             throw new InvalidOperationException("Purchase order not found");
+        if (po.Status != PurchaseOrderStatuses.Approved)
+            throw new InvalidOperationException("El pedido debe estar aprobado antes de registrar recepciones.");
 
         var receipt = new GoodsReceipt
         {

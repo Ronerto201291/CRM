@@ -1,8 +1,6 @@
 using System.Net;
-using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
-using Erp.Application.Features.Auth.Commands;
 using Stripe;
 using Xunit;
 
@@ -25,7 +23,7 @@ public class StripeWebhookHttpTests : IClassFixture<PostgresWebApplicationFactor
         if (!_factory.DockerAvailable)
             return;
 
-        var companyId = await RegisterCompanyAsync();
+        var companyId = (await IntegrationTestAuth.RegisterFreeAsync(_factory, $"stripe-wh-{Guid.NewGuid():N}"[..18])).CompanyId;
         await EnsureProPlanAsync();
 
         var apiVersion = StripeConfiguration.ApiVersion;
@@ -79,25 +77,6 @@ public class StripeWebhookHttpTests : IClassFixture<PostgresWebApplicationFactor
 
         var response = await client.SendAsync(request);
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-    }
-
-    private async Task<Guid> RegisterCompanyAsync()
-    {
-        var client = _factory.CreatePostgresClient();
-        var suffix = Guid.NewGuid().ToString("N")[..8];
-        var registerResponse = await client.PostAsJsonAsync("/api/auth/register", new RegisterCompanyCommand
-        {
-            CompanyName = $"Stripe Webhook Co {suffix}",
-            CompanyTaxId = IntegrationTestRegistration.NextTaxId(),
-            CompanyAddress = "Calle Test 1",
-            AdminEmail = $"stripe-wh-{suffix}@test.local",
-            AdminPassword = "SecurePass1!",
-            AdminFirstName = "Admin",
-            AdminLastName = "Test",
-        });
-        Assert.Equal(HttpStatusCode.OK, registerResponse.StatusCode);
-        var body = await registerResponse.Content.ReadFromJsonAsync<RegisterCompanyResponse>();
-        return body!.CompanyId;
     }
 
     private async Task EnsureProPlanAsync()

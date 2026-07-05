@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import PageContainer from '@/components/PageContainer';
 import AccessibleModal from '@/components/AccessibleModal';
 import { parseListResponse } from '@/lib/parseListResponse';
@@ -77,49 +77,50 @@ export default function TreasuryClient({ initialAccounts }: TreasuryClientProps)
         () => accounts.filter(a => a.isActive).reduce((sum, a) => sum + (a.currentBalance || 0), 0),
         [accounts],
     );
-    const activeAccount = useMemo(() => accounts.find(a => a.id === selectedAccount) ?? null, [accounts, selectedAccount]);
-    const unreconciledCount = useMemo(() => movements.filter(m => !m.isReconciled).length, [movements]);
 
     const loadAccounts = async () => {
         const r = await fetch('/api/proxy/treasury/bank-accounts');
         if (r.ok) { const data = await r.json(); setAccounts(data); if (!selectedAccount && data.length) setSelectedAccount(data[0].id); }
     };
-    const loadMovements = async (accountId?: string) => {
+    const loadMovements = useCallback(async (accountId?: string) => {
         const id = accountId || selectedAccount;
         if (!id) return;
         setLoading(true);
         const r = await fetch(`/api/proxy/treasury/bank-accounts/${id}/movements?pageSize=500`);
         if (r.ok) { const d = await r.json(); setMovements(parseListResponse<BankMovement>(d)); }
         setLoading(false);
-    };
-    const loadEffects = async () => {
+    }, [selectedAccount]);
+    const loadEffects = useCallback(async () => {
         const r = await fetch('/api/proxy/treasury/effects?pageSize=500');
         if (r.ok) { const d = await r.json(); setEffects(parseListResponse<CashEffect>(d)); }
-    };
-    const loadOrders = async () => {
+    }, []);
+    const loadOrders = useCallback(async () => {
         const r = await fetch('/api/proxy/treasury/payment-orders?pageSize=500');
         if (r.ok) { const d = await r.json(); setOrders(parseListResponse<PaymentOrder>(d)); }
-    };
-    const loadForecast = async () => {
-        const r = await fetch(`/api/proxy/treasury/forecasts?year=${now.getFullYear()}&month=${now.getMonth() + 1}`);
+    }, []);
+    const loadForecast = useCallback(async () => {
+        const d = new Date();
+        const r = await fetch(`/api/proxy/treasury/forecasts?year=${d.getFullYear()}&month=${d.getMonth() + 1}`);
         if (r.ok) setForecast(await r.json());
-    };
-    const loadCashSession = async () => {
+    }, []);
+    const loadCashSession = useCallback(async () => {
         const [openRes, allRes] = await Promise.all([
             fetch('/api/proxy/treasury/cash-sessions/open'),
             fetch('/api/proxy/treasury/cash-sessions'),
         ]);
         setOpenCashSessionData(openRes.ok ? await openRes.json() : null);
         if (allRes.ok) setCashSessions(await allRes.json());
-    };
+    }, []);
 
     useEffect(() => {
-        if (tab === 'movements') loadMovements();
-        if (tab === 'effects') loadEffects();
-        if (tab === 'orders') loadOrders();
-        if (tab === 'forecast') loadForecast();
-        if (tab === 'cash') loadCashSession();
-    }, [tab, selectedAccount]);
+        queueMicrotask(() => {
+            if (tab === 'movements') void loadMovements();
+            if (tab === 'effects') void loadEffects();
+            if (tab === 'orders') void loadOrders();
+            if (tab === 'forecast') void loadForecast();
+            if (tab === 'cash') void loadCashSession();
+        });
+    }, [tab, selectedAccount, loadMovements, loadEffects, loadOrders, loadForecast, loadCashSession]);
 
     const openCashSession = async () => {
         setCashSaving(true);

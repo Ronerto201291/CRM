@@ -598,6 +598,11 @@ export default function QuotesClient({
                         <div style={{ background: 'var(--surface-2)', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px', fontSize: '13px', color: 'var(--text-secondary)' }}>
                             Presupuesto <strong>{sendTarget?.number}</strong> · Se enviará un link de aceptación al cliente
                         </div>
+                        {sendError && (
+                            <div style={{ background: 'var(--danger-bg)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px', fontSize: '13px', color: 'var(--danger)' }}>
+                                {sendError}
+                            </div>
+                        )}
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
                             <div className="form-group">
                                 <label className="erp-label">EMAIL DESTINATARIO *</label>

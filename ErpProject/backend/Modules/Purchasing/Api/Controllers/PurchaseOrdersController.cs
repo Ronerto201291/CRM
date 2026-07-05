@@ -58,6 +58,42 @@ public class PurchaseOrdersController : ControllerBase
     [RequirePermission(Permissions.PurchaseOrder.Delete)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
         => await _mediator.Send(new DeletePurchaseOrderCommand(id), ct) ? NoContent() : NotFound();
+
+    [HttpPost("{id}/submit-for-approval")]
+    [RequirePermission(Permissions.PurchaseOrder.Update)]
+    public async Task<IActionResult> SubmitForApproval(Guid id, CancellationToken ct)
+    {
+        try
+        {
+            return Ok(await _mediator.Send(new SubmitPurchaseOrderForApprovalCommand(id), ct));
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
+    [HttpPost("{id}/approve")]
+    [RequirePermission(Permissions.PurchaseOrder.Approve)]
+    public async Task<IActionResult> Approve(Guid id, CancellationToken ct)
+    {
+        try
+        {
+            return Ok(await _mediator.Send(new ApprovePurchaseOrderCommand(id), ct));
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
+    [HttpPost("{id}/reject")]
+    [RequirePermission(Permissions.PurchaseOrder.Approve)]
+    public async Task<IActionResult> Reject(Guid id, [FromBody] RejectPoDto? dto, CancellationToken ct)
+    {
+        try
+        {
+            return Ok(await _mediator.Send(new RejectPurchaseOrderCommand(id, dto?.Reason), ct));
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
+    }
 }
 
 public class CreatePoDto
@@ -72,4 +108,9 @@ public class CreatePoLineDto
     public Guid? ProductId { get; set; }
     public decimal Quantity { get; set; }
     public decimal UnitPrice { get; set; }
+}
+
+public class RejectPoDto
+{
+    public string? Reason { get; set; }
 }

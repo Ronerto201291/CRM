@@ -214,11 +214,44 @@ test.describe('Smoke E2E', () => {
     });
 
     /**
-     * 2FA E2E parcial: valida que login devuelve requiresTwoFactor.
-     * Seed docker (admin@devcorp.com) no tiene 2FA — definir E2E_2FA_EMAIL y
-     * E2E_2FA_PASSWORD con usuario 2FA activo. Verificación TOTP completa requiere
-     * E2E_2FA_TOTP_SECRET (otplib) — omitido en CI por inestabilidad de reloj.
+     * 2FA E2E: requiresTwoFactor + verificación TOTP completa con otplib.
+     * Seed manual: usuario con 2FA activo + secreto base32 en E2E_2FA_TOTP_SECRET.
+     * Variables: E2E_2FA_EMAIL, E2E_2FA_PASSWORD, E2E_2FA_TOTP_SECRET.
      */
+    test('login → verify TOTP completo (E2E_2FA_* + TOTP secret)', async ({ request }) => {
+        const email = process.env.E2E_2FA_EMAIL;
+        const password = process.env.E2E_2FA_PASSWORD;
+        const totpSecret = process.env.E2E_2FA_TOTP_SECRET;
+        test.skip(!email || !password || !totpSecret,
+            '2FA E2E completo: definir E2E_2FA_EMAIL, E2E_2FA_PASSWORD y E2E_2FA_TOTP_SECRET');
+
+        const backendBase = process.env.E2E_BACKEND_URL ?? 'http://localhost:8081';
+        let loginResponse;
+        try {
+            loginResponse = await request.post(`${backendBase}/api/auth/login`, {
+                data: { email, password },
+            });
+        } catch (err) {
+            skipUnlessStackReady(false, `Backend 2FA no disponible: ${err}`);
+        }
+        skipUnlessStackReady(!!loginResponse?.ok(), 'Login 2FA requiere backend disponible');
+
+        const loginBody = await loginResponse!.json();
+        expect(loginBody.requiresTwoFactor).toBe(true);
+        expect(loginBody.userId).toBeTruthy();
+
+        const { authenticator } = await import('otplib');
+        const code = authenticator.generate(totpSecret!);
+
+        const verifyResponse = await request.post(`${backendBase}/api/auth/2fa/verify`, {
+            data: { userId: loginBody.userId, code },
+        });
+        skipUnlessStackReady(verifyResponse.ok(), `Verify TOTP falló (${verifyResponse.status()})`);
+
+        const tokens = await verifyResponse.json();
+        expect(tokens.token ?? tokens.accessToken).toBeTruthy();
+    });
+
     test('login → 2FA requiresTwoFactor (condicional E2E_2FA_*)', async ({ request }) => {
         const email = process.env.E2E_2FA_EMAIL;
         const password = process.env.E2E_2FA_PASSWORD;

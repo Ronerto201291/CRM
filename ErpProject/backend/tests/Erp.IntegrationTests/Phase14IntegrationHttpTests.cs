@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using Erp.Application.Features.Auth.Commands;
 using Erp.Modules.Accounting.Infrastructure.Data;
 using Erp.Application.Common.Events;
 using Erp.Modules.Accounting.Application.Handlers;
@@ -26,7 +25,7 @@ public class Phase14IntegrationHttpTests : IClassFixture<PostgresWebApplicationF
         if (!_factory.DockerAvailable)
             return;
 
-        var (client, _) = await RegisterAndAuthAsync($"users-p14-{Guid.NewGuid():N}"[..18]);
+        var (client, _) = await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"users-p14-{Guid.NewGuid():N}"[..18], withApiKey: true);
 
         var roles = await client.GetAsync("/api/users/roles");
         Assert.Equal(HttpStatusCode.OK, roles.StatusCode);
@@ -43,7 +42,7 @@ public class Phase14IntegrationHttpTests : IClassFixture<PostgresWebApplicationF
         if (!_factory.DockerAvailable)
             return;
 
-        var (client, _) = await RegisterAndAuthAsync($"users-role-p14-{Guid.NewGuid():N}"[..18]);
+        var (client, _) = await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"users-role-p14-{Guid.NewGuid():N}"[..18], withApiKey: true);
 
         var listResponse = await client.GetAsync("/api/users");
         Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
@@ -65,7 +64,7 @@ public class Phase14IntegrationHttpTests : IClassFixture<PostgresWebApplicationF
         if (!_factory.DockerAvailable)
             return;
 
-        var (client, _) = await RegisterAndAuthAsync($"fiscal-p14-{Guid.NewGuid():N}"[..18]);
+        var (client, _) = await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"fiscal-p14-{Guid.NewGuid():N}"[..18], withApiKey: true);
 
         var list = await client.GetAsync("/api/fiscal/calendar?year=2026");
         Assert.Equal(HttpStatusCode.OK, list.StatusCode);
@@ -94,7 +93,7 @@ public class Phase14IntegrationHttpTests : IClassFixture<PostgresWebApplicationF
         if (!_factory.DockerAvailable)
             return;
 
-        var (client, _) = await RegisterAndAuthAsync($"pub-inv-p14-{Guid.NewGuid():N}"[..18]);
+        var (client, _) = await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"pub-inv-p14-{Guid.NewGuid():N}"[..18], withApiKey: true);
 
         var response = await client.GetAsync("/api/v1/public/invoices?year=2026");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -108,7 +107,7 @@ public class Phase14IntegrationHttpTests : IClassFixture<PostgresWebApplicationF
         if (!_factory.DockerAvailable)
             return;
 
-        var (client, _) = await RegisterAndAuthAsync($"audit-p14-{Guid.NewGuid():N}"[..18]);
+        var (client, _) = await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"audit-p14-{Guid.NewGuid():N}"[..18], withApiKey: true);
 
         var from = DateTime.UtcNow.AddDays(-30).ToString("yyyy-MM-dd");
         var to = DateTime.UtcNow.ToString("yyyy-MM-dd");
@@ -122,7 +121,7 @@ public class Phase14IntegrationHttpTests : IClassFixture<PostgresWebApplicationF
         if (!_factory.DockerAvailable)
             return;
 
-        var (client, companyId) = await RegisterAndAuthAsync($"facturae-p14-{Guid.NewGuid():N}"[..18]);
+        var (client, companyId) = await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"facturae-p14-{Guid.NewGuid():N}"[..18], withApiKey: true);
         await SeedPgcAsync(companyId);
 
         var createResponse = await client.PostAsJsonAsync("/api/invoices", new
@@ -169,7 +168,7 @@ public class Phase14IntegrationHttpTests : IClassFixture<PostgresWebApplicationF
         if (!_factory.DockerAvailable)
             return;
 
-        var (client, _) = await RegisterAndAuthAsync($"verify-key-p14-{Guid.NewGuid():N}"[..18]);
+        var (client, _) = await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"verify-key-p14-{Guid.NewGuid():N}"[..18], withApiKey: true);
 
         var response = await client.GetAsync("/api/v1/auth/verify");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -177,38 +176,6 @@ public class Phase14IntegrationHttpTests : IClassFixture<PostgresWebApplicationF
         Assert.Contains("authenticated", body, StringComparison.OrdinalIgnoreCase);
     }
 
-    private async Task<(HttpClient Client, Guid CompanyId)> RegisterAndAuthAsync(string emailPrefix)
-    {
-        var client = _factory.CreatePostgresClient();
-        var suffix = Guid.NewGuid().ToString("N")[..8];
-
-        var registerResponse = await client.PostAsJsonAsync("/api/auth/register", new RegisterCompanyCommand
-        {
-            CompanyName = $"Phase14 Co {suffix}",
-            CompanyTaxId = IntegrationTestRegistration.NextTaxId(),
-            CompanyAddress = "Calle Test 1",
-            AdminEmail = $"{emailPrefix}-{suffix}@test.local",
-            AdminPassword = "SecurePass1!",
-            AdminFirstName = "Admin",
-            AdminLastName = "Test",
-        });
-
-        Assert.Equal(HttpStatusCode.OK, registerResponse.StatusCode);
-        var body = await registerResponse.Content.ReadFromJsonAsync<RegisterCompanyResponse>();
-
-        var authedClient = _factory.CreatePostgresClient();
-        TestAuthHelper.ApplyAuth(authedClient, body!.Token, body.CompanyId);
-
-        var keyResponse = await authedClient.PostAsJsonAsync("/api/apikeys", new Erp.Application.Features.ApiKeys.Commands.CreateApiKeyCommand
-        {
-            Name = "Phase14 Integration",
-            RateLimit = 500,
-        });
-        Assert.Equal(HttpStatusCode.OK, keyResponse.StatusCode);
-        var keyBody = await keyResponse.Content.ReadFromJsonAsync<Erp.Application.Features.ApiKeys.Commands.CreateApiKeyResult>();
-        authedClient.DefaultRequestHeaders.Add("X-Api-Key", keyBody!.RawKey);
-        return (authedClient, body.CompanyId);
-    }
 
     private async Task SeedPgcAsync(Guid companyId)
     {

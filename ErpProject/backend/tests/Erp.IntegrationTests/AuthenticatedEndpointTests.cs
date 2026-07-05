@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using Erp.Application.Features.Auth.Commands;
 using Xunit;
 
 namespace Erp.IntegrationTests;
@@ -24,31 +23,13 @@ public class AuthenticatedEndpointTests : IClassFixture<PostgresWebApplicationFa
         if (!_factory.DockerAvailable)
             return;
 
-        var client = _factory.CreatePostgresClient();
-        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var auth = await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"admin-{Guid.NewGuid():N}"[..18]);
+        Assert.False(string.IsNullOrEmpty(auth.Token));
 
-        var registerResponse = await client.PostAsJsonAsync("/api/auth/register", new RegisterCompanyCommand
-        {
-            CompanyName = $"Test Co {suffix}",
-            CompanyTaxId = IntegrationTestRegistration.NextTaxId(),
-            CompanyAddress = "Calle Test 1",
-            AdminEmail = $"admin-{suffix}@test.local",
-            AdminPassword = "SecurePass1!",
-            AdminFirstName = "Admin",
-            AdminLastName = "Test",
-        });
-
-        Assert.Equal(HttpStatusCode.OK, registerResponse.StatusCode);
-        var registerBody = await registerResponse.Content.ReadFromJsonAsync<RegisterCompanyResponse>();
-        Assert.NotNull(registerBody);
-        Assert.False(string.IsNullOrEmpty(registerBody!.Token));
-
-        TestAuthHelper.ApplyAuth(client, registerBody.Token, registerBody.CompanyId);
-
-        var companiesResponse = await client.GetAsync("/api/auth/companies");
+        var companiesResponse = await auth.Client.GetAsync("/api/auth/companies");
         Assert.Equal(HttpStatusCode.OK, companiesResponse.StatusCode);
 
-        var clientsResponse = await client.GetAsync("/api/clients");
+        var clientsResponse = await auth.Client.GetAsync("/api/clients");
         Assert.True(
             clientsResponse.StatusCode == HttpStatusCode.OK,
             $"GET /api/clients → {clientsResponse.StatusCode}: {await clientsResponse.Content.ReadAsStringAsync()}");
@@ -60,26 +41,8 @@ public class AuthenticatedEndpointTests : IClassFixture<PostgresWebApplicationFa
         if (!_factory.DockerAvailable)
             return;
 
-        var client = _factory.CreatePostgresClient();
-        var suffix = Guid.NewGuid().ToString("N")[..8];
-
-        var registerResponse = await client.PostAsJsonAsync("/api/auth/register", new RegisterCompanyCommand
-        {
-            CompanyName = $"Billing {suffix}",
-            CompanyTaxId = IntegrationTestRegistration.NextTaxId(),
-            CompanyAddress = "Calle Test 1",
-            AdminEmail = $"billing-{suffix}@test.local",
-            AdminPassword = "SecurePass1!",
-            AdminFirstName = "Admin",
-            AdminLastName = "Test",
-        });
-
-        var registerBody = await registerResponse.Content.ReadFromJsonAsync<RegisterCompanyResponse>();
-        Assert.NotNull(registerBody);
-
-        TestAuthHelper.ApplyAuth(client, registerBody!.Token, registerBody.CompanyId);
-
-        var invoicesResponse = await client.GetAsync("/api/invoices");
+        var auth = await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"billing-{Guid.NewGuid():N}"[..18]);
+        var invoicesResponse = await auth.Client.GetAsync("/api/invoices");
         Assert.Equal(HttpStatusCode.OK, invoicesResponse.StatusCode);
     }
 
@@ -89,26 +52,8 @@ public class AuthenticatedEndpointTests : IClassFixture<PostgresWebApplicationFa
         if (!_factory.DockerAvailable)
             return;
 
-        var client = _factory.CreatePostgresClient();
-        var suffix = Guid.NewGuid().ToString("N")[..8];
-
-        var registerResponse = await client.PostAsJsonAsync("/api/auth/register", new RegisterCompanyCommand
-        {
-            CompanyName = $"CRM Suppliers {suffix}",
-            CompanyTaxId = IntegrationTestRegistration.NextTaxId(),
-            CompanyAddress = "Calle Test 1",
-            AdminEmail = $"suppliers-{suffix}@test.local",
-            AdminPassword = "SecurePass1!",
-            AdminFirstName = "Admin",
-            AdminLastName = "Test",
-        });
-
-        var registerBody = await registerResponse.Content.ReadFromJsonAsync<RegisterCompanyResponse>();
-        Assert.NotNull(registerBody);
-
-        TestAuthHelper.ApplyAuth(client, registerBody!.Token, registerBody.CompanyId);
-
-        var suppliersResponse = await client.GetAsync("/api/suppliers");
+        var auth = await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"suppliers-{Guid.NewGuid():N}"[..18]);
+        var suppliersResponse = await auth.Client.GetAsync("/api/suppliers");
         Assert.Equal(HttpStatusCode.OK, suppliersResponse.StatusCode);
     }
 
@@ -118,25 +63,12 @@ public class AuthenticatedEndpointTests : IClassFixture<PostgresWebApplicationFa
         if (!_factory.DockerAvailable)
             return;
 
-        var client = _factory.CreatePostgresClient();
-        var suffix = Guid.NewGuid().ToString("N")[..8];
-
-        var registerResponse = await client.PostAsJsonAsync("/api/auth/register", new RegisterCompanyCommand
-        {
-            CompanyName = $"JWT {suffix}",
-            CompanyTaxId = IntegrationTestRegistration.NextTaxId(),
-            CompanyAddress = "Calle Test 1",
-            AdminEmail = $"jwt-{suffix}@test.local",
-            AdminPassword = "SecurePass1!",
-            AdminFirstName = "Admin",
-            AdminLastName = "Test",
-        });
-
-        var registerBody = await registerResponse.Content.ReadFromJsonAsync<RegisterCompanyResponse>();
-        Assert.NotNull(registerBody);
+        var registerBody = await IntegrationTestAuth.RegisterFreeAsync(_factory, $"jwt-{Guid.NewGuid():N}"[..18]);
+        await IntegrationTestModuleHelper.UpgradeToEnterpriseAndEnableAllModulesAsync(
+            _factory.GetConnectionString(), registerBody.CompanyId);
 
         var manualToken = TestAuthHelper.CreateToken(
-            registerBody!.UserId,
+            registerBody.UserId,
             registerBody.Email,
             registerBody.CompanyId);
 
@@ -164,8 +96,8 @@ public class MultiTenantIsolationIntegrationTests : IClassFixture<PostgresWebApp
             return;
 
         var suffix = Guid.NewGuid().ToString("N")[..8];
-        var tenantA = await RegisterTenantAsync($"A-{suffix}", $"a-{suffix}@test.local");
-        var tenantB = await RegisterTenantAsync($"B-{suffix}", $"b-{suffix}@test.local");
+        var tenantA = await IntegrationTestAuth.RegisterFreeAsync(_factory, $"a-{suffix}", $"A-{suffix}");
+        var tenantB = await IntegrationTestAuth.RegisterFreeAsync(_factory, $"b-{suffix}", $"B-{suffix}");
 
         var clientA = _factory.CreatePostgresClient();
         TestAuthHelper.ApplyAuth(clientA, tenantA.Token, tenantA.CompanyId);
@@ -199,24 +131,5 @@ public class MultiTenantIsolationIntegrationTests : IClassFixture<PostgresWebApp
                     Assert.NotEqual("Cliente exclusivo A", nameProp.GetString());
             }
         }
-    }
-
-    private async Task<RegisterCompanyResponse> RegisterTenantAsync(string companyName, string email)
-    {
-        var client = _factory.CreatePostgresClient();
-        var response = await client.PostAsJsonAsync("/api/auth/register", new RegisterCompanyCommand
-        {
-            CompanyName = companyName,
-            CompanyTaxId = IntegrationTestRegistration.NextTaxId(),
-            CompanyAddress = "Calle Test 1",
-            AdminEmail = email,
-            AdminPassword = "SecurePass1!",
-            AdminFirstName = "Admin",
-            AdminLastName = "Test",
-        });
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var body = await response.Content.ReadFromJsonAsync<RegisterCompanyResponse>();
-        return body!;
     }
 }

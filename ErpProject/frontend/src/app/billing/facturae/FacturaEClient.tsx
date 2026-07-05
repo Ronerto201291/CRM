@@ -1,6 +1,5 @@
 "use client";
-import React, { useCallback, useState } from "react";
-import { parseListResponse } from "@/lib/parseListResponse";
+import React, { useState } from "react";
 import Link from "next/link";
 
 interface Invoice {
@@ -19,30 +18,8 @@ interface FacturaEClientProps {
 }
 
 export default function FacturaEClient({ initialInvoices }: FacturaEClientProps) {
-  const [invoices, setInvoices] = useState<Invoice[]>(initialInvoices);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const invoices = initialInvoices;
   const [actionError, setActionError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/proxy/invoices?pageSize=500");
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setError(data.error ?? `Error ${res.status}`);
-        setInvoices([]);
-        return;
-      }
-      const data = parseListResponse<Invoice>(await res.json());
-      setInvoices(data.filter((i) => i.isLocked));
-    } catch {
-      setError("Error de conexión con el backend");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
 
   const downloadFile = async (url: string, filename: string) => {
     setActionError(null);
@@ -71,9 +48,6 @@ export default function FacturaEClient({ initialInvoices }: FacturaEClientProps)
         Facturas bloqueadas listas para generar XML FacturaE 3.2.2. El envío VERI*FACTU es por período en la página dedicada.
       </p>
 
-      {error && (
-        <div className="mb-4 p-3 bg-red-50 text-red-700 border border-red-200 rounded">{error}</div>
-      )}
       {actionError && (
         <div className="mb-4 p-3 bg-red-50 text-red-700 border border-red-200 rounded">{actionError}</div>
       )}
@@ -86,9 +60,7 @@ export default function FacturaEClient({ initialInvoices }: FacturaEClientProps)
           </Link>
         </div>
 
-        {loading ? (
-          <p className="text-gray-500">Cargando facturas...</p>
-        ) : invoices.length === 0 ? (
+        {invoices.length === 0 ? (
           <p className="text-gray-500">
             No hay facturas bloqueadas. Bloquea una factura en Billing para generar FacturaE.
           </p>

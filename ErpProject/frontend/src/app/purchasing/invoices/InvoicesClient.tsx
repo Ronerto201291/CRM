@@ -1,8 +1,6 @@
 'use client';
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import PageContainer from '@/components/PageContainer';
-import { useCachedApi } from '@/hooks/useCachedApi';
-import { parseListResponse } from '@/lib/parseListResponse';
 
 interface SupplierInvoice {
     id: string;
@@ -29,21 +27,8 @@ interface PurchasingInvoicesClientProps {
 }
 
 export default function PurchasingInvoicesClient({ initialInvoices }: PurchasingInvoicesClientProps) {
-    const [invoices, setInvoices] = useState<SupplierInvoice[]>(initialInvoices);
-    const [loading, setLoading] = useState(false);
+    const invoices = initialInvoices;
     const [filter, setFilter] = useState('all');
-    const { fetchCached, invalidateCached } = useCachedApi();
-
-    const load = useCallback(async () => {
-        setLoading(true);
-        try {
-            invalidateCached('purchasing/invoices');
-            const data = await fetchCached<unknown>('purchasing/invoices');
-            if (data) setInvoices(parseListResponse<SupplierInvoice>(data));
-        } finally {
-            setLoading(false);
-        }
-    }, [fetchCached, invalidateCached]);
 
     const filtered = useMemo(
         () => (filter === 'all' ? invoices : invoices.filter(i => i.status === filter)),
@@ -104,8 +89,7 @@ export default function PurchasingInvoicesClient({ initialInvoices }: Purchasing
                         </tr>
                     </thead>
                     <tbody>
-                        {loading && <tr><td colSpan={7} style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>Cargando...</td></tr>}
-                        {!loading && filtered.length === 0 && (
+                        {filtered.length === 0 && (
                             <tr><td colSpan={7}>
                                 <div className="empty-state">
                                     <div className="empty-state-icon">📄</div>

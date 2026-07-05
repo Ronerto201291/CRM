@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using Erp.Application.Features.Auth.Commands;
 using Xunit;
 
 namespace Erp.IntegrationTests;
@@ -24,7 +23,7 @@ public class AuthenticatedFlowsTests : IClassFixture<PostgresWebApplicationFacto
         if (!_factory.DockerAvailable)
             return;
 
-        var client = await RegisterAndAuthAsync($"flow-client-{Guid.NewGuid():N}"[..20]);
+        var client = (await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"flow-client-{Guid.NewGuid():N}"[..20])).Client;
 
         var createResponse = await client.PostAsJsonAsync("/api/clients", new
         {
@@ -56,7 +55,7 @@ public class AuthenticatedFlowsTests : IClassFixture<PostgresWebApplicationFacto
         if (!_factory.DockerAvailable)
             return;
 
-        var client = await RegisterAndAuthAsync($"flow-inv-{Guid.NewGuid():N}"[..20]);
+        var client = (await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"flow-inv-{Guid.NewGuid():N}"[..20])).Client;
 
         var createResponse = await client.PostAsJsonAsync("/api/invoices", new
         {
@@ -103,34 +102,9 @@ public class AuthenticatedFlowsTests : IClassFixture<PostgresWebApplicationFacto
         if (!_factory.DockerAvailable)
             return;
 
-        var client = await RegisterAndAuthAsync($"flow-fiscal-{Guid.NewGuid():N}"[..20]);
+        var client = (await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"flow-fiscal-{Guid.NewGuid():N}"[..20])).Client;
         var response = await client.GetAsync("/api/fiscal/calendar?year=2026");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-    }
-
-    private async Task<HttpClient> RegisterAndAuthAsync(string emailPrefix)
-    {
-        var client = _factory.CreatePostgresClient();
-        var suffix = Guid.NewGuid().ToString("N")[..8];
-
-        var registerResponse = await client.PostAsJsonAsync("/api/auth/register", new RegisterCompanyCommand
-        {
-            CompanyName = $"Flow Co {suffix}",
-            CompanyTaxId = IntegrationTestRegistration.NextTaxId(),
-            CompanyAddress = "Calle Test 1",
-            AdminEmail = $"{emailPrefix}-{suffix}@test.local",
-            AdminPassword = "SecurePass1!",
-            AdminFirstName = "Admin",
-            AdminLastName = "Test",
-        });
-
-        Assert.Equal(HttpStatusCode.OK, registerResponse.StatusCode);
-        var registerBody = await registerResponse.Content.ReadFromJsonAsync<RegisterCompanyResponse>();
-        Assert.NotNull(registerBody);
-
-        var authedClient = _factory.CreatePostgresClient();
-        TestAuthHelper.ApplyAuth(authedClient, registerBody!.Token, registerBody.CompanyId);
-        return authedClient;
     }
 }
 
@@ -150,8 +124,8 @@ public class MultiTenantInvoiceIsolationTests : IClassFixture<PostgresWebApplica
             return;
 
         var suffix = Guid.NewGuid().ToString("N")[..8];
-        var tenantA = await RegisterTenantAsync($"InvA-{suffix}", $"inva-{suffix}@test.local");
-        var tenantB = await RegisterTenantAsync($"InvB-{suffix}", $"invb-{suffix}@test.local");
+        var tenantA = await IntegrationTestAuth.RegisterFreeAsync(_factory, $"inva-{suffix}", $"InvA-{suffix}");
+        var tenantB = await IntegrationTestAuth.RegisterFreeAsync(_factory, $"invb-{suffix}", $"InvB-{suffix}");
 
         var clientA = _factory.CreatePostgresClient();
         TestAuthHelper.ApplyAuth(clientA, tenantA.Token, tenantA.CompanyId);
@@ -200,24 +174,5 @@ public class MultiTenantInvoiceIsolationTests : IClassFixture<PostgresWebApplica
                     Assert.NotEqual("Factura exclusiva A", nameProp.GetString());
             }
         }
-    }
-
-    private async Task<RegisterCompanyResponse> RegisterTenantAsync(string companyName, string email)
-    {
-        var client = _factory.CreatePostgresClient();
-        var response = await client.PostAsJsonAsync("/api/auth/register", new RegisterCompanyCommand
-        {
-            CompanyName = companyName,
-            CompanyTaxId = IntegrationTestRegistration.NextTaxId(),
-            CompanyAddress = "Calle Test 1",
-            AdminEmail = email,
-            AdminPassword = "SecurePass1!",
-            AdminFirstName = "Admin",
-            AdminLastName = "Test",
-        });
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var body = await response.Content.ReadFromJsonAsync<RegisterCompanyResponse>();
-        return body!;
     }
 }

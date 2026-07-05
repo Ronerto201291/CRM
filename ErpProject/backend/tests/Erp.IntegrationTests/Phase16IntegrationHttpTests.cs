@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using Erp.Application.Features.Auth.Commands;
 using Erp.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -28,7 +27,7 @@ public class Phase16IntegrationHttpTests : IClassFixture<PostgresWebApplicationF
         if (!_factory.DockerAvailable)
             return;
 
-        var (client, _) = await RegisterAndAuthAsync($"leads-p16-{Guid.NewGuid():N}"[..18]);
+        var (client, _) = await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"leads-p16-{Guid.NewGuid():N}"[..18], withApiKey: true);
 
         var response = await client.PostAsJsonAsync("/api/leads", new
         {
@@ -58,7 +57,7 @@ public class Phase16IntegrationHttpTests : IClassFixture<PostgresWebApplicationF
         if (!_factory.DockerAvailable)
             return;
 
-        var (client, _) = await RegisterAndAuthAsync($"lead-conv-p16-{Guid.NewGuid():N}"[..18]);
+        var (client, _) = await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"lead-conv-p16-{Guid.NewGuid():N}"[..18], withApiKey: true);
 
         var createResponse = await client.PostAsJsonAsync("/api/leads", new
         {
@@ -83,7 +82,7 @@ public class Phase16IntegrationHttpTests : IClassFixture<PostgresWebApplicationF
         if (!_factory.DockerAvailable)
             return;
 
-        var (client, _) = await RegisterAndAuthAsync($"exec-po-p16-{Guid.NewGuid():N}"[..18]);
+        var (client, _) = await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"exec-po-p16-{Guid.NewGuid():N}"[..18], withApiKey: true);
 
         var bankResponse = await client.PostAsJsonAsync("/api/treasury/bank-accounts", new
         {
@@ -122,7 +121,7 @@ public class Phase16IntegrationHttpTests : IClassFixture<PostgresWebApplicationF
         if (!_factory.DockerAvailable)
             return;
 
-        var (client, companyId) = await RegisterAndAuthAsync($"anul-vf-p16-{Guid.NewGuid():N}"[..18]);
+        var (client, companyId) = await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"anul-vf-p16-{Guid.NewGuid():N}"[..18], withApiKey: true);
         await SeedPgcAsync(companyId);
 
         var createResponse = await client.PostAsJsonAsync("/api/invoices", new
@@ -155,7 +154,7 @@ public class Phase16IntegrationHttpTests : IClassFixture<PostgresWebApplicationF
         if (!_factory.DockerAvailable)
             return;
 
-        var (client, companyId) = await RegisterAndAuthAsync($"prov-p16-{Guid.NewGuid():N}"[..18]);
+        var (client, companyId) = await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"prov-p16-{Guid.NewGuid():N}"[..18], withApiKey: true);
         await SeedPgcAsync(companyId);
 
         var createResponse = await client.PostAsJsonAsync("/api/v1/accounting/provisions", new
@@ -180,7 +179,7 @@ public class Phase16IntegrationHttpTests : IClassFixture<PostgresWebApplicationF
         if (!_factory.DockerAvailable)
             return;
 
-        var (client, _) = await RegisterAndAuthAsync($"aging-p16-{Guid.NewGuid():N}"[..18]);
+        var (client, _) = await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"aging-p16-{Guid.NewGuid():N}"[..18], withApiKey: true);
 
         var response = await client.GetAsync("/api/accounting/aging");
         var body = await response.Content.ReadAsStringAsync();
@@ -194,7 +193,7 @@ public class Phase16IntegrationHttpTests : IClassFixture<PostgresWebApplicationF
         if (!_factory.DockerAvailable)
             return;
 
-        var (client, _) = await RegisterAndAuthAsync($"deliv-p16-{Guid.NewGuid():N}"[..18]);
+        var (client, _) = await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"deliv-p16-{Guid.NewGuid():N}"[..18], withApiKey: true);
 
         var response = await client.GetAsync("/api/v1/sales/deliveries");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -212,36 +211,4 @@ public class Phase16IntegrationHttpTests : IClassFixture<PostgresWebApplicationF
         await seeder.Handle(new CompanyCreatedEvent { CompanyId = companyId }, CancellationToken.None);
     }
 
-    private async Task<(HttpClient Client, Guid CompanyId)> RegisterAndAuthAsync(string emailPrefix)
-    {
-        var client = _factory.CreatePostgresClient();
-        var suffix = Guid.NewGuid().ToString("N")[..8];
-
-        var registerResponse = await client.PostAsJsonAsync("/api/auth/register", new RegisterCompanyCommand
-        {
-            CompanyName = $"Phase16 Co {suffix}",
-            CompanyTaxId = IntegrationTestRegistration.NextTaxId(),
-            CompanyAddress = "Calle Test 1",
-            AdminEmail = $"{emailPrefix}-{suffix}@test.local",
-            AdminPassword = "SecurePass1!",
-            AdminFirstName = "Admin",
-            AdminLastName = "Test",
-        });
-
-        Assert.Equal(HttpStatusCode.OK, registerResponse.StatusCode);
-        var body = await registerResponse.Content.ReadFromJsonAsync<RegisterCompanyResponse>();
-
-        var authedClient = _factory.CreatePostgresClient();
-        TestAuthHelper.ApplyAuth(authedClient, body!.Token, body.CompanyId);
-
-        var keyResponse = await authedClient.PostAsJsonAsync("/api/apikeys", new Erp.Application.Features.ApiKeys.Commands.CreateApiKeyCommand
-        {
-            Name = "Phase16 Integration",
-            RateLimit = 500,
-        });
-        Assert.Equal(HttpStatusCode.OK, keyResponse.StatusCode);
-        var keyBody = await keyResponse.Content.ReadFromJsonAsync<Erp.Application.Features.ApiKeys.Commands.CreateApiKeyResult>();
-        authedClient.DefaultRequestHeaders.Add("X-Api-Key", keyBody!.RawKey);
-        return (authedClient, body.CompanyId);
-    }
 }

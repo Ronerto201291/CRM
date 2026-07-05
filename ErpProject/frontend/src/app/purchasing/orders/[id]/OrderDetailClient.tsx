@@ -3,13 +3,21 @@
 import { useState, useCallback } from 'react';
 import Link from 'next/link';
 import PageContainer from '@/components/PageContainer';
-import type { PurchaseOrderDetail } from './page';
+
+export interface PurchaseOrderDetail {
+    id: string;
+    number: string;
+    orderDate: string;
+    status: string;
+    totalAmount: number;
+    lines: { productId?: string; quantity: number; unitPrice: number }[];
+}
 
 const STATUS_MAP: Record<string, { label: string; cls: string }> = {
-    Open: { label: 'Abierto', cls: 'badge-info' },
-    PartiallyReceived: { label: 'Parcial', cls: 'badge-warning' },
-    Completed: { label: 'Completado', cls: 'badge-success' },
-    Cancelled: { label: 'Cancelado', cls: 'badge-gray' },
+    Draft: { label: 'Borrador', cls: 'badge-gray' },
+    PendingApproval: { label: 'Pendiente aprobación', cls: 'badge-warning' },
+    Approved: { label: 'Aprobado', cls: 'badge-success' },
+    Rejected: { label: 'Rechazado', cls: 'badge-danger' },
 };
 
 interface OrderDetailClientProps {
@@ -29,14 +37,19 @@ export default function OrderDetailClient({ id, initialOrder }: OrderDetailClien
         else setOrder(null);
     }, [id]);
 
-    const doAction = async (action: string) => {
+    const doPost = async (action: string) => {
         setActionLoading(action);
         setActionError(null);
         setSuccessMsg(null);
         try {
-            const res = await fetch(`/api/proxy/v1/purchasing/orders/${id}/${action}`, { method: 'PATCH' });
-            if (res.ok) { setSuccessMsg('Acción realizada'); load(); }
-            else { const e = await res.json(); setActionError(e.error || 'Error'); }
+            const res = await fetch(`/api/proxy/v1/purchasing/orders/${id}/${action}`, { method: 'POST' });
+            if (res.ok) {
+                setSuccessMsg('Acción realizada correctamente');
+                await load();
+            } else {
+                const e = await res.json();
+                setActionError(e.error || 'Error');
+            }
         } finally {
             setActionLoading(null);
         }
@@ -51,7 +64,7 @@ export default function OrderDetailClient({ id, initialOrder }: OrderDetailClien
             <div className="page-header">
                 <div>
                     <h1 className="page-title">Pedido {order.number}</h1>
-                    <p className="page-subtitle">{order.supplierName}</p>
+                    <p className="page-subtitle">Total {fmt(order.totalAmount)}</p>
                 </div>
                 <Link href="/purchasing/orders" className="btn btn-secondary">← Volver</Link>
             </div>
@@ -66,97 +79,57 @@ export default function OrderDetailClient({ id, initialOrder }: OrderDetailClien
                 </div>
             )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '20px', marginBottom: '20px' }}>
-                <div className="erp-card">
-                    <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '12px' }}>Información del Proveedor</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                        <div><span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>Nombre</span><div style={{ fontWeight: 600 }}>{order.supplierName}</div></div>
-                        {order.supplierTaxId && <div><span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>NIF/CIF</span><div style={{ fontWeight: 600 }}>{order.supplierTaxId}</div></div>}
-                        {order.supplierEmail && <div><span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>Email</span><div style={{ fontWeight: 600 }}>{order.supplierEmail}</div></div>}
-                        <div><span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>Fecha</span><div style={{ fontWeight: 600 }}>{new Date(order.orderDate).toLocaleDateString('es-ES')}</div></div>
-                    </div>
-                </div>
-                <div className="erp-card" style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '8px' }}>Estado</div>
-                    <span className={`badge ${STATUS_MAP[order.status]?.cls ?? 'badge-gray'}`} style={{ fontSize: '14px', padding: '8px 16px' }}>
-                        {STATUS_MAP[order.status]?.label ?? order.status}
-                    </span>
-                    <div style={{ marginTop: '16px', fontSize: '24px', fontWeight: 800, color: 'var(--brand-primary)' }}>{fmt(order.total)}</div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Total pedido</div>
+            <div className="erp-card" style={{ marginBottom: '20px', textAlign: 'center' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '8px' }}>Estado</div>
+                <span className={`badge ${STATUS_MAP[order.status]?.cls ?? 'badge-gray'}`} style={{ fontSize: '14px', padding: '8px 16px' }}>
+                    {STATUS_MAP[order.status]?.label ?? order.status}
+                </span>
+                <div style={{ marginTop: '12px', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                    Fecha: {new Date(order.orderDate).toLocaleDateString('es-ES')}
                 </div>
             </div>
 
-            {order.notes && (
-                <div className="erp-card" style={{ marginBottom: '20px' }}>
-                    <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>Notas</div>
-                    <div style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>{order.notes}</div>
-                </div>
-            )}
-
             <div className="erp-card" style={{ marginBottom: '20px' }}>
-                <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '12px' }}>Líneas del Pedido</div>
                 <table className="erp-table">
                     <thead>
                         <tr>
-                            <th>Descripción</th>
                             <th style={{ textAlign: 'right' }}>Cant.</th>
-                            <th style={{ textAlign: 'right' }}>Recibido</th>
-                            <th style={{ textAlign: 'right' }}>Facturado</th>
                             <th style={{ textAlign: 'right' }}>P. Unit.</th>
                             <th style={{ textAlign: 'right' }}>Total</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {order.lines.map(line => (
-                            <tr key={line.id}>
-                                <td style={{ fontWeight: 500 }}>{line.description}</td>
+                        {order.lines.map((line, i) => (
+                            <tr key={i}>
                                 <td style={{ textAlign: 'right' }}>{line.quantity}</td>
-                                <td style={{ textAlign: 'right', color: line.deliveredQuantity >= line.quantity ? 'var(--success)' : 'var(--warning)' }}>{line.deliveredQuantity}</td>
-                                <td style={{ textAlign: 'right', color: 'var(--text-muted)' }}>{line.billedQuantity}</td>
                                 <td style={{ textAlign: 'right' }}>{fmt(line.unitPrice)}</td>
-                                <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(line.total)}</td>
+                                <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(line.quantity * line.unitPrice)}</td>
                             </tr>
                         ))}
                     </tbody>
-                    <tfoot style={{ background: 'var(--surface-2)' }}>
-                        <tr>
-                            <td colSpan={5} style={{ textAlign: 'right', padding: '8px 12px', fontWeight: 600 }}>Base imponible</td>
-                            <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(order.subtotal)}</td>
-                        </tr>
-                        <tr>
-                            <td colSpan={5} style={{ textAlign: 'right', padding: '8px 12px', fontWeight: 600 }}>IVA</td>
-                            <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(order.taxAmount)}</td>
-                        </tr>
-                        <tr>
-                            <td colSpan={5} style={{ textAlign: 'right', padding: '8px 12px', fontWeight: 800, fontSize: '15px' }}>Total</td>
-                            <td style={{ textAlign: 'right', fontWeight: 800, fontSize: '15px', color: 'var(--brand-primary)' }}>{fmt(order.total)}</td>
-                        </tr>
-                    </tfoot>
                 </table>
             </div>
 
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                {order.status === 'Open' && (
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                {(order.status === 'Draft' || order.status === 'Rejected') && (
+                    <button className="btn btn-primary" onClick={() => doPost('submit-for-approval')} disabled={!!actionLoading}>
+                        {actionLoading === 'submit-for-approval' ? 'Enviando...' : 'Enviar a aprobación'}
+                    </button>
+                )}
+                {order.status === 'PendingApproval' && (
                     <>
-                        <a href={`/purchasing/receipts/new?purchaseOrderId=${order.id}`} className="btn btn-secondary">
-                            📦 Registrar Recepción
-                        </a>
-                        <a href={`/purchasing/invoices/new?purchaseOrderId=${order.id}`} className="btn btn-secondary">
-                            📄 Crear Factura
-                        </a>
-                        <button className="btn btn-secondary" onClick={() => doAction('cancel')} disabled={!!actionLoading} style={{ color: 'var(--danger)' }}>
-                            {actionLoading === 'cancel' ? 'Cancelando...' : '✕ Cancelar'}
+                        <button className="btn btn-primary" onClick={() => doPost('approve')} disabled={!!actionLoading}>
+                            {actionLoading === 'approve' ? 'Aprobando...' : '✓ Aprobar'}
+                        </button>
+                        <button className="btn btn-secondary" onClick={() => doPost('reject')} disabled={!!actionLoading} style={{ color: 'var(--danger)' }}>
+                            {actionLoading === 'reject' ? 'Rechazando...' : '✕ Rechazar'}
                         </button>
                     </>
                 )}
-                {order.status === 'PartiallyReceived' && (
+                {order.status === 'Approved' && (
                     <>
-                        <a href={`/purchasing/receipts/new?purchaseOrderId=${order.id}`} className="btn btn-secondary">
-                            📦 Registrar Recepción
-                        </a>
-                        <a href={`/purchasing/invoices/new?purchaseOrderId=${order.id}`} className="btn btn-secondary">
-                            📄 Crear Factura
-                        </a>
+                        <a href={`/purchasing/receipts/new?purchaseOrderId=${order.id}`} className="btn btn-secondary">📦 Registrar recepción</a>
+                        <a href={`/purchasing/invoices/new?purchaseOrderId=${order.id}`} className="btn btn-secondary">📄 Crear factura</a>
                     </>
                 )}
             </div>

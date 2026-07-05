@@ -12,6 +12,8 @@ public record PurchaseOrderDto(
     Guid Id,
     string Number,
     DateTime OrderDate,
+    string Status,
+    decimal TotalAmount,
     IReadOnlyList<PurchaseOrderLineDto> Lines);
 
 public record GetPurchaseOrdersQuery : IRequest<IReadOnlyList<PurchaseOrderDto>>;
@@ -45,16 +47,13 @@ public class GetPurchaseOrdersHandler : IRequestHandler<GetPurchaseOrdersQuery, 
     public async Task<IReadOnlyList<PurchaseOrderDto>> Handle(GetPurchaseOrdersQuery request, CancellationToken ct)
     {
         var tenantId = _tenant.TenantId ?? throw new InvalidOperationException("Tenant not resolved");
-        return await _ctx.PurchaseOrders
+        var orders = await _ctx.PurchaseOrders
             .Include(p => p.Lines)
             .Where(p => p.CompanyId == tenantId)
             .AsNoTracking()
-            .Select(p => new PurchaseOrderDto(
-                p.Id,
-                p.Number,
-                p.OrderDate,
-                p.Lines.Select(l => new PurchaseOrderLineDto(l.ProductId, l.Quantity, l.UnitPrice)).ToList()))
             .ToListAsync(ct);
+
+        return orders.Select(PurchaseOrderMapper.ToDto).ToList();
     }
 }
 
@@ -76,12 +75,7 @@ public class GetPurchaseOrderByIdHandler : IRequestHandler<GetPurchaseOrderByIdQ
             .Include(p => p.Lines)
             .AsNoTracking()
             .FirstOrDefaultAsync(p => p.Id == request.Id && p.CompanyId == tenantId, ct);
-        if (po == null) return null;
-        return new PurchaseOrderDto(
-            po.Id,
-            po.Number,
-            po.OrderDate,
-            po.Lines.Select(l => new PurchaseOrderLineDto(l.ProductId, l.Quantity, l.UnitPrice)).ToList());
+        return po == null ? null : PurchaseOrderMapper.ToDto(po);
     }
 }
 
@@ -105,6 +99,7 @@ public class CreatePurchaseOrderHandler : IRequestHandler<CreatePurchaseOrderCom
             CompanyId = tenantId,
             Number = request.Number,
             OrderDate = request.OrderDate,
+            Status = PurchaseOrderStatuses.Draft,
         };
 
         foreach (var l in request.Lines)
@@ -124,11 +119,7 @@ public class CreatePurchaseOrderHandler : IRequestHandler<CreatePurchaseOrderCom
         _ctx.PurchaseOrders.Add(po);
         await _ctx.SaveChangesAsync(ct);
 
-        return new PurchaseOrderDto(
-            po.Id,
-            po.Number,
-            po.OrderDate,
-            po.Lines.Select(l => new PurchaseOrderLineDto(l.ProductId, l.Quantity, l.UnitPrice)).ToList());
+        return PurchaseOrderMapper.ToDto(po);
     }
 }
 
@@ -150,6 +141,9 @@ public class UpdatePurchaseOrderHandler : IRequestHandler<UpdatePurchaseOrderCom
             .Include(p => p.Lines)
             .FirstOrDefaultAsync(p => p.Id == request.Id && p.CompanyId == tenantId, ct);
         if (po == null) return null;
+
+        if (po.Status is not (PurchaseOrderStatuses.Draft or PurchaseOrderStatuses.Rejected))
+            throw new InvalidOperationException("Solo pedidos en borrador o rechazados pueden editarse.");
 
         po.Number = request.Number;
         po.OrderDate = request.OrderDate;
@@ -173,11 +167,7 @@ public class UpdatePurchaseOrderHandler : IRequestHandler<UpdatePurchaseOrderCom
         }
 
         await _ctx.SaveChangesAsync(ct);
-        return new PurchaseOrderDto(
-            po.Id,
-            po.Number,
-            po.OrderDate,
-            po.Lines.Select(x => new PurchaseOrderLineDto(x.ProductId, x.Quantity, x.UnitPrice)).ToList());
+        return PurchaseOrderMapper.ToDto(po);
     }
 }
 
@@ -198,6 +188,8 @@ public class DeletePurchaseOrderHandler : IRequestHandler<DeletePurchaseOrderCom
         var po = await _ctx.PurchaseOrders
             .FirstOrDefaultAsync(p => p.Id == request.Id && p.CompanyId == tenantId, ct);
         if (po == null) return false;
+        if (po.Status == PurchaseOrderStatuses.PendingApproval)
+            throw new InvalidOperationException("No se puede eliminar un pedido pendiente de aprobación.");
         _ctx.PurchaseOrders.Remove(po);
         await _ctx.SaveChangesAsync(ct);
         return true;

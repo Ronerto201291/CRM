@@ -20,7 +20,6 @@ const emptyLine = (): ReceiptLine => ({
 
 export default function NewReceiptPage() {
     const [orders, setOrders] = useState<PurchaseOrder[]>([]);
-    const [selectedOrder, setSelectedOrder] = useState<PurchaseOrder | null>(null);
     const [form, setForm] = useState({
         purchaseOrderId: '',
         number: '',
@@ -38,8 +37,6 @@ export default function NewReceiptPage() {
     }, []);
 
     const selectOrder = (orderId: string) => {
-        const order = orders.find(o => o.id === orderId);
-        setSelectedOrder(order || null);
         setForm(f => ({ ...f, purchaseOrderId: orderId }));
     };
 

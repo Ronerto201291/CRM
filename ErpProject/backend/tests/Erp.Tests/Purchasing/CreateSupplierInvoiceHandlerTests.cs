@@ -60,7 +60,7 @@ public class CreateSupplierInvoiceHandlerTests
         app.Companies.Add(new Company { Id = companyId, Name = "Co", TaxId = "B12345674" });
         await app.SaveChangesAsync();
 
-        purch.PurchaseOrders.Add(new PurchaseOrder { Id = poId, CompanyId = companyId, Number = "PO-1", OrderDate = DateTime.UtcNow });
+        purch.PurchaseOrders.Add(new PurchaseOrder { Id = poId, CompanyId = companyId, Number = "PO-1", OrderDate = DateTime.UtcNow, Status = PurchaseOrderStatuses.Approved });
         purch.PurchaseOrderLines.Add(new PurchaseOrderLine { Id = lineId, PurchaseOrderId = poId, Quantity = 10m, UnitPrice = 5m });
         purch.GoodsReceiptLines.Add(new GoodsReceiptLine
         {
@@ -111,7 +111,7 @@ public class CreateSupplierInvoiceHandlerTests
         app.Companies.Add(new Company { Id = companyId, Name = "Co", TaxId = "B12345674", MatchingToleranceAmount = 0m });
         await app.SaveChangesAsync();
 
-        purch.PurchaseOrders.Add(new PurchaseOrder { Id = poId, CompanyId = companyId, Number = "PO-2", OrderDate = DateTime.UtcNow });
+        purch.PurchaseOrders.Add(new PurchaseOrder { Id = poId, CompanyId = companyId, Number = "PO-2", OrderDate = DateTime.UtcNow, Status = PurchaseOrderStatuses.Approved });
         purch.PurchaseOrderLines.Add(new PurchaseOrderLine { Id = lineId, PurchaseOrderId = poId, Quantity = 10m, UnitPrice = 5m });
         purch.GoodsReceiptLines.Add(new GoodsReceiptLine { PurchaseOrderLineId = lineId, QuantityReceived = 10m, UnitPrice = 5m });
         await purch.SaveChangesAsync();
@@ -157,7 +157,7 @@ public class CreateSupplierInvoiceHandlerTests
         app.Companies.Add(new Company { Id = companyId, Name = "Co", TaxId = "B12345674", MatchingToleranceAmount = 1m });
         await app.SaveChangesAsync();
 
-        purch.PurchaseOrders.Add(new PurchaseOrder { Id = poId, CompanyId = companyId, Number = "PO-3", OrderDate = DateTime.UtcNow });
+        purch.PurchaseOrders.Add(new PurchaseOrder { Id = poId, CompanyId = companyId, Number = "PO-3", OrderDate = DateTime.UtcNow, Status = PurchaseOrderStatuses.Approved });
         purch.PurchaseOrderLines.Add(new PurchaseOrderLine { Id = lineId, PurchaseOrderId = poId, Quantity = 10m, UnitPrice = 5m });
         purch.GoodsReceiptLines.Add(new GoodsReceiptLine { PurchaseOrderLineId = lineId, QuantityReceived = 10m, UnitPrice = 5m });
         await purch.SaveChangesAsync();

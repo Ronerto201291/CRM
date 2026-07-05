@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using Erp.Application.Features.Auth.Commands;
 using Xunit;
 
 namespace Erp.IntegrationTests;
@@ -21,7 +20,7 @@ public class CreateInvoicePostgresTests : IClassFixture<PostgresWebApplicationFa
         if (!_factory.DockerAvailable)
             return;
 
-        var client = await RegisterAndAuthAsync($"create-inv-{Guid.NewGuid():N}"[..20]);
+        var client = (await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"create-inv-{Guid.NewGuid():N}"[..20])).Client;
 
         var createResponse = await client.PostAsJsonAsync("/api/invoices", new
         {
@@ -71,7 +70,7 @@ public class CreateInvoicePostgresTests : IClassFixture<PostgresWebApplicationFa
         if (!_factory.DockerAvailable)
             return;
 
-        var client = await RegisterAndAuthAsync($"get-inv-{Guid.NewGuid():N}"[..18]);
+        var client = (await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"get-inv-{Guid.NewGuid():N}"[..18])).Client;
 
         var createResponse = await client.PostAsJsonAsync("/api/invoices", new
         {
@@ -116,32 +115,9 @@ public class CreateInvoicePostgresTests : IClassFixture<PostgresWebApplicationFa
         if (!_factory.DockerAvailable)
             return;
 
-        var client = await RegisterAndAuthAsync($"get-inv-404-{Guid.NewGuid():N}"[..18]);
+        var client = (await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"get-inv-404-{Guid.NewGuid():N}"[..18])).Client;
         var response = await client.GetAsync($"/api/invoices/{Guid.NewGuid()}");
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
-    private async Task<HttpClient> RegisterAndAuthAsync(string emailPrefix)
-    {
-        var client = _factory.CreatePostgresClient();
-        var suffix = Guid.NewGuid().ToString("N")[..8];
-
-        var registerResponse = await client.PostAsJsonAsync("/api/auth/register", new RegisterCompanyCommand
-        {
-            CompanyName = $"Invoice Co {suffix}",
-            CompanyTaxId = IntegrationTestRegistration.NextTaxId(),
-            CompanyAddress = "Calle Test 1",
-            AdminEmail = $"{emailPrefix}-{suffix}@test.local",
-            AdminPassword = "SecurePass1!",
-            AdminFirstName = "Admin",
-            AdminLastName = "Test",
-        });
-
-        Assert.Equal(HttpStatusCode.OK, registerResponse.StatusCode);
-        var body = await registerResponse.Content.ReadFromJsonAsync<RegisterCompanyResponse>();
-
-        var authedClient = _factory.CreatePostgresClient();
-        TestAuthHelper.ApplyAuth(authedClient, body!.Token, body.CompanyId);
-        return authedClient;
-    }
 }

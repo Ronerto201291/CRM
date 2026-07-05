@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using Erp.Application.Features.Auth.Commands;
 using Xunit;
 
 namespace Erp.IntegrationTests;
@@ -21,7 +20,7 @@ public class SalesOrderFlowPostgresTests : IClassFixture<PostgresWebApplicationF
         if (!_factory.DockerAvailable)
             return;
 
-        var client = await RegisterAndAuthAsync($"sales-flow-{Guid.NewGuid():N}"[..18]);
+        var client = (await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"sales-flow-{Guid.NewGuid():N}"[..18], withApiKey: true)).Client;
 
         var clientResponse = await client.PostAsJsonAsync("/api/clients", new
         {
@@ -85,39 +84,6 @@ public class SalesOrderFlowPostgresTests : IClassFixture<PostgresWebApplicationF
 
         var listResponse = await client.GetAsync("/api/v1/sales/invoices");
         Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
-    }
-
-    private async Task<HttpClient> RegisterAndAuthAsync(string emailPrefix)
-    {
-        var client = _factory.CreatePostgresClient();
-        var suffix = Guid.NewGuid().ToString("N")[..8];
-
-        var registerResponse = await client.PostAsJsonAsync("/api/auth/register", new RegisterCompanyCommand
-        {
-            CompanyName = $"Sales Co {suffix}",
-            CompanyTaxId = IntegrationTestRegistration.NextTaxId(),
-            CompanyAddress = "Calle Test 1",
-            AdminEmail = $"{emailPrefix}-{suffix}@test.local",
-            AdminPassword = "SecurePass1!",
-            AdminFirstName = "Admin",
-            AdminLastName = "Test",
-        });
-
-        Assert.Equal(HttpStatusCode.OK, registerResponse.StatusCode);
-        var body = await registerResponse.Content.ReadFromJsonAsync<RegisterCompanyResponse>();
-
-        var authedClient = _factory.CreatePostgresClient();
-        TestAuthHelper.ApplyAuth(authedClient, body!.Token, body.CompanyId);
-
-        var keyResponse = await authedClient.PostAsJsonAsync("/api/apikeys", new Erp.Application.Features.ApiKeys.Commands.CreateApiKeyCommand
-        {
-            Name = "Sales Flow Integration",
-            RateLimit = 500,
-        });
-        Assert.Equal(HttpStatusCode.OK, keyResponse.StatusCode);
-        var keyBody = await keyResponse.Content.ReadFromJsonAsync<Erp.Application.Features.ApiKeys.Commands.CreateApiKeyResult>();
-        authedClient.DefaultRequestHeaders.Add("X-Api-Key", keyBody!.RawKey);
-        return authedClient;
     }
 
     private async Task<Guid> GetFirstSalesOrderLineIdAsync(Guid orderId)

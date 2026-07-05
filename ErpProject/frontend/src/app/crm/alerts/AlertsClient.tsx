@@ -36,7 +36,7 @@ export default function AlertsClient({ initialAlerts, initialClients }: AlertsCl
     const [form, setForm] = useState(EMPTY_FORM);
     const [saving, setSaving] = useState(false);
     const [filterTab, setFilterTab] = useState<'pending' | 'all'>('pending');
-    const { fetchCached, invalidateCached } = useCachedApi();
+    const { fetchCached } = useCachedApi();
 
     const load = useCallback(async () => {
         setLoading(true);

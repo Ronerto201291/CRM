@@ -1,17 +1,17 @@
 {
   "backend": {
-    "merged_line_min": 49.0,
+    "merged_line_min": 52.0,
     "unit_line_min": 27.0,
-    "integration_line_min": 49.0,
+    "integration_line_min": 52.0,
     "modules": {
       "Erp.Modules.Billing.Application": 55.0,
-      "Erp.Modules.Accounting.Application": 20.0,
+      "Erp.Modules.Accounting.Application": 22.0,
       "Erp.Infrastructure": 50.0
     }
   },
   "frontend": {
-    "lines_min": 39.0,
-    "statements_min": 39.0,
+    "lines_min": 43.0,
+    "statements_min": 43.0,
     "functions_min": 25.0,
     "branches_min": 50.0
   },

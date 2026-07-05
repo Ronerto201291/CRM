@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import PageListLayout from "@/components/PageListLayout";
 import FormErrorBanner from "@/components/FormErrorBanner";
 import { updateLineAt } from "@/lib/lineForm";
@@ -25,7 +25,6 @@ const emptyLine = (): DeliveryLine => ({
 
 export default function NewDeliveryNotePage() {
     const [orders, setOrders] = useState<SalesOrder[]>([]);
-    const [selectedOrder, setSelectedOrder] = useState<SalesOrder | null>(null);
     const [form, setForm] = useState({
         salesOrderId: '',
         number: '',
@@ -43,8 +42,6 @@ export default function NewDeliveryNotePage() {
     }, []);
 
     const selectOrder = (orderId: string) => {
-        const order = orders.find(o => o.id === orderId);
-        setSelectedOrder(order || null);
         setForm(f => ({ ...f, salesOrderId: orderId }));
     };
 

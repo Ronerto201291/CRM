@@ -43,7 +43,7 @@ export default function UsersClient({
     initialRoles: Role[];
 }) {
     const [users, setUsers]       = useState<User[]>(initialUsers);
-    const [roles, setRoles]       = useState<Role[]>(initialRoles);
+    const [roles]       = useState<Role[]>(initialRoles);
     const [loading, setLoading]   = useState(false);
     const [showModal, setShowModal] = useState(false);
     const { register, handleSubmit, reset, formState: { errors } } = useForm<CreateUserFormValues>({
@@ -65,16 +65,6 @@ export default function UsersClient({
         const data = await fetchCached<unknown>('users');
         if (data) setUsers(parseListResponse<User>(data));
         setLoading(false);
-    };
-
-    const loadRoles = async () => {
-        invalidateCached('users/roles');
-        const data = await fetchCached<unknown>('users/roles');
-        if (data) {
-            const roleList = parseListResponse<Role>(data);
-            setRoles(roleList);
-            if (roleList.length > 0) reset({ firstName: '', lastName: '', email: '', roleId: roleList[roleList.length - 1].id });
-        }
     };
 
     const showMsg = (type: 'success' | 'error', text: string) => {

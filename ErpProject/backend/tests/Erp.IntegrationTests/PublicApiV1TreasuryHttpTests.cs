@@ -1,6 +1,4 @@
 using System.Net;
-using System.Net.Http.Json;
-using Erp.Application.Features.Auth.Commands;
 using Xunit;
 
 namespace Erp.IntegrationTests;
@@ -19,7 +17,8 @@ public class PublicApiV1TreasuryHttpTests : IClassFixture<PostgresWebApplication
     {
         if (!_factory.DockerAvailable) return;
 
-        var client = await CreateAuthedClientWithApiKeyAsync();
+        var client = (await IntegrationTestAuth.RegisterEnterpriseAsync(
+            _factory, $"v1-treasury-{Guid.NewGuid():N}"[..18], withApiKey: true)).Client;
         var response = await client.GetAsync("/api/v1/treasury/currencies");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -30,7 +29,8 @@ public class PublicApiV1TreasuryHttpTests : IClassFixture<PostgresWebApplication
     {
         if (!_factory.DockerAvailable) return;
 
-        var client = await CreateAuthedClientWithApiKeyAsync();
+        var client = (await IntegrationTestAuth.RegisterEnterpriseAsync(
+            _factory, $"v1-treasury-{Guid.NewGuid():N}"[..18], withApiKey: true)).Client;
         var response = await client.GetAsync("/api/v1/treasury/financing/confirming");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -41,7 +41,8 @@ public class PublicApiV1TreasuryHttpTests : IClassFixture<PostgresWebApplication
     {
         if (!_factory.DockerAvailable) return;
 
-        var client = await CreateAuthedClientWithApiKeyAsync();
+        var client = (await IntegrationTestAuth.RegisterEnterpriseAsync(
+            _factory, $"v1-treasury-{Guid.NewGuid():N}"[..18], withApiKey: true)).Client;
         var response = await client.GetAsync("/api/v1/treasury/financing/credit-lines");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -52,43 +53,10 @@ public class PublicApiV1TreasuryHttpTests : IClassFixture<PostgresWebApplication
     {
         if (!_factory.DockerAvailable) return;
 
-        var client = await CreateAuthedClientWithApiKeyAsync();
+        var client = (await IntegrationTestAuth.RegisterEnterpriseAsync(
+            _factory, $"v1-treasury-{Guid.NewGuid():N}"[..18], withApiKey: true)).Client;
         var response = await client.GetAsync("/api/v1/treasury/consolidation");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-    }
-
-    private async Task<HttpClient> CreateAuthedClientWithApiKeyAsync()
-    {
-        var suffix = Guid.NewGuid().ToString("N")[..8];
-        var registerResponse = await _factory.CreatePostgresClient().PostAsJsonAsync("/api/auth/register", new RegisterCompanyCommand
-        {
-            CompanyName = $"V1 Treasury {suffix}",
-            CompanyTaxId = IntegrationTestRegistration.NextTaxId(),
-            CompanyAddress = "Calle Test 1",
-            AdminEmail = $"v1-treasury-{suffix}@test.local",
-            AdminPassword = "SecurePass1!",
-            AdminFirstName = "Admin",
-            AdminLastName = "Test",
-        });
-        Assert.Equal(HttpStatusCode.OK, registerResponse.StatusCode);
-        var registerBody = await registerResponse.Content.ReadFromJsonAsync<RegisterCompanyResponse>();
-        Assert.NotNull(registerBody);
-
-        var client = _factory.CreatePostgresClient();
-        TestAuthHelper.ApplyAuth(client, registerBody!.Token, registerBody.CompanyId);
-
-        var keyResponse = await client.PostAsJsonAsync("/api/apikeys", new Erp.Application.Features.ApiKeys.Commands.CreateApiKeyCommand
-        {
-            Name = "V1 Integration",
-            RateLimit = 500,
-        });
-        Assert.Equal(HttpStatusCode.OK, keyResponse.StatusCode);
-        var keyBody = await keyResponse.Content.ReadFromJsonAsync<Erp.Application.Features.ApiKeys.Commands.CreateApiKeyResult>();
-        Assert.NotNull(keyBody);
-
-        client.DefaultRequestHeaders.Remove("X-Api-Key");
-        client.DefaultRequestHeaders.Add("X-Api-Key", keyBody!.RawKey);
-        return client;
     }
 }

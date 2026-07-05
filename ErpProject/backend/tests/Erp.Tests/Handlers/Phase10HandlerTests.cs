@@ -129,6 +129,7 @@ public class CreateGoodsReceiptHandlerTests
             CompanyId = companyId,
             Number = "PO-1",
             OrderDate = DateTime.UtcNow,
+            Status = PurchaseOrderStatuses.Approved,
         });
         ctx.PurchaseOrderLines.Add(new PurchaseOrderLine
         {

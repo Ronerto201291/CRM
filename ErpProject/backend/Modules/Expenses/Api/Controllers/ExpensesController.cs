@@ -127,6 +127,18 @@ public class ExpensesController : ControllerBase
         catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
     }
 
+    [HttpPost("{id}/submit-for-approval"), Authorize, RequiredModule("Expenses"), RequirePermission(Permissions.Expense.Update)]
+    public async Task<IActionResult> SubmitForApproval(Guid id, CancellationToken ct)
+    {
+        try
+        {
+            var result = await _mediator.Send(new SubmitExpenseForApprovalCommand { Id = id }, ct);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
+        catch (KeyNotFoundException) { return NotFound(); }
+    }
+
     [HttpPost("{id}/approve"), Authorize, RequiredModule("Expenses"), RequirePermission(Permissions.Expense.Approve)]
     public async Task<IActionResult> Approve(Guid id, CancellationToken ct)
     {

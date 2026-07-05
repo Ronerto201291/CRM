@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import PageContainer from '@/components/PageContainer';
 import EmptyState from '@/components/EmptyState';
 import LoadingPlaceholder from '@/components/LoadingPlaceholder';
@@ -71,17 +71,17 @@ export default function FiscalClient({ initialEvents, initialYear }: FiscalClien
     const [form, setForm] = useState({ modelCode: '303', modelName: '', year: new Date().getFullYear(), quarter: '', month: '', deadlineDate: '', reminderDate: '', amount: '', notes: '' });
     const [saving, setSaving] = useState(false);
 
-    const load = async () => {
+    const load = useCallback(async () => {
         setLoading(true);
         const r = await fetch(`/api/proxy/fiscal/calendar?year=${year}`);
         if (r.ok) setEvents(await r.json());
         setLoading(false);
-    };
+    }, [year]);
 
     useEffect(() => {
         if (year === initialYear && initialEvents.length > 0) return;
-        void load();
-    }, [year]);
+        queueMicrotask(() => { void load(); });
+    }, [year, initialYear, initialEvents.length, load]);
 
     const filtered = useMemo(() => events.filter(e => {
         if (filter === 'pending') return e.status === 'Pending' || e.status === 'Reminded' || e.status === 'InProgress';

@@ -8,7 +8,31 @@ un smoke test por módulo/área; ampliación incremental hacia cobertura exhaust
 
 
 
-## Inventario actual (jul 2026, fase 17 — ROI tests)
+## Inventario actual (jul 2026, fase 18 — backlog opcional ADR-0018)
+
+| Área | Cantidad | Tests existentes |
+
+|---|---|---|
+
+| Controllers API | ~54 | 1 HTTP smoke 401 por controller (`ControllerUnauthorizedTests`) |
+
+| Handlers MediatR | ~200+ clases | **578 unit tests** (+ `Phase18HandlerTests`: fixed assets, deferred entries, contacts, recargo) |
+
+| Páginas frontend | ~77 `page.tsx` | **129 tests Vitest** (+ `NewDeliveryNotePage`, `ClientEditorClient`; smoke RSC con `await Page()`) |
+
+| Architecture tests | 4 reglas | **5** (`Erp.ArchitectureTests`) |
+
+| Integration (Testcontainers) | Postgres + Redis | **152 tests** (+ `PostgresRlsBootstrapTests`) |
+
+| E2E Playwright | 19 | 12 smoke + 6 business flows + **verify TOTP completo** (`E2E_2FA_TOTP_SECRET` + otplib) |
+
+**Total CI:** ~**763 tests** (578 unit + 152 integration + 129 frontend + 19 E2E). Gates: merged **52%**, unit **27%** (objetivo 30% pendiente medición ~26–28%), Accounting.Application **22%**, frontend líneas **43%** (medido ~45%).
+
+**Lint frontend:** 0 errores; **0 warnings `react-hooks/*`** (26 warnings restantes: `no-unused-vars`, `@next/next/no-img-element`).
+
+**RLS (#34):** 19 tablas — 10 core + 9 módulo (`billing.Invoices/Quotes`, `crm.Clients/Suppliers/Leads/Contacts`, `expenses.ExpenseDocuments`, `sales.SalesOrders`, `purchasing.PurchaseOrders`).
+
+## Inventario anterior (jul 2026, fase 17 — ROI tests)
 
 | Área | Cantidad | Tests existentes |
 
@@ -197,6 +221,8 @@ un smoke test por módulo/área; ampliación incremental hacia cobertura exhaust
 
 - **`PostgresWebApplicationFactory`** + `TestAuthHelper` + `IntegrationTestDatabaseMigrator`.
 
+- **Auth HTTP centralizada (ADR-0018 #42c):** `IntegrationTestAuth.RegisterEnterpriseAsync` — register real → upgrade plan Enterprise → habilitar todos los `PlanModules` incluidos como `TenantModule` (`IntegrationTestModuleHelper`). Usar en cualquier test que llame endpoints con `[RequiredModule]`. `RegisterFreeAsync` solo para multi-tenant en CRM/Billing, webhooks de cambio de plan o tests que esperan 403 (`ModuleAuthorizationEndToEndTests`).
+
 - **Flujos autenticados:** register → JWT → CRUD cliente/factura; GET invoice; **POST v1 eliminate-intercompany** JWT + X-Api-Key.
 
 - **Fase 8:** `PublicApiV1TreasuryHttpTests` — GET `/api/v1/treasury/currencies`, `/financing/confirming`, `/financing/credit-lines`, `/consolidation` con JWT + X-Api-Key.
@@ -250,11 +276,14 @@ un smoke test por módulo/área; ampliación incremental hacia cobertura exhaust
 
 **Nota:** el umbral coverlet **50%** en csproj mide un scope distinto (assemblies referenciados por cada proyecto de test) y **no** sustituye al gate XPlat. El gate real es `check-coverage.py` + Vitest thresholds.
 
-### CI (`.github/workflows/ci-cd.yml`)
+### CI (`/.github/workflows/ci-cd.yml` en la raíz del monorepo)
 
-1. `backend-build`: unit + integration con `--collect:"XPlat Code Coverage"` → `check-coverage.py`
+Pipeline único en la raíz (`c:\CRM\.github\workflows\ci-cd.yml`); `ErpProject/.github/workflows/` solo documenta la redirección.
+
+1. `backend-build`: unit + integration con `--collect:"XPlat Code Coverage"` → `ErpProject/scripts/check-coverage.py`
 2. `frontend-build`: `npm run test:coverage` (Vitest v8 + umbrales)
-3. `e2e-playwright`: `needs: [backend-build, frontend-build]` — deploy Docker solo si ambos gates pasan
+3. `e2e-playwright`: `needs: [backend-build, frontend-build]`
+4. `docker-build` + `deploy` (Hetzner): solo `push` a `main`, tras pasar E2E y coverage gates
 
 ### Comandos locales
 
@@ -285,21 +314,17 @@ Pendiente para «total»: E2E verify TOTP (`E2E_2FA_TOTP_SECRET`), más handlers
 
 ## CI (`/.github/workflows/ci-cd.yml`)
 
+Jobs: `backend-build` → `frontend-build` (paralelos) → `e2e-playwright` → `docker-build` (solo `main`) → `deploy` Hetzner (solo `main`).
 
+```bash
+# Backend gate (desde raíz monorepo)
+bash ErpProject/scripts/run-backend-coverage-gate.sh
 
-```yaml
-
-dotnet test Erp.Tests + Erp.IntegrationTests --collect XPlat → check-coverage.py (gate bloqueante)
-
-npm ci && npm run test:coverage && npm run build
-
-# push main + pull_request: e2e-playwright (needs coverage gates) + wait-for-health
-
+# Frontend gate
+cd ErpProject/frontend && npm ci && npm run test:coverage && npm run build
 ```
 
-
-
-**Gate bloqueante** en `scripts/check-coverage.py` (merged ≥49%, unit ≥27%, módulos críticos). Frontend: Vitest thresholds ≥39% líneas. Upload Codecov opcional con secret `CODECOV_TOKEN` en repo.
+**Gate bloqueante** en `ErpProject/scripts/check-coverage.py` (merged ≥49%, unit ≥27%, módulos críticos). Frontend: Vitest thresholds ≥39% líneas. Upload Codecov opcional con secret `CODECOV_TOKEN`.
 
 
 

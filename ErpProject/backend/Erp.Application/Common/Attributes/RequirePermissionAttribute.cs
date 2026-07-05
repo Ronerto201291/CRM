@@ -305,6 +305,7 @@ public static class Permissions
         public const string Read   = "PurchaseOrder:Read";
         public const string Update = "PurchaseOrder:Update";
         public const string Delete = "PurchaseOrder:Delete";
+        public const string Approve = "PurchaseOrder:Approve";
     }
 
     public static class PurchaseInvoice

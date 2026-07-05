@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import PageContainer from '@/components/PageContainer';
 import AccessibleModal from '@/components/AccessibleModal';
 import FormLabel from '@/components/FormLabel';
@@ -47,7 +47,7 @@ export default function InventoryClient({
 }) {
     const [tab, setTab] = useState<Tab>('products');
     const [products, setProducts] = useState<Product[]>(initialProducts);
-    const [warehouses, setWarehouses] = useState<Warehouse[]>(initialWarehouses);
+    const [warehouses] = useState<Warehouse[]>(initialWarehouses);
     const [movements, setMovements] = useState<Movement[]>([]);
     const [movPage, setMovPage] = useState(1);
     const [movTotal, setMovTotal] = useState(0);
@@ -69,12 +69,7 @@ export default function InventoryClient({
         if (data) setProducts(parseListResponse<Product>(data));
     };
 
-    const loadWarehouses = async () => {
-        const data = await fetchCached<unknown>('inventory/warehouses');
-        if (data) setWarehouses(parseListResponse<Warehouse>(data));
-    };
-
-    const loadMovements = async (page = 1) => {
+    const loadMovements = useCallback(async (page = 1) => {
         const r = await fetch(`/api/proxy/inventory/movements?page=${page}&pageSize=20`);
         if (r.ok) {
             const data = await r.json();
@@ -82,9 +77,11 @@ export default function InventoryClient({
             setMovTotal(data.total ?? 0);
             setMovPage(page);
         }
-    };
+    }, []);
 
-    useEffect(() => { if (tab === 'movements') loadMovements(1); }, [tab]);
+    useEffect(() => {
+        if (tab === 'movements') queueMicrotask(() => { void loadMovements(1); });
+    }, [tab, loadMovements]);
 
     const handleSave = async () => {
         setFormError('');

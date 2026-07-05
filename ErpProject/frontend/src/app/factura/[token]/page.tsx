@@ -65,7 +65,9 @@ function PublicInvoiceView() {
         setLoading(false);
     }, [token]);
 
-    useEffect(() => { load(); }, [load]);
+    useEffect(() => {
+        queueMicrotask(() => { void load(); });
+    }, [load]);
 
     const handlePay = async () => {
         setPaying(true);

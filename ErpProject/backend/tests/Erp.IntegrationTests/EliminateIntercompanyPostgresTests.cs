@@ -1,8 +1,5 @@
-using System.Net;
-using System.Net.Http.Json;
 using System.Text.Json;
 using Erp.Application.Common.Interfaces;
-using Erp.Application.Features.Auth.Commands;
 using Erp.Modules.Treasury.Application.Features.Consolidation;
 using Erp.Modules.Treasury.Domain.Entities;
 using Erp.Modules.Treasury.Infrastructure.Data;
@@ -26,7 +23,7 @@ public class EliminateIntercompanyPostgresTests : IClassFixture<PostgresWebAppli
         if (!_factory.DockerAvailable)
             return;
 
-        var companyId = await RegisterCompanyAsync($"elim-ic-{Guid.NewGuid():N}"[..18]);
+        var companyId = (await IntegrationTestAuth.RegisterFreeAsync(_factory, $"elim-ic-{Guid.NewGuid():N}"[..18])).CompanyId;
         await SeedIntercompanyTransactionsAsync(companyId, count: 2);
 
         await using var ctx = CreateTreasuryContext(companyId);
@@ -44,26 +41,6 @@ public class EliminateIntercompanyPostgresTests : IClassFixture<PostgresWebAppli
             .Where(t => t.ParentCompanyId == companyId && !t.IsEliminated)
             .CountAsync();
         Assert.Equal(0, remaining);
-    }
-
-    private async Task<Guid> RegisterCompanyAsync(string emailPrefix)
-    {
-        var client = _factory.CreatePostgresClient();
-        var suffix = Guid.NewGuid().ToString("N")[..8];
-
-        var registerResponse = await client.PostAsJsonAsync("/api/auth/register", new RegisterCompanyCommand
-        {
-            CompanyName = $"IC Co {suffix}",
-            CompanyTaxId = IntegrationTestRegistration.NextTaxId(),
-            CompanyAddress = "Calle Test 1",
-            AdminEmail = $"{emailPrefix}-{suffix}@test.local",
-            AdminPassword = "SecurePass1!",
-            AdminFirstName = "Admin",
-            AdminLastName = "Test",
-        });
-        Assert.Equal(HttpStatusCode.OK, registerResponse.StatusCode);
-        var body = await registerResponse.Content.ReadFromJsonAsync<RegisterCompanyResponse>();
-        return body!.CompanyId;
     }
 
     private async Task SeedIntercompanyTransactionsAsync(Guid companyId, int count)

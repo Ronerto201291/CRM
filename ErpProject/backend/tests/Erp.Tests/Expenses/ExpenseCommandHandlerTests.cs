@@ -76,7 +76,8 @@ public class ApproveExpenseHandlerTests
         });
         await expenseCtx.SaveChangesAsync();
 
-        var handler = new ApproveExpenseHandler(expenseCtx, appCtx, new FakePublisher(), new FakeCurrentUserAccessor());
+        var handler = new ApproveExpenseHandler(
+            expenseCtx, appCtx, new FakePublisher(), new FakeCurrentUserAccessor(), new FakeApprovalThresholdService());
         var result = await handler.Handle(new ApproveExpenseCommand { Id = docId }, CancellationToken.None);
 
         Assert.Contains("aprobado", result.Message, StringComparison.OrdinalIgnoreCase);
@@ -120,7 +121,8 @@ public class ApproveExpenseHandlerTests
         await expenseCtx.SaveChangesAsync();
 
         var currentUser = new FakeCurrentUserAccessor { UserId = userId };
-        var handler = new ApproveExpenseHandler(expenseCtx, appCtx, new FakePublisher(), currentUser);
+        var handler = new ApproveExpenseHandler(
+            expenseCtx, appCtx, new FakePublisher(), currentUser, new FakeApprovalThresholdService());
         await handler.Handle(new ApproveExpenseCommand { Id = docId }, CancellationToken.None);
 
         var audit = await appCtx.AuditLogs.SingleAsync();
