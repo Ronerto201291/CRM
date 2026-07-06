@@ -185,6 +185,15 @@ namespace Erp.Modules.Billing.Infrastructure.Migrations
                     b.Property<DateTime?>("VerifactuSubmittedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("VerifactuAnulacionHuella")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("VerifactuAnulacionAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("VerifactuAnulacionSubmittedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CompanyId");

@@ -63,6 +63,26 @@ export default function VerifactuClient() {
         } finally { setLoading(null); }
     };
 
+    const handleConservationExport = async () => {
+        setLoading('conservation'); reset();
+        try {
+            const r = await fetch(`/api/proxy/sii/verifactu/conservation?year=${year}&month=${month}`);
+            if (r.ok) {
+                const blob = await r.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `Verifactu_Conservacion_${year}_${String(month).padStart(2, '0')}.zip`;
+                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                setMessage({ text: `Paquete de conservación descargado (${year}-${String(month).padStart(2, '0')})`, ok: true });
+            } else {
+                const e = await r.json().catch(() => ({}));
+                setMessage({ text: (e as { error?: string }).error || 'Error al exportar conservación', ok: false });
+            }
+        } finally { setLoading(null); }
+    };
+
     return (
         <PageContainer>
             <div className="page-header" style={{ marginBottom: '24px' }}>
@@ -155,6 +175,12 @@ export default function VerifactuClient() {
                         style={{ borderColor: 'var(--brand-primary)', color: 'var(--brand-primary)' }}
                     >
                         {loading === 'download' ? '...' : '⬇ Generar y Descargar XML'}
+                    </button>
+                    <button
+                        className="btn btn-secondary" onClick={handleConservationExport} disabled={!!loading}
+                        title="Paquete ZIP RRSIF (modalidad no-VERI*FACTU)"
+                    >
+                        {loading === 'conservation' ? '...' : '📦 Exportar conservación (ZIP)'}
                     </button>
                     <button className="btn btn-primary" onClick={handleSubmit} disabled={!!loading}
                         style={{ marginLeft: 'auto', background: useProd ? 'var(--danger)' : 'var(--brand-primary)' }}

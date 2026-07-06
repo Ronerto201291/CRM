@@ -16,6 +16,14 @@ public sealed class FakeVerifactuService : IVerifactuService
         int numeroRegistro,
         DateTimeOffset fechaHoraHuella)
         => ($"huella-{numSerieFactura}", $"https://qr.test/{numSerieFactura}");
+
+    public string ComputeAnulacionHuella(
+        string nifEmisor,
+        string numSerieFacturaAnulada,
+        DateOnly fechaExpedicionAnulada,
+        string? huellaRegistroAnterior,
+        DateTimeOffset fechaHoraRegistro)
+        => $"anul-{numSerieFacturaAnulada}-{huellaRegistroAnterior ?? "GENESIS"}";
 }
 
 public sealed class FakeVerifactuSubmissionService : IVerifactuSubmissionService
@@ -36,4 +44,24 @@ public sealed class FakeVerifactuSubmissionGateway : IVerifactuSubmissionGateway
 public sealed class FakeVerifactuModeSettings : IVerifactuModeSettings
 {
     public bool RealtimeSubmissionEnabled { get; init; }
+}
+
+public sealed class FakeVerifactuChainQuery : IVerifactuChainQuery
+{
+    public string? LastHuella { get; set; }
+
+    public Task<string?> GetLastHuellaBeforeAsync(
+        Guid companyId, string series, int fiscalYear, DateTime beforeUtc, CancellationToken ct = default)
+        => Task.FromResult(LastHuella);
+}
+
+public sealed class FakeVerifactuAnulacionRegistrar : IVerifactuAnulacionRegistrar
+{
+    public List<Guid> Registered { get; } = new();
+
+    public Task<bool> RegisterAsync(Guid invoiceId, CancellationToken ct = default)
+    {
+        Registered.Add(invoiceId);
+        return Task.FromResult(true);
+    }
 }

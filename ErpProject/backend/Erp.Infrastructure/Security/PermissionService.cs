@@ -57,7 +57,13 @@ public class PermissionService : IPermissionService
     {
         var userId = GetCurrentUserId();
         if (userId == null) return Array.Empty<string>();
-        var set = await GetUserPermissionsInternalAsync(userId.Value, ct);
+        return await GetEffectivePermissionsForUserAsync(userId.Value, ct);
+    }
+
+    /// <inheritdoc/>
+    public async Task<IReadOnlyList<string>> GetEffectivePermissionsForUserAsync(Guid userId, CancellationToken ct = default)
+    {
+        var set = await GetUserPermissionsInternalAsync(userId, ct);
         return set.ToList();
     }
 

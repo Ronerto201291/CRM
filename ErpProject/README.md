@@ -14,14 +14,21 @@
 | **OCR** | Tesseract (local) |
 | **Deploy** | Docker Compose · Nginx · Let's Encrypt |
 
-## 📦 Módulos
+## 📦 Módulos de negocio (9)
 
-- **🔐 Autenticación** — JWT + Refresh Tokens · Multi-tenant por CompanyId · Roles (Admin/Manager/Contable)
-- **👥 CRM** — Clientes · Proveedores · Contactos · Timeline de actividad
-- **🧾 Facturación** — Conforme RD 1619/2012 · Ley 11/2021 Antifraude · SHA256 hash chain · IVA 21/10/4/Exento · IRPF · Recargo equivalencia · Facturas rectificativas
-- **📊 Contabilidad** — Asientos automáticos · Libro diario · Balance · IVA soportado/repercutido
-- **📸 Smart Expense Capture** — QR único por empresa · Upload público · OCR local (Tesseract) · Auto-crear proveedor
-- **📦 Inventario** — Productos · Stock · Movimientos entrada/salida
+| Módulo | Capacidades principales |
+|--------|-------------------------|
+| **CRM** | Clientes, proveedores, contactos, leads |
+| **Billing** | Facturas, presupuestos, FacturaE, hash antifraude |
+| **Accounting** | Asientos, diario, balance, IVA, periodificaciones |
+| **Expenses** | Gastos, OCR, captura QR |
+| **Inventory** | Productos, almacenes, stock, lotes, series |
+| **Sales** | Pedidos de venta, albaranes, facturas cliente |
+| **Purchasing** | Pedidos de compra, aprobaciones |
+| **Treasury** | Bancos, conciliación, Open Banking, TPV, caja |
+| **Payroll** | Empleados, nóminas, retenciones IRPF |
+
+Además: **Fiscal** (SII, VeriFactu, modelos AEAT) y **Auth** multi-tenant con ABAC.
 
 ## 🚀 Inicio Rápido (local con Docker)
 
@@ -48,8 +55,8 @@ Las migraciones EF Core (core + módulos) se aplican **automáticamente** al arr
 ## 🧪 Tests y cobertura
 
 ```bash
-cd ErpProject/backend && dotnet test              # 613 tests backend
-cd ErpProject/frontend && npm test                # 123 Vitest (sin cobertura)
+cd ErpProject/backend && dotnet test              # ~654+ tests backend
+cd ErpProject/frontend && npm test                # ~136 Vitest
 cd ErpProject/frontend && npm run test:coverage   # Vitest + gate umbral líneas 39%
 ```
 

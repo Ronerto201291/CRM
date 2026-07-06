@@ -67,19 +67,43 @@ public class VerifactuSubmissionJob
             return;
         }
 
-        if (!inv.VerifactuRealtimeSubmission)
+        var isLocalOnly = !inv.VerifactuRealtimeSubmission;
+        if (submissionType == "Anulacion" && string.IsNullOrEmpty(inv.VerifactuAnulacionHuella))
         {
-            _log.LogInformation(
-                "VerifactuSubmissionJob: factura {Number} en modo local (sin remisión TIKE), omitiendo",
-                inv.Number);
+            _log.LogWarning("VerifactuSubmissionJob: factura {Number} sin huella de anulación", inv.Number);
             return;
         }
 
-        _log.LogInformation("VerifactuSubmissionJob: {Type} factura {Number}", submissionType, inv.Number);
+        _log.LogInformation(
+            "VerifactuSubmissionJob: {Type} factura {Number} (localOnly={Local})",
+            submissionType, inv.Number, isLocalOnly);
 
         try
         {
             var xml = await xmlFactory(invoiceId, ct);
+
+            if (isLocalOnly)
+            {
+                _billing.VerifactuSubmissionLogs.Add(new VerifactuSubmissionLog
+                {
+                    Id = Guid.NewGuid(),
+                    CompanyId = inv.CompanyId,
+                    InvoiceId = inv.Id,
+                    InvoiceNumber = inv.Number,
+                    SubmissionType = submissionType,
+                    EstadoEnvio = "ConservacionLocal",
+                    Success = true,
+                    IsProduction = false,
+                    RawResponse = xml.Length > 4000 ? xml[..4000] : xml,
+                    SubmittedAt = DateTime.UtcNow
+                });
+                await _billing.SaveChangesAsync(ct);
+                _log.LogInformation(
+                    "VerifactuSubmissionJob: {Type} {Number} archivado localmente (RRSIF)",
+                    submissionType, inv.Number);
+                return;
+            }
+
             var result = await _submissionService.SubmitSingleAsync(xml, _useProduction, ct);
             var success = result.Success || result.EstadoEnvio == "AceptadoConErrores";
 
@@ -101,6 +125,8 @@ public class VerifactuSubmissionJob
 
             if (success && submissionType == "Alta")
                 inv.VerifactuSubmittedAt = DateTime.UtcNow;
+            if (success && submissionType == "Anulacion")
+                inv.VerifactuAnulacionSubmittedAt = DateTime.UtcNow;
 
             await _billing.SaveChangesAsync(ct);
 

@@ -58,4 +58,7 @@ public sealed class FakePermissionService : IPermissionService
 
     public Task<IReadOnlyList<string>> GetUserPermissionsAsync(CancellationToken ct = default)
         => Task.FromResult(Permissions);
+
+    public Task<IReadOnlyList<string>> GetEffectivePermissionsForUserAsync(Guid userId, CancellationToken ct = default)
+        => Task.FromResult(Permissions);
 }

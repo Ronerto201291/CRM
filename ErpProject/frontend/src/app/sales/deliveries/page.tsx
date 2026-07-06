@@ -5,9 +5,8 @@ interface DeliveryNote {
     id: string;
     number: string;
     deliveryDate: string;
-    customerName: string;
-    status: string;
     lineCount: number;
+    salesOrderId?: string;
     createdAt: string;
 }
 

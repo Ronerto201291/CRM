@@ -7,6 +7,7 @@ using Erp.Modules.Billing.Application.Features.Billing.Queries;
 using Erp.Modules.Billing.Application.Features.Quotes;
 using Erp.Modules.Billing.Domain.Entities;
 using Erp.Modules.Billing.Infrastructure.Data;
+using Erp.Modules.Billing.Infrastructure.Services;
 using Erp.Modules.Treasury.Application.Features.Treasury.Commands;
 using Erp.Modules.Treasury.Application.Features.Treasury.Handlers;
 using Erp.Modules.Treasury.Application.Interfaces;
@@ -395,22 +396,31 @@ public class Phase15AnulVerifactuHandlerTests
         var tenant = new FakeTenantContext();
         tenant.SetTenant(companyId, "Empresa VF");
 
-        await using var ctx = CreateBillingContext(tenant);
-        ctx.Invoices.Add(new Invoice
+        await using var billing = CreateBillingContext(tenant);
+        await using var app = CreateAppContext(tenant, companyId);
+        billing.Invoices.Add(new Invoice
         {
             Id = invoiceId,
             CompanyId = companyId,
             Number = "A-2026-000050",
+            Series = "A",
+            FiscalYear = 2026,
+            SequenceNumber = 50,
             IssueDate = DateTime.UtcNow,
             DueDate = DateTime.UtcNow.AddDays(30),
             VerifactuHuella = "huella-test",
             VerifactuSubmittedAt = DateTime.UtcNow,
             Total = 121m,
+            TaxAmount = 21m,
+            Subtotal = 100m,
         });
-        await ctx.SaveChangesAsync();
+        await billing.SaveChangesAsync();
 
         var gateway = new FakeVerifactuSubmissionGateway();
-        var handler = new AnulVerifactuInvoiceHandler(ctx, gateway);
+        var registrar = new VerifactuAnulacionRegistrar(
+            billing, app, new FakeVerifactuService(), gateway,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<VerifactuAnulacionRegistrar>.Instance);
+        var handler = new AnulVerifactuInvoiceHandler(registrar);
         var ok = await handler.Handle(new AnulVerifactuInvoiceCommand { InvoiceId = invoiceId }, CancellationToken.None);
 
         Assert.True(ok);
@@ -423,8 +433,13 @@ public class Phase15AnulVerifactuHandlerTests
         var tenant = new FakeTenantContext();
         tenant.SetTenant(Guid.NewGuid(), "Empresa test");
 
-        await using var ctx = CreateBillingContext(tenant);
-        var handler = new AnulVerifactuInvoiceHandler(ctx, new FakeVerifactuSubmissionGateway());
+        await using var billing = CreateBillingContext(tenant);
+        await using var app = CreateAppContext(tenant, Guid.NewGuid());
+
+        var registrar = new VerifactuAnulacionRegistrar(
+            billing, app, new FakeVerifactuService(), new FakeVerifactuSubmissionGateway(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<VerifactuAnulacionRegistrar>.Instance);
+        var handler = new AnulVerifactuInvoiceHandler(registrar);
         var ok = await handler.Handle(new AnulVerifactuInvoiceCommand { InvoiceId = Guid.NewGuid() }, CancellationToken.None);
         Assert.False(ok);
     }
@@ -437,8 +452,9 @@ public class Phase15AnulVerifactuHandlerTests
         var tenant = new FakeTenantContext();
         tenant.SetTenant(companyId, "Empresa VF");
 
-        await using var ctx = CreateBillingContext(tenant);
-        ctx.Invoices.Add(new Invoice
+        await using var billing = CreateBillingContext(tenant);
+        await using var app = CreateAppContext(tenant, companyId);
+        billing.Invoices.Add(new Invoice
         {
             Id = invoiceId,
             CompanyId = companyId,
@@ -448,9 +464,12 @@ public class Phase15AnulVerifactuHandlerTests
             VerifactuSubmittedAt = DateTime.UtcNow,
             Total = 100m,
         });
-        await ctx.SaveChangesAsync();
+        await billing.SaveChangesAsync();
 
-        var handler = new AnulVerifactuInvoiceHandler(ctx, new FakeVerifactuSubmissionGateway());
+        var registrar = new VerifactuAnulacionRegistrar(
+            billing, app, new FakeVerifactuService(), new FakeVerifactuSubmissionGateway(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<VerifactuAnulacionRegistrar>.Instance);
+        var handler = new AnulVerifactuInvoiceHandler(registrar);
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             handler.Handle(new AnulVerifactuInvoiceCommand { InvoiceId = invoiceId }, CancellationToken.None));
     }
@@ -461,6 +480,24 @@ public class Phase15AnulVerifactuHandlerTests
             .UseInMemoryDatabase($"phase15-vf-{Guid.NewGuid()}")
             .Options;
         return new BillingDbContext(options, tenant);
+    }
+
+    private static ErpDbContext CreateAppContext(FakeTenantContext tenant, Guid companyId)
+    {
+        var options = new DbContextOptionsBuilder<ErpDbContext>()
+            .UseInMemoryDatabase($"phase15-vf-app-{Guid.NewGuid()}")
+            .Options;
+        var ctx = new ErpDbContext(options, tenant);
+        ctx.Companies.Add(new Company
+        {
+            Id = companyId,
+            Name = "Empresa VF",
+            TaxId = "B12345674",
+            Address = "Calle 1",
+            SubscriptionId = Guid.NewGuid(),
+        });
+        ctx.SaveChanges();
+        return ctx;
     }
 }
 

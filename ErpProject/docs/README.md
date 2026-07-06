@@ -19,6 +19,7 @@ antes de tocar código en ese módulo.
   Architecture, CQRS, duplicación, escalabilidad): la metodología que la
   sección "Evaluación de calidad arquitectónica" de cada ADR aplica.
 - `0019`-`0020` — roadmap producto y Docker Compose local vs producción.
+- `0021` — análisis de madurez integral del ERP (código, funcional, fiscal, GTM).
 
 Cada ADR sigue la misma estructura: Estado, Contexto, Decisión (Backend /
 Frontend / Modelo de datos / Flujo end-to-end), Relación con otros módulos,
@@ -51,6 +52,7 @@ varios módulos tienen hallazgos así (ver tabla).
 | [0018](adr/0018-calidad-arquitectura.md) | Calidad arquitectónica (transversal) | Backlog 64 ítems; techo accionable ~100%; ver sección Cierre backlog |
 | [0019](adr/0019-producto-roadmap.md) | Roadmap producto (#38–#42f) | 9 de 11 ítems implementados en código (#38/#40/#41/#42/#42a/#42b/#42c/#42e/#42f ✅); parciales #39 (portal cliente) y #42d (biblioteca documentos, falta S3 producción) |
 | [0020](adr/0020-docker-local-produccion.md) | Docker Compose local vs producción | Comandos, URLs, migraciones, seed, `.env`, troubleshooting — complementa ADR-0003 |
+| [0021](adr/0021-analisis-madurez-erp.md) | Análisis de madurez del ERP (jul 2026) | Snapshot transversal: ~92% código/arquitectura, ~55–58% comercial/legal; mapa por módulo, brechas funcionales/técnicas, cumplimiento fiscal España, 18 recomendaciones priorizadas |
 
 ## Cómo usar esta carpeta
 

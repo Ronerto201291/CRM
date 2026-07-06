@@ -2,6 +2,10 @@
 # Producción: usar solo docker-compose.yml + docker-compose.prod.yml (sin este archivo).
 
 services:
+  postgres:
+    ports: !override
+      - "127.0.0.1:5433:5432"
+
   backend:
     ports:
       - "8081:8080"

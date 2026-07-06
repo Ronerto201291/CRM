@@ -42,6 +42,9 @@ public static class DependencyInjection
 
         // VERI*FACTU: XML generator (bridge from Application to Infrastructure impl)
         services.AddScoped<IVerifactuXmlGenerator, VerifactuXmlGenerator>();
+        services.AddScoped<IVerifactuChainQuery, VerifactuChainQuery>();
+        services.AddScoped<IVerifactuAnulacionRegistrar, VerifactuAnulacionRegistrar>();
+        services.AddScoped<IVerifactuConservationExporter, VerifactuConservationExporter>();
         services.AddScoped<ISiiEmitidasInvoiceSource, SiiEmitidasInvoiceSource>();
         services.AddScoped<IAutomationBillingQuery, AutomationBillingQuery>();
 

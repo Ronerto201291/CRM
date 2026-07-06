@@ -123,6 +123,29 @@ public class VerifactuService : IVerifactuService
         var url    = GetQrUrl(data, huella);
         return (huella, url);
     }
+
+    /// <inheritdoc />
+    public string ComputeAnulacionHuella(
+        string nifEmisor,
+        string numSerieFacturaAnulada,
+        DateOnly fechaExpedicionAnulada,
+        string? huellaRegistroAnterior,
+        DateTimeOffset fechaHoraRegistro)
+    {
+        var fechaHora = fechaHoraRegistro.ToString("yyyy-MM-ddTHH:mm:sszzz");
+        var campos = string.Join("&", new[]
+        {
+            $"IDEmisorFacturaAnulada={nifEmisor}",
+            $"NumSerieFacturaAnulada={numSerieFacturaAnulada}",
+            $"FechaExpedicionFacturaAnulada={fechaExpedicionAnulada:dd-MM-yyyy}",
+            $"Huella={huellaRegistroAnterior ?? string.Empty}",
+            $"FechaHoraHusoGenRegistro={fechaHora}"
+        });
+
+        using var sha256 = SHA256.Create();
+        var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(campos));
+        return BitConverter.ToString(bytes).Replace("-", "").ToUpperInvariant();
+    }
 }
 
 /// <summary>Input data required to compute a Verifactu Huella.</summary>

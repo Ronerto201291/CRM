@@ -1,6 +1,8 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import AccessibleModal from '@/components/AccessibleModal';
+import { PAYMENT_METHODS, type PaymentMethodValue } from '@/lib/paymentMethods';
 
 interface InvoiceLine {
     id: string; description: string; quantity: number;
@@ -37,6 +39,9 @@ export default function InvoiceDetailClient({ id, initialInvoice }: InvoiceDetai
     const [loading, setLoading] = useState(false);
     const [printing, setPrinting] = useState(false);
     const [linkCopied, setLinkCopied] = useState(false);
+    const [showPayModal, setShowPayModal] = useState(false);
+    const [paymentMethod, setPaymentMethod] = useState<PaymentMethodValue>('bank');
+    const [paying, setPaying] = useState(false);
 
     const load = async () => {
         setLoading(true);
@@ -46,8 +51,18 @@ export default function InvoiceDetailClient({ id, initialInvoice }: InvoiceDetai
     };
 
     const markPaid = async () => {
-        if (!confirm('¿Marcar como PAGADA?')) return;
-        await fetch(`/api/proxy/invoices/${id}/pay`, { method: 'POST' }); load();
+        setPaying(true);
+        try {
+            await fetch(`/api/proxy/invoices/${id}/pay`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ paymentMethod }),
+            });
+            setShowPayModal(false);
+            await load();
+        } finally {
+            setPaying(false);
+        }
     };
 
     const lockInvoice = async () => {
@@ -84,7 +99,7 @@ export default function InvoiceDetailClient({ id, initialInvoice }: InvoiceDetai
                 </button>
                 <div style={{ display: 'flex', gap: '10px' }}>
                     {!invoice.isLocked && invoice.status !== 'Paid' && (
-                        <button className="btn btn-success btn-sm" onClick={markPaid}>✓ Marcar como Pagada</button>
+                        <button className="btn btn-success btn-sm" onClick={() => setShowPayModal(true)}>✓ Marcar como Pagada</button>
                     )}
                     {!invoice.isLocked && (
                         <button className="btn btn-sm" style={{ background: 'var(--danger-bg)', color: 'var(--danger)' }} onClick={lockInvoice}>🔒 Bloquear y Contabilizar</button>
@@ -214,6 +229,31 @@ export default function InvoiceDetailClient({ id, initialInvoice }: InvoiceDetai
                     )}
                 </div>
             </div>
+
+            <AccessibleModal
+                open={showPayModal}
+                onClose={() => setShowPayModal(false)}
+                title="Marcar factura como pagada"
+                maxWidth="420px"
+                footer={(
+                    <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                        <button className="btn btn-secondary" onClick={() => setShowPayModal(false)}>Cancelar</button>
+                        <button className="btn btn-success" onClick={markPaid} disabled={paying}>
+                            {paying ? 'Registrando...' : '✓ Confirmar pago'}
+                        </button>
+                    </div>
+                )}
+            >
+                <label className="erp-label">FORMA DE PAGO</label>
+                <select className="erp-input" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value as PaymentMethodValue)}>
+                    {PAYMENT_METHODS.map(m => (
+                        <option key={m.value} value={m.value}>{m.label}</option>
+                    ))}
+                </select>
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '12px' }}>
+                    Se registrará el cobro y se generará el asiento en tesorería según la cuenta PGC asociada.
+                </p>
+            </AccessibleModal>
 
             <style>{`
         @media print {

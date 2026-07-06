@@ -29,4 +29,14 @@ public interface IVerifactuService
         string? huellaAnterior,
         int numeroRegistro,
         DateTimeOffset fechaHoraHuella);
+
+    /// <summary>
+    /// Huella del registro de anulación (OM HAC/1177/2024 art. 13.b — 5 campos clave=valor).
+    /// </summary>
+    string ComputeAnulacionHuella(
+        string nifEmisor,
+        string numSerieFacturaAnulada,
+        DateOnly fechaExpedicionAnulada,
+        string? huellaRegistroAnterior,
+        DateTimeOffset fechaHoraRegistro);
 }

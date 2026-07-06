@@ -84,6 +84,8 @@ export default function TreasuryClient({ initialAccounts }: TreasuryClientProps)
     const [importCsv, setImportCsv] = useState('');
     const [reconciling, setReconciling] = useState(false);
     const [reconcileResult, setReconcileResult] = useState<{ matchedCount: number; matchedAmount: number; message: string } | null>(null);
+    const [syncing, setSyncing] = useState(false);
+    const [syncResult, setSyncResult] = useState<{ importedCount: number; skippedDuplicates: number; reconciledCount: number; provider: string } | null>(null);
     const [openCashSessionData, setOpenCashSessionData] = useState<CashSession | null>(null);
     const [cashSessions, setCashSessions] = useState<CashSession[]>([]);
     const [cashOpeningBalance, setCashOpeningBalance] = useState('');
@@ -344,6 +346,23 @@ export default function TreasuryClient({ initialAccounts }: TreasuryClientProps)
         setReconciling(false);
     };
 
+    const syncOpenBanking = async () => {
+        if (!selectedAccount) return;
+        setSyncing(true);
+        setSyncResult(null);
+        try {
+            const r = await fetch(`/api/proxy/treasury/bank-accounts/${selectedAccount}/sync-open-banking`, { method: 'POST' });
+            if (r.ok) {
+                const data = await r.json();
+                setSyncResult(data);
+                await loadMovements();
+                await loadAccounts();
+            }
+        } finally {
+            setSyncing(false);
+        }
+    };
+
     const tabs: { key: TreasuryTab; label: string }[] = [
         { key: 'accounts', label: 'Cuentas Bancarias' },
         { key: 'movements', label: 'Movimientos' },
@@ -380,10 +399,18 @@ export default function TreasuryClient({ initialAccounts }: TreasuryClientProps)
                 {tab === 'movements' && (
                     <div style={{ display: 'flex', gap: '8px' }}>
                         <button className="btn btn-secondary" onClick={() => { setImportCsv(''); setShowModal('import'); }}>⬆ Importar CSV</button>
+                        <button className="btn btn-secondary" onClick={syncOpenBanking} disabled={syncing || !selectedAccount}>
+                            {syncing ? 'Sincronizando...' : '🔄 Sincronizar Open Banking'}
+                        </button>
                         <button className="btn btn-secondary" onClick={reconcile} disabled={reconciling}>
                             {reconciling ? 'Conciliando...' : '⚖ Conciliar'}
                         </button>
                     </div>
+                )}
+                {tab === 'accounts' && accounts.length > 0 && (
+                    <button className="btn btn-secondary" onClick={syncOpenBanking} disabled={syncing || !selectedAccount}>
+                        {syncing ? 'Sincronizando...' : '🔄 Sincronizar Open Banking'}
+                    </button>
                 )}
             </div>
 
@@ -412,6 +439,17 @@ export default function TreasuryClient({ initialAccounts }: TreasuryClientProps)
                 <div style={{ marginBottom: '16px', padding: '12px 16px', borderRadius: '8px', background: 'var(--success-bg)', color: 'var(--success)', fontSize: '13px', fontWeight: 500, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span>✓ {reconcileResult.message} — {reconcileResult.matchedCount} movimientos · {fmt(reconcileResult.matchedAmount)}</span>
                     <button onClick={() => setReconcileResult(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--success)', fontSize: '18px' }}>✕</button>
+                </div>
+            )}
+
+            {syncResult && (
+                <div style={{ marginBottom: '16px', padding: '12px 16px', borderRadius: '8px', background: 'var(--info-bg, rgba(59,130,246,0.1))', color: 'var(--brand-primary)', fontSize: '13px', fontWeight: 500, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>
+                        ✓ Open Banking ({syncResult.provider}): {syncResult.importedCount} importados,
+                        {syncResult.skippedDuplicates} duplicados omitidos,
+                        {syncResult.reconciledCount} conciliados
+                    </span>
+                    <button onClick={() => setSyncResult(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--brand-primary)', fontSize: '18px' }}>✕</button>
                 </div>
             )}
 

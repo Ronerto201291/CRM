@@ -29,12 +29,7 @@ interface SalesOrderDetail {
     lines: OrderLine[];
 }
 
-const STATUS_MAP: Record<string, { label: string; cls: string }> = {
-    Open: { label: 'Abierto', cls: 'badge-info' },
-    Shipped: { label: 'Enviado', cls: 'badge-warning' },
-    Delivered: { label: 'Entregado', cls: 'badge-success' },
-    Cancelled: { label: 'Cancelado', cls: 'badge-gray' },
-};
+import { SALES_ORDER_STATUS_MAP } from '@/lib/salesOrderStatus';
 
 interface OrderDetailClientProps {
     id: string;
@@ -44,9 +39,6 @@ interface OrderDetailClientProps {
 export default function OrderDetailClient({ id, initialOrder }: OrderDetailClientProps) {
     const [order, setOrder] = useState<SalesOrderDetail | null>(initialOrder);
     const [loading, setLoading] = useState(false);
-    const [actionLoading, setActionLoading] = useState<string | null>(null);
-    const [actionError, setActionError] = useState<string | null>(null);
-    const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -58,19 +50,6 @@ export default function OrderDetailClient({ id, initialOrder }: OrderDetailClien
             setLoading(false);
         }
     }, [id]);
-
-    const doAction = async (action: string, method: string = 'PATCH') => {
-        setActionLoading(action);
-        setActionError(null);
-        setSuccessMsg(null);
-        try {
-            const res = await fetch(`/api/proxy/v1/sales/orders/${id}/${action}`, { method });
-            if (res.ok) { setSuccessMsg('Acción realizada'); load(); }
-            else { const e = await res.json(); setActionError(e.error || 'Error'); }
-        } finally {
-            setActionLoading(null);
-        }
-    };
 
     const fmt = (n: number) => `€ ${n.toLocaleString('es-ES', { minimumFractionDigits: 2 })}`;
 
@@ -87,16 +66,6 @@ export default function OrderDetailClient({ id, initialOrder }: OrderDetailClien
                 <Link href="/sales/orders" className="btn btn-secondary">← Volver</Link>
             </div>
 
-            {(actionError || successMsg) && (
-                <div className="erp-card" style={{
-                    padding: '12px 16px', marginBottom: 16,
-                    color: actionError ? 'var(--danger)' : 'var(--success)',
-                    background: actionError ? 'var(--danger-bg)' : 'var(--success-bg)',
-                }}>
-                    {actionError || successMsg}
-                </div>
-            )}
-
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '20px', marginBottom: '20px' }}>
                 <div className="erp-card">
                     <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '12px' }}>Información del Cliente</div>
@@ -109,8 +78,8 @@ export default function OrderDetailClient({ id, initialOrder }: OrderDetailClien
                 </div>
                 <div className="erp-card" style={{ textAlign: 'center' }}>
                     <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '8px' }}>Estado</div>
-                    <span className={`badge ${STATUS_MAP[order.status]?.cls ?? 'badge-gray'}`} style={{ fontSize: '14px', padding: '8px 16px' }}>
-                        {STATUS_MAP[order.status]?.label ?? order.status}
+                    <span className={`badge ${SALES_ORDER_STATUS_MAP[order.status]?.cls ?? 'badge-gray'}`} style={{ fontSize: '14px', padding: '8px 16px' }}>
+                        {SALES_ORDER_STATUS_MAP[order.status]?.label ?? order.status}
                     </span>
                     <div style={{ marginTop: '16px', fontSize: '24px', fontWeight: 800, color: 'var(--brand-primary)' }}>{fmt(order.total)}</div>
                     <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Total pedido</div>
@@ -165,24 +134,16 @@ export default function OrderDetailClient({ id, initialOrder }: OrderDetailClien
             </div>
 
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                {order.status === 'Open' && (
-                    <>
-                        <button className="btn btn-secondary" onClick={() => doAction('ship')} disabled={!!actionLoading}>
-                            {actionLoading === 'ship' ? 'Enviando...' : '📦 Marcar Enviado'}
-                        </button>
-                        <button className="btn btn-secondary" onClick={() => doAction('cancel')} disabled={!!actionLoading} style={{ color: 'var(--danger)' }}>
-                            {actionLoading === 'cancel' ? 'Cancelando...' : '✕ Cancelar'}
-                        </button>
-                    </>
+                {(order.status === 'Open' || order.status === 'PartiallyDelivered') && (
+                    <Link href={`/sales/deliveries/new?salesOrderId=${order.id}`} className="btn btn-primary">
+                        + Crear albarán de entrega
+                    </Link>
                 )}
-                {order.status === 'Shipped' && (
-                    <button className="btn btn-primary" onClick={() => doAction('deliver')} disabled={!!actionLoading}>
-                        {actionLoading === 'deliver' ? 'Entregando...' : '✓ Marcar Entregado'}
-                    </button>
+                {order.status === 'Completed' && (
+                    <Link href={`/sales/invoices/new?salesOrderId=${order.id}`} className="btn btn-secondary">
+                        Facturar pedido
+                    </Link>
                 )}
-                <a href={`/sales/deliveries/new?salesOrderId=${order.id}`} className="btn btn-secondary">
-                    + Crear Albarán
-                </a>
             </div>
         </PageContainer>
     );

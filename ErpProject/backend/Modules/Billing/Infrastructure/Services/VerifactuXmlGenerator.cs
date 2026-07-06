@@ -56,6 +56,7 @@ public class VerifactuXmlGenerator : IVerifactuXmlGenerator
     {
         var inv = await _billing.Invoices
             .Include(i => i.InvoiceLines)
+            .Include(i => i.RectifiedInvoice)
             .FirstOrDefaultAsync(i => i.Id == invoiceId, ct)
             ?? throw new InvalidOperationException($"Invoice {invoiceId} not found.");
 
@@ -65,18 +66,20 @@ public class VerifactuXmlGenerator : IVerifactuXmlGenerator
     public async Task<string> GenerateAnulacionRegistroAsync(Guid invoiceId, CancellationToken ct = default)
     {
         var inv = await _billing.Invoices
+            .Include(i => i.InvoiceLines)
             .FirstOrDefaultAsync(i => i.Id == invoiceId, ct)
             ?? throw new InvalidOperationException($"Invoice {invoiceId} not found.");
 
-        if (string.IsNullOrEmpty(inv.VerifactuHuella))
-            throw new InvalidOperationException("La factura no tiene huella VeriFactu — no se puede anular en AEAT.");
+        if (string.IsNullOrEmpty(inv.VerifactuAnulacionHuella))
+            throw new InvalidOperationException("La factura no tiene registro de anulación VeriFactu.");
 
         var company = await _app.Companies
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(c => c.Id == inv.CompanyId, ct)
             ?? throw new InvalidOperationException($"Company {inv.CompanyId} not found.");
 
-        var previous = await GetPreviousRegistroAsync(inv, ct);
+        var previous = await GetPreviousRegistroAsync(
+            inv.CompanyId, inv.Series, inv.FiscalYear, inv.VerifactuAnulacionAt ?? DateTime.UtcNow, ct);
 
         var sb = new StringBuilder();
         using var writer = XmlWriter.Create(sb, new XmlWriterSettings { Indent = true, Encoding = Encoding.UTF8 });
@@ -98,11 +101,11 @@ public class VerifactuXmlGenerator : IVerifactuXmlGenerator
         writer.WriteEndElement();
         WriteEncadenamiento(writer, company.TaxId ?? string.Empty, previous);
         WriteSistemaInformatico(writer);
-        var fechaHora = (inv.LockedAt ?? inv.IssueDate).ToString("yyyy-MM-ddTHH:mm:sszzz");
+        var fechaHora = (inv.VerifactuAnulacionAt ?? inv.LockedAt ?? inv.IssueDate)
+            .ToString("yyyy-MM-ddTHH:mm:sszzz");
         writer.WriteElementString("sf", "FechaHoraHusoGenRegistro", NsInfo, fechaHora);
         writer.WriteElementString("sf", "TipoHuella", NsInfo, "01");
-        var anulacionHuella = inv.VerifactuHuella ?? string.Empty;
-        writer.WriteElementString("sf", "Huella", NsInfo, anulacionHuella);
+        writer.WriteElementString("sf", "Huella", NsInfo, inv.VerifactuAnulacionHuella ?? string.Empty);
         writer.WriteEndElement();
         writer.WriteEndElement();
         writer.WriteEndElement();
@@ -124,6 +127,7 @@ public class VerifactuXmlGenerator : IVerifactuXmlGenerator
 
         var query = _billing.Invoices
             .Include(i => i.InvoiceLines)
+            .Include(i => i.RectifiedInvoice)
             .Where(i => i.CompanyId == companyId
                      && i.IssueDate >= from
                      && i.IssueDate < to
@@ -151,7 +155,8 @@ public class VerifactuXmlGenerator : IVerifactuXmlGenerator
 
         foreach (var inv in invoices)
         {
-            var previous = await GetPreviousRegistroAsync(inv, ct);
+            var previous = await GetPreviousRegistroAsync(
+                inv.CompanyId, inv.Series, inv.FiscalYear, inv.LockedAt ?? inv.IssueDate, ct);
             WriteRegistroFactura(writer, inv, company.Name, company.TaxId ?? string.Empty, previous);
         }
 
@@ -193,7 +198,13 @@ public class VerifactuXmlGenerator : IVerifactuXmlGenerator
         writer.WriteEndElement(); // IDFactura
 
         writer.WriteElementString("sf", "NombreRazonEmisor", NsInfo, companyName);
-        writer.WriteElementString("sf", "TipoFactura", NsInfo, VerifactuTipoFactura.Resolve(inv.InvoiceType));
+
+        var tipoFactura = ResolveTipoFactura(inv);
+        writer.WriteElementString("sf", "TipoFactura", NsInfo, tipoFactura);
+
+        if (tipoFactura is "R1" or "R5")
+            WriteFacturasRectificadas(writer, inv, companyNif);
+
         writer.WriteElementString("sf", "DescripcionOperacion", NsInfo,
             $"Factura {inv.Number}");
 
@@ -215,6 +226,35 @@ public class VerifactuXmlGenerator : IVerifactuXmlGenerator
 
         writer.WriteEndElement(); // RegistroAlta
         writer.WriteEndElement(); // RegistroFactura
+    }
+
+    private static string ResolveTipoFactura(Invoice inv) =>
+        VerifactuTipoFactura.Resolve(inv.InvoiceType, inv.RectifiedInvoice?.InvoiceType);
+
+    private void WriteFacturasRectificadas(XmlWriter writer, Invoice inv, string companyNif)
+    {
+        if (inv.RectifiedInvoice is null && inv.RectifiedInvoiceId.HasValue)
+            throw new InvalidOperationException(
+                $"Factura rectificativa {inv.Number}: falta factura original (RectifiedInvoice).");
+
+        var orig = inv.RectifiedInvoice
+            ?? throw new InvalidOperationException(
+                $"Factura rectificativa {inv.Number}: factura original no cargada.");
+
+        writer.WriteStartElement("sf", "FacturasRectificadas", NsInfo);
+        writer.WriteStartElement("sf", "IDFacturaRectificada", NsInfo);
+        writer.WriteStartElement("sf", "IDEmisorFactura", NsInfo);
+        writer.WriteElementString("sf", "NIF", NsInfo, companyNif);
+        writer.WriteEndElement();
+        writer.WriteElementString("sf", "NumSerieFactura", NsInfo, orig.Number);
+        writer.WriteElementString("sf", "FechaExpedicionFactura", NsInfo,
+            orig.IssueDate.ToString("dd-MM-yyyy", CultureInfo.InvariantCulture));
+        writer.WriteEndElement(); // IDFacturaRectificada
+        writer.WriteEndElement(); // FacturasRectificadas
+
+        // S = por sustitución (abono total); I = por diferencias
+        var tipoRect = inv.Total < 0 || inv.Subtotal < 0 ? "S" : "I";
+        writer.WriteElementString("sf", "TipoRectificativa", NsInfo, tipoRect);
     }
 
     private static void WriteDesglose(XmlWriter writer, Invoice inv)
@@ -278,20 +318,19 @@ public class VerifactuXmlGenerator : IVerifactuXmlGenerator
         writer.WriteEndElement();
     }
 
-    private async Task<PreviousRegistro?> GetPreviousRegistroAsync(Invoice inv, CancellationToken ct)
+    private async Task<PreviousRegistro?> GetPreviousRegistroAsync(
+        Guid companyId,
+        string series,
+        int fiscalYear,
+        DateTime beforeUtc,
+        CancellationToken ct)
     {
-        var prev = await _billing.Invoices
-            .AsNoTracking()
-            .Where(i => i.CompanyId == inv.CompanyId
-                     && i.Series == inv.Series
-                     && i.FiscalYear == inv.FiscalYear
-                     && i.SequenceNumber < inv.SequenceNumber
-                     && i.VerifactuHuella != null)
-            .OrderByDescending(i => i.SequenceNumber)
-            .Select(i => new PreviousRegistro(i.Number, i.IssueDate, i.VerifactuHuella!))
-            .FirstOrDefaultAsync(ct);
+        var prev = await VerifactuChainHelper.GetLastEntryBeforeAsync(
+            _billing, companyId, series, fiscalYear, beforeUtc, ct);
 
-        return prev;
+        return prev is null
+            ? null
+            : new PreviousRegistro(prev.NumSerieFactura, prev.FechaExpedicion, prev.Huella);
     }
 
     private sealed record PreviousRegistro(string NumSerieFactura, DateTime IssueDate, string Huella)

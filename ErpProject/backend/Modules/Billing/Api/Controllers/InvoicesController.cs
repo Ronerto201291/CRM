@@ -74,6 +74,24 @@ public class InvoicesController : ControllerBase
         }
     }
 
+    /// <summary>Baja de factura bloqueada y registro VeriFactu de anulación encadenado.</summary>
+    [HttpPost("{id}/cancel")]
+    [RequirePermission(Permissions.Invoice.Manage)]
+    public async Task<IActionResult> Cancel(Guid id, CancellationToken ct)
+    {
+        try
+        {
+            var ok = await _mediator.Send(new CancelInvoiceCommand { Id = id }, ct);
+            return ok
+                ? Ok(new { message = "Factura dada de baja. Anulación VeriFactu registrada si aplica." })
+                : NotFound();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     /// <summary>Encola anulación VERI*FACTU en AEAT (factura previamente enviada).</summary>
     [HttpPost("{id}/verifactu/anular")]
     [RequirePermission(Permissions.Invoice.Manage)]

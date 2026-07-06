@@ -6,6 +6,7 @@ import { updateLineAt } from '@/lib/lineForm';
 import { parseListResponse } from '@/lib/parseListResponse';
 import { invoiceCreateSchema } from '@/lib/schemas/invoiceCreateSchema';
 import { useCachedApi } from '@/hooks/useCachedApi';
+import { PAYMENT_METHODS, type PaymentMethodValue } from '@/lib/paymentMethods';
 
 interface Invoice {
     id: string; number: string; clientName?: string; issueDate: string;
@@ -64,6 +65,9 @@ export default function BillingClient({
     const [saving, setSaving] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
     const [pageError, setPageError] = useState<string | null>(null);
+    const [payInvoiceId, setPayInvoiceId] = useState<string | null>(null);
+    const [paymentMethod, setPaymentMethod] = useState<PaymentMethodValue>('bank');
+    const [paying, setPaying] = useState(false);
     const [currencies, setCurrencies] = useState<{ code: string; name: string; exchangeRate: number }[]>([
         { code: 'EUR', name: 'Euro', exchangeRate: 1 },
     ]);
@@ -90,8 +94,18 @@ export default function BillingClient({
     }, [fetchCached, invalidateCached]);
 
     const markPaid = async (id: string) => {
-        if (!confirm('¿Marcar esta factura como PAGADA?')) return;
-        await fetch(`/api/proxy/invoices/${id}/pay`, { method: 'POST' }); refresh();
+        setPaying(true);
+        try {
+            await fetch(`/api/proxy/invoices/${id}/pay`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ paymentMethod }),
+            });
+            setPayInvoiceId(null);
+            await refresh();
+        } finally {
+            setPaying(false);
+        }
     };
     const lockInvoice = async (id: string) => {
         if (!confirm('¿Bloquear y contabilizar esta factura? Esta acción es IRREVERSIBLE.')) return;
@@ -263,7 +277,7 @@ export default function BillingClient({
                                 <td style={{ textAlign: 'right' }}>
                                     <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
                                         {!inv.isLocked && inv.status !== 'Paid' && (
-                                            <button className="btn btn-success btn-sm" onClick={() => markPaid(inv.id)}>Pagar</button>
+                                            <button className="btn btn-success btn-sm" onClick={() => setPayInvoiceId(inv.id)}>Pagar</button>
                                         )}
                                         {!inv.isLocked && (
                                             <button className="btn btn-sm" style={{ background: 'var(--danger-bg)', color: 'var(--danger)' }} onClick={() => lockInvoice(inv.id)}>Bloquear</button>
@@ -587,6 +601,28 @@ export default function BillingClient({
                         ) : (
                             <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>Error al contactar con el servidor</div>
                         )}
+            </AccessibleModal>
+
+            <AccessibleModal
+                open={payInvoiceId !== null}
+                onClose={() => setPayInvoiceId(null)}
+                title="Registrar pago de factura"
+                maxWidth="420px"
+                footer={(
+                    <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                        <button className="btn btn-secondary" onClick={() => setPayInvoiceId(null)}>Cancelar</button>
+                        <button className="btn btn-success" onClick={() => payInvoiceId && markPaid(payInvoiceId)} disabled={paying}>
+                            {paying ? 'Registrando...' : '✓ Confirmar pago'}
+                        </button>
+                    </div>
+                )}
+            >
+                <label className="erp-label">FORMA DE PAGO</label>
+                <select className="erp-input" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value as PaymentMethodValue)}>
+                    {PAYMENT_METHODS.map(m => (
+                        <option key={m.value} value={m.value}>{m.label}</option>
+                    ))}
+                </select>
             </AccessibleModal>
         </PageContainer>
     );

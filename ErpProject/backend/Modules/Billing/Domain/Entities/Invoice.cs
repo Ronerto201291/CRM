@@ -87,6 +87,10 @@ public class Invoice : AuditableEntity
     public string? VerifactuHuella { get; set; }  // SHA256 per Annex II (computed at lock time)
     public string? VerifactuQrUrl { get; set; }   // AEAT validation URL (embedded as QR on PDF)
     public DateTime? VerifactuSubmittedAt { get; set; } // Timestamp de envío exitoso a AEAT (null = pendiente)
+    /// <summary>Huella del registro de anulación encadenado (RD 1007/2023).</summary>
+    public string? VerifactuAnulacionHuella { get; set; }
+    public DateTime? VerifactuAnulacionAt { get; set; }
+    public DateTime? VerifactuAnulacionSubmittedAt { get; set; }
     /// <summary>Si true, modo VERI*FACTU (remisión TIKE); si false, registro local sin remisión.</summary>
     public bool VerifactuRealtimeSubmission { get; set; } = true;
 

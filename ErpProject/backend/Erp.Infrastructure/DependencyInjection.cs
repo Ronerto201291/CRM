@@ -70,6 +70,8 @@ public static class DependencyInjection
                 : sp.GetRequiredService<DisabledWebPushService>();
         });
 
+        services.AddOptions<PlatformOptions>().BindConfiguration(PlatformOptions.SectionName);
+
         services.AddScoped<IJwtProvider, JwtProvider>();
         services.AddScoped<IApplicationDbContext>(provider => provider.GetRequiredService<ErpDbContext>());
         services.AddScoped<Erp.Application.Common.Interfaces.ILicensingDbContext>(

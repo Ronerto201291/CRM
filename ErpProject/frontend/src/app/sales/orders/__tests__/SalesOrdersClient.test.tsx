@@ -19,7 +19,7 @@ describe('SalesOrdersClient', () => {
             number: 'PV-2026-000002',
             orderDate: '2026-03-05T10:00:00Z',
             customerName: 'Cliente Beta',
-            status: 'Delivered',
+            status: 'Completed',
             total: 800,
             lineCount: 1,
             createdAt: '2026-03-05T10:00:00Z',
@@ -33,9 +33,9 @@ describe('SalesOrdersClient', () => {
         expect(screen.getByText('Cliente Beta')).toBeInTheDocument();
     });
 
-    it('filtra pedidos por estado', () => {
+    it('filtra pedidos por estado Completado', () => {
         render(<SalesOrdersClient initialOrders={initialOrders} />);
-        fireEvent.click(screen.getByRole('button', { name: /entregado/i }));
+        fireEvent.click(screen.getByRole('button', { name: /completado/i }));
         expect(screen.queryByText('Cliente Alpha')).not.toBeInTheDocument();
         expect(screen.getByText('Cliente Beta')).toBeInTheDocument();
     });

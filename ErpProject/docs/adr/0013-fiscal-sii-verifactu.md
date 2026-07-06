@@ -204,10 +204,17 @@ por motivos propios y confirmados leyendo el código exacto citado.
   hace `ok = estado == "Correcto"`~~ **✅ Corregido**.
 - **Reenvíos duplicados**: ~~el job de envío reprocesa todas las facturas sin
   marcar del mes~~ **✅ Corregido** — `GenerateSingleInvoiceRegistroAsync` envía solo la factura bloqueada.
-- **Sin registro de anulación**: ~~no existe ningún camino de cumplimiento para
-  anular un registro ya enviado~~ **✅ Corregido** — `GenerateAnulacionRegistroAsync`,
-  `AnulVerifactuInvoiceCommand` vía `IVerifactuSubmissionGateway.EnqueueVerifactuAnulacion`,
-  `POST /api/invoices/{id}/verifactu/anular`.
+- **Sin registro de anulación**: ~~no existe ningún camino~~ **✅ Corregido (jul 2026)** —
+  `IVerifactuAnulacionRegistrar` calcula huella de anulación (OM HAC/1177/2024 art. 13.b),
+  encadena altas+anulaciones vía `VerifactuChainHelper`, dispara envío o conservación local;
+  E2E: `POST /api/invoices/{id}/cancel`, bloqueo de rectificativa → anulación automática de la
+  original, `POST /api/invoices/{id}/verifactu/anular`; columnas `VerifactuAnulacionHuella/At`.
+- **Conservación segura (no-VERI*FACTU)**: **✅ Corregido (jul 2026)** — `VerifactuSubmissionJob`
+  archiva XML en `VerifactuSubmissionLog` con `EstadoEnvio=ConservacionLocal` cuando
+  `VerifactuRealtimeSubmission=false`; `GET /api/sii/verifactu/conservation` exporta ZIP
+  (manifest + index + XML alta/anulación); botón en `frontend/src/app/verifactu/VerifactuClient.tsx`.
+- **Facturas simplificadas / rectificativas**: **✅ Corregido (jul 2026)** — `VerifactuTipoFactura`
+  distingue F2/R1/R5; XML incluye `FacturasRectificadas` + `TipoRectificativa` para R1/R5.
 - **Sin tabla de auditoría/eventos**: ~~los envíos fallidos o con errores no
   dejan rastro consultable en base de datos~~ **✅ Corregido** — entidad
   `VerifactuSubmissionLog` (Alta/Anulacion, éxito/error, respuesta AEAT);
@@ -368,8 +375,9 @@ que exista certificado y homologación; el backend arranca igual.
   desarrollo/demo estos flujos no son operativos end-to-end contra la AEAT
   real.
 - No existe una tabla de auditoría dedicada a envíos **SII** más allá del log
-  de aplicación. **VeriFactu** sí tiene `VerifactuSubmissionLog` y
-  `GET /api/invoices/{id}/verifactu/submissions` (#0a).
+  de aplicación. **VeriFactu** sí tiene `VerifactuSubmissionLog` (Alta/Anulacion/ConservacionLocal) y
+  `GET /api/invoices/{id}/verifactu/submissions` (#0a); exportación ZIP RRSIF vía
+  `GET /api/sii/verifactu/conservation`.
 - `TaxReport` (`Erp.Domain/Entities/Tax/TaxReport.cs`) existe como entidad
   pero no se localizó un controlador/handler que la persista activamente —
   posible funcionalidad incompleta o pendiente de conectar; no se debe asumir

@@ -20,16 +20,23 @@ const navGroups = [
             { href: '/crm/alerts', label: 'Alertas', icon: <IconAlerts /> },
             { href: '/crm/suppliers', label: 'Proveedores', icon: <IconSuppliers /> },
             { href: '/crm/services', label: 'Catálogo de Servicios', icon: <IconServices /> },
+            { href: '/sales/orders', label: 'Pedidos de Venta', icon: <IconSales /> },
+            { href: '/sales/deliveries', label: 'Albaranes', icon: <IconSales /> },
+            { href: '/sales/invoices', label: 'Facturas de Venta', icon: <IconBilling /> },
             { href: '/billing', label: 'Facturación', icon: <IconBilling /> },
             { href: '/billing/quotes', label: 'Presupuestos', icon: <IconQuotes /> },
             { href: '/billing/credit-notes', label: '↩ Rectificativas', icon: <IconCreditNotes /> },
+            { href: '/billing/facturae', label: 'FacturaE', icon: <IconBilling /> },
         ]
     },
     {
         label: 'Compras y Gastos',
         items: [
             { href: '/expenses', label: 'Gastos (OCR)', icon: <IconExpenses /> },
-            { href: '/purchasing/supplier-uploads', label: 'Facturas de Proveedores', icon: <IconExpenses /> },
+            { href: '/purchasing/orders', label: 'Pedidos de Compra', icon: <IconPurchasing /> },
+            { href: '/purchasing/receipts', label: 'Recepciones', icon: <IconPurchasing /> },
+            { href: '/purchasing/invoices', label: 'Facturas de Compra', icon: <IconPurchasing /> },
+            { href: '/purchasing/supplier-uploads', label: 'Subida Proveedores', icon: <IconExpenses /> },
         ]
     },
     {
@@ -37,6 +44,11 @@ const navGroups = [
         items: [
             { href: '/accounting', label: 'Contabilidad', icon: <IconAccounting /> },
             { href: '/accounting/reports', label: '📊 Reportes', icon: <IconReports /> },
+            { href: '/accounting/iva-registers', label: 'Libros IVA', icon: <IconAccounting /> },
+            { href: '/accounting/aging', label: 'Antigüedad (DSO/DPO)', icon: <IconReports /> },
+            { href: '/accounting/budgets', label: 'Presupuestos', icon: <IconReports /> },
+            { href: '/accounting/deferred-entries', label: 'Periodificaciones', icon: <IconAccounting /> },
+            { href: '/accounting/provisions', label: 'Provisiones', icon: <IconAccounting /> },
             { href: '/accounting/cierre', label: '🔒 Cierre Contable', icon: <IconCierre /> },
             { href: '/treasury', label: 'Tesorería', icon: <IconTreasury /> },
             { href: '/treasury/currencies', label: '💱 Divisas (BCE)', icon: <IconCurrency /> },
@@ -54,6 +66,10 @@ const navGroups = [
         label: 'Operaciones',
         items: [
             { href: '/inventory', label: 'Inventario', icon: <IconInventory /> },
+            { href: '/inventory/warehouses', label: 'Almacenes', icon: <IconInventory /> },
+            { href: '/inventory/lots', label: 'Lotes', icon: <IconInventory /> },
+            { href: '/inventory/serials', label: 'Números de serie', icon: <IconInventory /> },
+            { href: '/inventory/valuation', label: 'Valoración stock', icon: <IconInventory /> },
         ]
     },
     {
@@ -69,6 +85,8 @@ const navGroups = [
             { href: '/gestoria', label: '📊 Panel gestoría', icon: <IconCompanies /> },
             { href: '/settings/onboarding', label: '🚀 Onboarding', icon: <IconSettings /> },
             { href: '/settings/notifications', label: '🔔 Notificaciones', icon: <IconSettings /> },
+            { href: '/settings/automation', label: '⚙ Automatización', icon: <IconSettings /> },
+            { href: '/settings/accountant-export', label: 'Export gestoría', icon: <IconDocuments /> },
         ]
     },
 ];
@@ -107,7 +125,7 @@ export default function Sidebar() {
                         }}>{group.label}</div>
                         {group.items.map(item => {
                             // Use exact match for paths that are prefixes of sibling paths to avoid false highlights
-                            const exactOnly = ['/dashboard', '/crm', '/billing', '/accounting', '/expenses', '/inventory', '/treasury', '/fiscal'];
+                            const exactOnly = ['/dashboard', '/crm', '/billing', '/accounting', '/expenses', '/inventory', '/treasury', '/fiscal', '/sales/orders', '/sales/deliveries', '/sales/invoices', '/purchasing/orders'];
                             const isActive = pathname === item.href || (!exactOnly.includes(item.href) && pathname?.startsWith(item.href));
                             return (
                                 <Link key={item.href} href={item.href} style={{
@@ -186,3 +204,5 @@ function IconCurrency() { return <svg fill="none" viewBox="0 0 24 24" stroke="cu
 function IconFinancing() { return <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2v4c0 1.105 1.343 2 3 2s3-.895 3-2v-4c0-1.105-1.343-2-3-2z" /><path strokeLinecap="round" strokeLinejoin="round" d="M7 14h10m-5-7v10" /></svg>; }
 function IconGuarantees() { return <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m7 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>; }
 function IconConsolidation() { return <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>; }
+function IconSales() { return <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>; }
+function IconPurchasing() { return <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>; }

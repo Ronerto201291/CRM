@@ -1,8 +1,10 @@
 using Erp.Application.Features.Auth.Commands;
 using Erp.Application.Features.Admin.Queries;
+using Erp.Application.Options;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 namespace Erp.Api.Controllers;
 
@@ -12,14 +14,24 @@ namespace Erp.Api.Controllers;
 public class AdminController : ControllerBase
 {
     private readonly IMediator _mediator;
+    private readonly PlatformOptions _platform;
 
-    public AdminController(IMediator mediator) => _mediator = mediator;
+    public AdminController(IMediator mediator, IOptions<PlatformOptions> platform)
+    {
+        _mediator = mediator;
+        _platform = platform.Value;
+    }
 
     private string? GetCurrentUserEmail() =>
         User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
         ?? User.FindFirst("email")?.Value;
 
-    private bool IsSuperAdmin() => GetCurrentUserEmail() == "admin@devcorp.com";
+    private bool IsSuperAdmin()
+    {
+        var email = GetCurrentUserEmail();
+        return !string.IsNullOrEmpty(email)
+            && _platform.SuperAdminEmails.Contains(email, StringComparer.OrdinalIgnoreCase);
+    }
 
     [HttpGet("companies")]
     public async Task<IActionResult> GetCompanies(CancellationToken ct)

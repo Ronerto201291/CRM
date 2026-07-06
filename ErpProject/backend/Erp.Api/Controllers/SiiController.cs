@@ -116,6 +116,20 @@ public class SiiController : ControllerBase
             ? Ok(new { submitted = true, estadoEnvio = result.EstadoEnvio, period = result.Period })
             : StatusCode(502, new { submitted = false, estadoEnvio = result.EstadoEnvio, error = result.Error });
     }
+
+    /// <summary>Paquete ZIP de conservación RRSIF (modalidad no-VERI*FACTU).</summary>
+    [HttpGet("verifactu/conservation")]
+    public async Task<IActionResult> ExportVerifactuConservation(
+        [FromQuery] int year,
+        [FromQuery] int? month,
+        CancellationToken ct)
+    {
+        if (month is < 1 or > 12)
+            return BadRequest(new { error = "month debe estar entre 1 y 12" });
+
+        var package = await _mediator.Send(new Erp.Modules.Billing.Application.Features.Billing.Queries.ExportVerifactuConservationQuery(year, month), ct);
+        return File(package.ZipBytes, "application/zip", package.FileName);
+    }
 }
 
 public record SiiSubmitRequest(string? Type, int Year, int Month);

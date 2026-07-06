@@ -27,4 +27,9 @@ public interface IPermissionService
     /// Results are cached in Redis for 5 minutes.
     /// </summary>
     Task<IReadOnlyList<string>> GetUserPermissionsAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns effective permissions for a specific user (admin operations).
+    /// </summary>
+    Task<IReadOnlyList<string>> GetEffectivePermissionsForUserAsync(Guid userId, CancellationToken ct = default);
 }

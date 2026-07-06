@@ -80,6 +80,8 @@ public class LockInvoiceHandlerTests
             new FakePublisher(),
             gateway,
             new FakeVerifactuModeSettings { RealtimeSubmissionEnabled = false },
+            new FakeVerifactuAnulacionRegistrar(),
+            new FakeVerifactuChainQuery(),
             new FakeCurrentUserAccessor(),
             new FakeBillingInvoiceSalesLinkQuery(),
             NullLogger<LockInvoiceHandler>.Instance);
@@ -91,7 +93,7 @@ public class LockInvoiceHandlerTests
         Assert.True(locked.IsLocked);
         Assert.Equal("Locked", locked.Status);
         Assert.NotNull(locked.VerifactuHuella);
-        Assert.Empty(gateway.EnqueuedInvoices);
+        Assert.Single(gateway.EnqueuedInvoices);
     }
 
     [Fact]
@@ -118,6 +120,8 @@ public class LockInvoiceHandlerTests
             new FakePublisher(),
             new FakeVerifactuSubmissionGateway(),
             new FakeVerifactuModeSettings(),
+            new FakeVerifactuAnulacionRegistrar(),
+            new FakeVerifactuChainQuery(),
             new FakeCurrentUserAccessor(),
             new FakeBillingInvoiceSalesLinkQuery(),
             NullLogger<LockInvoiceHandler>.Instance);
@@ -171,6 +175,8 @@ public class LockInvoiceHandlerTests
             new FakePublisher(),
             new FakeVerifactuSubmissionGateway(),
             new FakeVerifactuModeSettings(),
+            new FakeVerifactuAnulacionRegistrar(),
+            new FakeVerifactuChainQuery(),
             new FakeCurrentUserAccessor(),
             new FakeBillingInvoiceSalesLinkQuery(),
             NullLogger<LockInvoiceHandler>.Instance);

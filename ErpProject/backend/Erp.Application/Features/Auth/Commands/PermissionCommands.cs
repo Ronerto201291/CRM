@@ -23,6 +23,22 @@ public class GetMyPermissionsHandler : IRequestHandler<GetMyPermissionsQuery, IR
         => _permissions.GetUserPermissionsAsync(ct);
 }
 
+/// <summary>Returns effective permissions for a specific user (Admin only).</summary>
+public record GetUserPermissionsQuery(Guid UserId) : IRequest<IReadOnlyList<string>>;
+
+public class GetUserPermissionsHandler : IRequestHandler<GetUserPermissionsQuery, IReadOnlyList<string>>
+{
+    private readonly IPermissionService _permissions;
+
+    public GetUserPermissionsHandler(IPermissionService permissions)
+    {
+        _permissions = permissions;
+    }
+
+    public Task<IReadOnlyList<string>> Handle(GetUserPermissionsQuery request, CancellationToken ct)
+        => _permissions.GetEffectivePermissionsForUserAsync(request.UserId, ct);
+}
+
 // ─── Permission DTOs ──────────────────────────────────────────────────────────
 
 public record PermissionDto(Guid Id, string Resource, string Action, string Description);

@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import AccessibleModal from '@/components/AccessibleModal';
@@ -23,6 +23,13 @@ interface User {
 interface Role {
     id: string;
     name: string;
+}
+
+interface PermissionDef {
+    id: string;
+    resource: string;
+    action: string;
+    description: string;
 }
 
 const ROLE_COLORS: Record<string, string> = {
@@ -58,6 +65,11 @@ export default function UsersClient({
     const [saving, setSaving]     = useState(false);
     const [tempPassword, setTempPassword] = useState<string | null>(null);
     const [message, setMessage]   = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+    const [allPermissions, setAllPermissions] = useState<PermissionDef[]>([]);
+    const [permissionsUserId, setPermissionsUserId] = useState<string>('');
+    const [effectivePermissions, setEffectivePermissions] = useState<string[]>([]);
+    const [permissionsLoading, setPermissionsLoading] = useState(false);
+    const [showAbac, setShowAbac] = useState(false);
     const { fetchCached, invalidateCached } = useCachedApi();
 
     const loadUsers = async () => {
@@ -71,6 +83,39 @@ export default function UsersClient({
         setMessage({ type, text });
         setTimeout(() => setMessage(null), 4000);
     };
+
+    const loadPermissionCatalog = useCallback(async () => {
+        const res = await fetch('/api/proxy/permissions');
+        if (!res.ok) return;
+        const data = await res.json();
+        setAllPermissions(Array.isArray(data) ? data : []);
+        setShowAbac(true);
+    }, []);
+
+    const loadUserPermissions = useCallback(async (userId: string) => {
+        if (!userId) {
+            setEffectivePermissions([]);
+            return;
+        }
+        setPermissionsLoading(true);
+        try {
+            const res = await fetch(`/api/proxy/permissions/users/${userId}`);
+            if (res.ok) {
+                const data = await res.json();
+                setEffectivePermissions(Array.isArray(data) ? data : []);
+            }
+        } finally {
+            setPermissionsLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        void loadPermissionCatalog();
+    }, [loadPermissionCatalog]);
+
+    useEffect(() => {
+        if (permissionsUserId) void loadUserPermissions(permissionsUserId);
+    }, [permissionsUserId, loadUserPermissions]);
 
     const onCreate = handleSubmit(async (data) => {
         setSaving(true);
@@ -258,6 +303,77 @@ export default function UsersClient({
                                 {r.name}
                             </div>
                         ))}
+                    </div>
+                </div>
+            )}
+
+            {showAbac && allPermissions.length > 0 && (
+                <div style={{ marginTop: '28px' }}>
+                    <h3 style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '12px' }}>
+                        Permisos ABAC (Admin)
+                    </h3>
+                    <div className="erp-card" style={{ padding: '20px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                            <div>
+                                <label className="erp-label">USUARIO</label>
+                                <select
+                                    className="erp-input"
+                                    value={permissionsUserId}
+                                    onChange={e => setPermissionsUserId(e.target.value)}
+                                >
+                                    <option value="">Seleccionar usuario...</option>
+                                    {users.map(u => (
+                                        <option key={u.id} value={u.id}>{u.firstName} {u.lastName} ({u.email})</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="erp-label">PERMISOS EFECTIVOS</label>
+                                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
+                                    {permissionsLoading ? 'Cargando...' : permissionsUserId
+                                        ? `${effectivePermissions.length} permisos activos`
+                                        : 'Selecciona un usuario'}
+                                </div>
+                            </div>
+                        </div>
+                        {permissionsUserId && !permissionsLoading && (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '16px' }}>
+                                {effectivePermissions.length === 0 ? (
+                                    <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Sin permisos efectivos</span>
+                                ) : effectivePermissions.map(p => (
+                                    <span key={p} className="badge badge-success" style={{ fontFamily: 'monospace', fontSize: '11px' }}>{p}</span>
+                                ))}
+                            </div>
+                        )}
+                        <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '8px' }}>
+                            Catálogo del sistema ({allPermissions.length})
+                        </div>
+                        <div style={{ maxHeight: '240px', overflowY: 'auto' }}>
+                            <table className="erp-table">
+                                <thead>
+                                    <tr>
+                                        <th>Recurso</th>
+                                        <th>Acción</th>
+                                        <th>Descripción</th>
+                                        <th>Efectivo</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {allPermissions.map(p => {
+                                        const key = `${p.resource}:${p.action}`;
+                                        const active = effectivePermissions.some(ep => ep.toLowerCase() === key.toLowerCase());
+                                        return (
+                                            <tr key={p.id}>
+                                                <td style={{ fontFamily: 'monospace', fontSize: '12px' }}>{p.resource}</td>
+                                                <td style={{ fontFamily: 'monospace', fontSize: '12px' }}>{p.action}</td>
+                                                <td style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{p.description}</td>
+                                                <td>{active ? <span className="badge badge-success">✓</span> : <span className="badge badge-gray">—</span>}</td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             )}

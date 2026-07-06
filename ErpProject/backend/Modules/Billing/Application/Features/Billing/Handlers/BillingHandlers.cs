@@ -463,6 +463,8 @@ public class LockInvoiceHandler : IRequestHandler<LockInvoiceCommand, bool>
     private readonly IPublisher _publisher;
     private readonly IVerifactuSubmissionGateway _verifactuGateway;
     private readonly IVerifactuModeSettings _verifactuMode;
+    private readonly IVerifactuAnulacionRegistrar _anulacionRegistrar;
+    private readonly IVerifactuChainQuery _verifactuChain;
     private readonly IHttpContextCurrentUserAccessor _currentUser;
     private readonly IBillingInvoiceSalesLinkQuery _salesLink;
     private readonly Microsoft.Extensions.Logging.ILogger<LockInvoiceHandler> _log;
@@ -475,6 +477,8 @@ public class LockInvoiceHandler : IRequestHandler<LockInvoiceCommand, bool>
         IPublisher publisher,
         IVerifactuSubmissionGateway verifactuGateway,
         IVerifactuModeSettings verifactuMode,
+        IVerifactuAnulacionRegistrar anulacionRegistrar,
+        IVerifactuChainQuery verifactuChain,
         IHttpContextCurrentUserAccessor currentUser,
         IBillingInvoiceSalesLinkQuery salesLink,
         Microsoft.Extensions.Logging.ILogger<LockInvoiceHandler> log)
@@ -486,6 +490,8 @@ public class LockInvoiceHandler : IRequestHandler<LockInvoiceCommand, bool>
         _publisher        = publisher;
         _verifactuGateway = verifactuGateway;
         _verifactuMode    = verifactuMode;
+        _anulacionRegistrar = anulacionRegistrar;
+        _verifactuChain     = verifactuChain;
         _currentUser      = currentUser;
         _salesLink        = salesLink;
         _log              = log;
@@ -495,6 +501,7 @@ public class LockInvoiceHandler : IRequestHandler<LockInvoiceCommand, bool>
     {
         var inv = await _ctx.Invoices
             .Include(i => i.InvoiceLines)
+            .Include(i => i.RectifiedInvoice)
             .FirstOrDefaultAsync(i => i.Id == req.Id, ct);
         if (inv == null) return false;
 
@@ -515,16 +522,11 @@ public class LockInvoiceHandler : IRequestHandler<LockInvoiceCommand, bool>
 
         if (company != null && !string.IsNullOrEmpty(company.TaxId))
         {
-            var previousHuella = await _ctx.Invoices
-                .Where(i => i.Series == inv.Series
-                         && i.FiscalYear == inv.FiscalYear
-                         && i.SequenceNumber < inv.SequenceNumber
-                         && i.VerifactuHuella != null)
-                .OrderByDescending(i => i.SequenceNumber)
-                .Select(i => i.VerifactuHuella)
-                .FirstOrDefaultAsync(ct);
+            var previousHuella = await _verifactuChain.GetLastHuellaBeforeAsync(
+                inv.CompanyId, inv.Series, inv.FiscalYear, lockedAt.UtcDateTime, ct);
 
-            var tipoFactura = VerifactuTipoFactura.Resolve(inv.InvoiceType);
+            var tipoFactura = VerifactuTipoFactura.Resolve(
+                inv.InvoiceType, inv.RectifiedInvoice?.InvoiceType);
 
             inv.VerifactuRealtimeSubmission = _verifactuMode.RealtimeSubmissionEnabled;
 
@@ -545,11 +547,27 @@ public class LockInvoiceHandler : IRequestHandler<LockInvoiceCommand, bool>
 
         await _ctx.SaveChangesAsync(ct);
 
-        // ── Verifactu per-invoice submission via Hangfire (RD 1007/2023) ──────
-        if (!string.IsNullOrEmpty(inv.VerifactuHuella) && inv.VerifactuRealtimeSubmission)
+        // ── Verifactu per-invoice submission / conservación local (RD 1007/2023) ─
+        if (!string.IsNullOrEmpty(inv.VerifactuHuella))
         {
             _verifactuGateway.EnqueueVerifactuSubmission(inv.Id);
-            _log.LogInformation("VerifactuSubmissionJob enqueued for invoice {Number}", inv.Number);
+            _log.LogInformation(
+                "VerifactuSubmissionJob enqueued for invoice {Number} (realtime={Realtime})",
+                inv.Number, inv.VerifactuRealtimeSubmission);
+        }
+
+        // Rectificativa bloqueada → anulación VeriFactu de la factura original
+        if (string.Equals(inv.InvoiceType, "Rectificativa", StringComparison.OrdinalIgnoreCase)
+            && inv.RectifiedInvoiceId.HasValue)
+        {
+            try
+            {
+                await _anulacionRegistrar.RegisterAsync(inv.RectifiedInvoiceId.Value, ct);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _log.LogWarning(ex, "No se pudo registrar anulación VeriFactu de factura original");
+            }
         }
 
         // AuditLog inmutable con hash (solo si hay usuario autenticado — evita FK inválida)
@@ -596,6 +614,39 @@ public class LockInvoiceHandler : IRequestHandler<LockInvoiceCommand, bool>
                 return amount;
             return Math.Round(amount * inv.ExchangeRateToEur, 2, MidpointRounding.AwayFromZero);
         }
+    }
+}
+
+/// <summary>Baja de factura bloqueada + registro VeriFactu de anulación si aplica.</summary>
+public class CancelInvoiceHandler : IRequestHandler<CancelInvoiceCommand, bool>
+{
+    private readonly IBillingDbContext _ctx;
+    private readonly IVerifactuAnulacionRegistrar _anulacionRegistrar;
+
+    public CancelInvoiceHandler(IBillingDbContext ctx, IVerifactuAnulacionRegistrar anulacionRegistrar)
+    {
+        _ctx = ctx;
+        _anulacionRegistrar = anulacionRegistrar;
+    }
+
+    public async Task<bool> Handle(CancelInvoiceCommand req, CancellationToken ct)
+    {
+        var inv = await _ctx.Invoices.FirstOrDefaultAsync(i => i.Id == req.Id, ct);
+        if (inv is null) return false;
+
+        if (!inv.IsLocked)
+            throw new InvalidOperationException("Solo se pueden dar de baja facturas bloqueadas.");
+
+        if (inv.Status == "Cancelled")
+            throw new InvalidOperationException("La factura ya está anulada.");
+
+        inv.Status = "Cancelled";
+        await _ctx.SaveChangesAsync(ct);
+
+        if (!string.IsNullOrEmpty(inv.VerifactuHuella))
+            await _anulacionRegistrar.RegisterAsync(inv.Id, ct);
+
+        return true;
     }
 }
 

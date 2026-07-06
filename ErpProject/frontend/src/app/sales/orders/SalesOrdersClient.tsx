@@ -17,12 +17,7 @@ export interface SalesOrder {
     createdAt: string;
 }
 
-const STATUS_MAP: Record<string, { label: string; cls: string }> = {
-    Open: { label: 'Abierto', cls: 'badge-info' },
-    Shipped: { label: 'Enviado', cls: 'badge-warning' },
-    Delivered: { label: 'Entregado', cls: 'badge-success' },
-    Cancelled: { label: 'Cancelado', cls: 'badge-gray' },
-};
+import { SALES_ORDER_STATUS_FILTERS, SALES_ORDER_STATUS_MAP } from '@/lib/salesOrderStatus';
 
 interface SalesOrdersClientProps {
     initialOrders: SalesOrder[];
@@ -65,7 +60,7 @@ export default function SalesOrdersClient({ initialOrders }: SalesOrdersClientPr
             </div>
 
             <div style={{ display: 'flex', gap: '6px', marginBottom: '20px' }}>
-                {['all', 'Open', 'Shipped', 'Delivered', 'Cancelled'].map(f => (
+                {SALES_ORDER_STATUS_FILTERS.map(f => (
                     <button key={f} onClick={() => setFilter(f)}
                         style={{
                             padding: '6px 14px', borderRadius: '6px', border: '1px solid var(--border)',
@@ -74,7 +69,7 @@ export default function SalesOrdersClient({ initialOrders }: SalesOrdersClientPr
                             color: filter === f ? 'white' : 'var(--text-secondary)',
                             cursor: 'pointer',
                         }}>
-                        {f === 'all' ? 'Todos' : STATUS_MAP[f]?.label ?? f}
+                        {f === 'all' ? 'Todos' : SALES_ORDER_STATUS_MAP[f]?.label ?? f}
                         {f !== 'all' && (
                             <span style={{ marginLeft: '6px', opacity: 0.7 }}>
                                 ({orders.filter(o => o.status === f).length})
@@ -87,8 +82,8 @@ export default function SalesOrdersClient({ initialOrders }: SalesOrdersClientPr
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px', marginBottom: '20px' }}>
                 <MiniStat label="Total Pedidos" value={fmt(orders.reduce((s, o) => s + o.total, 0))} color="var(--brand-primary)" />
                 <MiniStat label="Abiertos" value={fmt(orders.filter(o => o.status === 'Open').reduce((s, o) => s + o.total, 0))} color="var(--info)" />
-                <MiniStat label="Enviados" value={fmt(orders.filter(o => o.status === 'Shipped').reduce((s, o) => s + o.total, 0))} color="var(--warning)" />
-                <MiniStat label="Entregados" value={fmt(orders.filter(o => o.status === 'Delivered').reduce((s, o) => s + o.total, 0))} color="var(--success)" />
+                <MiniStat label="Parcial" value={fmt(orders.filter(o => o.status === 'PartiallyDelivered').reduce((s, o) => s + o.total, 0))} color="var(--warning)" />
+                <MiniStat label="Completados" value={fmt(orders.filter(o => o.status === 'Completed').reduce((s, o) => s + o.total, 0))} color="var(--success)" />
             </div>
 
             <div className="erp-card" style={{ overflow: 'hidden' }}>
@@ -120,7 +115,7 @@ export default function SalesOrdersClient({ initialOrders }: SalesOrdersClientPr
                                 <td style={{ color: 'var(--text-secondary)' }}>{o.customerName || '—'}</td>
                                 <td style={{ color: 'var(--text-secondary)' }}>{new Date(o.orderDate).toLocaleDateString('es-ES')}</td>
                                 <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(o.total)}</td>
-                                <td><span className={`badge ${STATUS_MAP[o.status]?.cls ?? 'badge-gray'}`}>{STATUS_MAP[o.status]?.label ?? o.status}</span></td>
+                                <td><span className={`badge ${SALES_ORDER_STATUS_MAP[o.status]?.cls ?? 'badge-gray'}`}>{SALES_ORDER_STATUS_MAP[o.status]?.label ?? o.status}</span></td>
                                 <td>
                                     <a href={`/sales/orders/${o.id}`} className="btn btn-secondary btn-sm">Ver</a>
                                 </td>

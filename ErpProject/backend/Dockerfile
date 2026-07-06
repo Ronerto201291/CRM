@@ -8,6 +8,8 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS csproj-only
 WORKDIR /src
 COPY backend/ .
+# NTFS no distingue Api/API; Docker en Linux sí — alinear con las ProjectReference (*.csproj).
+RUN if [ -d Modules/Inventory/API ]; then rm -rf Modules/Inventory/Api; mv Modules/Inventory/API Modules/Inventory/Api; fi
 RUN find . -type f ! -name '*.csproj' -delete && find . -type d -empty -delete
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
@@ -17,6 +19,7 @@ RUN dotnet restore "Erp.Api/Erp.Api.csproj"
 
 # Ahora sí se copia el código fuente completo para compilar/publicar.
 COPY backend/ .
+RUN if [ -d Modules/Inventory/API ]; then rm -rf Modules/Inventory/Api; mv Modules/Inventory/API Modules/Inventory/Api; fi
 
 WORKDIR "/src/Erp.Api"
 RUN dotnet build "Erp.Api.csproj" -c Release -o /app/build

@@ -33,6 +33,12 @@ public class PermissionsController : ControllerBase
     public async Task<IActionResult> MyPermissions(CancellationToken ct)
         => Ok(await _mediator.Send(new GetMyPermissionsQuery(), ct));
 
+    /// <summary>Returns effective permissions for a specific user (Admin only).</summary>
+    [HttpGet("users/{userId:guid}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> UserPermissions(Guid userId, CancellationToken ct)
+        => Ok(await _mediator.Send(new GetUserPermissionsQuery(userId), ct));
+
     /// <summary>Grants a permission to a specific user (Admin only).</summary>
     [HttpPost("grant")]
     [Authorize(Roles = "Admin")]
