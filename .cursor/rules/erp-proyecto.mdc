@@ -13,12 +13,12 @@ aislado — CRM es uno de nueve módulos de negocio). Backend en .NET 10
 
 ## Antes de tocar un módulo, lee su ADR
 
-**Obligatorio:** antes de implementar o modificar cualquier módulo, lee el ADR
-correspondiente en `ErpProject/docs/adr/`. La estructura real de cada módulo
-(controllers, entidades, páginas, integraciones, huecos conocidos) está ahí —
-varios módulos tienen deuda técnica ya identificada (código muerto,
-integraciones a medias, endpoints mock) que el ADR señala explícitamente para
-no asumir que todo funciona.
+La estructura real de cada módulo (controllers, entidades, páginas,
+integraciones con otros módulos, huecos conocidos) está documentada en
+`ErpProject/docs/adr/`. Lee el ADR correspondiente antes de implementar o
+modificar algo — varios módulos tienen deuda técnica ya identificada
+(código muerto, integraciones a medias, endpoints mock) que el ADR señala
+explícitamente para no asumir que todo funciona.
 
 Índice completo: `ErpProject/docs/README.md`.
 
@@ -42,43 +42,37 @@ no asumir que todo funciona.
 | API pública y API Keys | `ErpProject/docs/adr/0016-api-publica-keys.md` |
 | Audit Logs | `ErpProject/docs/adr/0017-audit-logs.md` |
 | Calidad arquitectónica (SOLID, Clean Architecture, CQRS, duplicación) | `ErpProject/docs/adr/0018-calidad-arquitectura.md` |
+| Roadmap producto (#38–#42f) | `ErpProject/docs/adr/0019-producto-roadmap.md` |
+| Docker Compose local vs producción | `ErpProject/docs/adr/0020-docker-local-produccion.md` |
 
 Si un cambio modifica la estructura descrita en un ADR (nuevo endpoint,
 entidad, integración), actualiza ese ADR en el mismo cambio.
 
-**Mantener ADRs de módulo alineados:** al cerrar un ítem en ADR-0018
-(✅ Corregido) o modificar código de un módulo, actualiza el ADR del
-módulo en el mismo cambio. No basta con una nota al final ni con dejar
-ADR-0018 al día si **Decisión**, **Consecuencias** o **Evaluación de
-calidad arquitectónica** siguen describiendo el estado anterior:
-
-1. Revisar y actualizar esas tres secciones para reflejar el estado real
-   tras el cambio (no solo añadir un párrafo al final del documento).
-2. Buscar y eliminar o actualizar frases obsoletas (p. ej. «sin
-   IMediator», «mock», «código muerto», entidades en `Erp.Domain` cuando
-   ya viven en el módulo).
-3. Pasar el checklist de `0000-template.md`: ¿alguna frase contradice
-   ADR-0018 o el código actual?
+Al cerrar un ítem en ADR-0018 o modificar un módulo, actualiza también
+**Decisión**, **Consecuencias** y **Evaluación de calidad** del ADR del
+módulo (no solo una nota al final); elimina frases obsoletas («sin
+IMediator», «mock», «código muerto», entidades en `Erp.Domain`) y comprueba
+con `0000-template.md` que no contradigan ADR-0018 ni el código.
 
 ## Antes de dar por terminado un cambio, pasa el checklist de calidad
 
-**Obligatorio:** antes de considerar terminada cualquier implementación, pasa
-este checklist. Todo ADR incluye una sección **"Evaluación de calidad
-arquitectónica"** (plantilla en `0000-template.md`, metodología completa en
-ADR-0018).
+Todo ADR incluye una sección **"Evaluación de calidad arquitectónica"**
+(plantilla en `0000-template.md`, metodología completa en `ADR-0018`). Antes
+de considerar terminada una implementación en un módulo:
 
 - Los controllers nuevos/modificados son delgados: construyen un
   Command/Query y llaman a `_mediator.Send(...)`, sin lógica de negocio ni
-  acceso a datos inline (43/43 controllers con `IMediator`; no reintroducir
-  bypass; remediación arquitectónica backlog 1–27 ~100% en ADR-0018).
+  acceso a datos inline (0 de 71 controllers incumplen esto a día de hoy —
+  no reintroducir ninguno; ver ADR-0018 §5).
 - No se duplica lógica que ya existe en un Command/Handler (patrón repetido
   y ya corregido en VIES, VAT y Prorrata — ver ADR-0018 §4 antes de crear un
   segundo cálculo/consulta que ya exista).
 - Si el módulo usa CQRS, cualquier flujo nuevo pasa por MediatR; si el
   módulo no tiene CQRS (caso Payroll), no asumir que existe sin comprobar.
 - Los endpoints de listado paginan; no se añaden queries dentro de bucles.
-- Las referencias de proyecto nuevas respetan la dirección de dependencias
-  (Api→Application→Domain; el core no depende de módulos).
+- **Dirección de dependencias:** ver regla dedicada `erp-dependency-direction.mdc`.
+  El core NUNCA depende de módulos. Ejecutar `DependencyDirectionArchitectureTests`
+  antes de cerrar cambios en `Erp.Domain`, `Erp.Application` o `Erp.Infrastructure`.
 - **El frontend de la página tocada queda conectado de verdad al backend**:
   si arreglas o implementas un endpoint, confirma que la página que lo usa
   hace `fetch`/`onClick` real contra él (no lo des por hecho — hay páginas
@@ -95,6 +89,17 @@ ADR-0018).
   reléelo antes de modificarlo. El objetivo es que la deuda técnica sea
   monótonamente decreciente: cada corrección debe quedar protegida, no
   solo hecha una vez.
+- **Toda funcionalidad nueva lleva test que corra en CI, sin excepción**:
+  ningún handler, entidad, endpoint o componente nuevo se da por terminado
+  sin al menos un test en `backend/tests/` (`Erp.Tests` unit,
+  `Erp.IntegrationTests` flujos BBDD, `Erp.ArchitectureTests` reglas
+  estructurales) y `dotnet test ErpProject/backend/Erp.slnx` en verde en el
+  mismo cambio. Igual frontend con Vitest cuando aplique. Bugs corregidos:
+  test que prueba la corrección. No tests circulares (ver `SpanishTaxIdValidatorTests`, ADR-0018 ítem 0f).
+- **Migraciones EF en paralelo:** antes de push de migración nueva, `git pull`,
+  verificar orden con `dotnet ef migrations script --idempotent`. Migraciones
+  SQL manuales requieren `[DbContext(typeof(ErpDbContext))]` (test en
+  `ManualMigrationArchitectureTests`).
 
 ## Comandos básicos
 
@@ -113,15 +118,16 @@ npm run lint
 # Stack completo (local, con BBDD en Docker — sin servidor)
 cd ErpProject
 cp .env.example .env                  # rellena POSTGRES_PASSWORD y JWT_SECRET
-docker compose up -d --build
-# frontend :3000 (vía nginx :80), backend+swagger :8081, postgres :5432
+docker compose up -d --build        # local: override.yml se carga automáticamente
+# frontend http://localhost (nginx :80) o http://localhost:3000 (directo); backend+swagger :8081, postgres :5432
 # producción: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
 ## Huecos conocidos
 
-- Backend: `Erp.Tests`, `Erp.IntegrationTests` y `Erp.ArchitectureTests`
-  (~48 tests); frontend sin runner JS configurado.
+- Cobertura de tests **fase 17 (jul 2026, coverage gates)**: backend **~654+ tests**;
+  frontend **~136 Vitest** con gates en CI; `ErpProject/scripts/check-coverage.py`,
+  `coverage-thresholds.json`; pipeline en `.github/workflows/ci-cd.yml`; ver ADR-0018 ítem #32.
 - `ErpProject/backend/Erp.slnx` no registra explícitamente todos los
   módulos que sí están cableados en `Program.cs` (ver ADR-0001).
 - Varios módulos tienen partes construidas pero no conectadas end-to-end

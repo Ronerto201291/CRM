@@ -16,9 +16,10 @@ En `appsettings.json` o variables de entorno:
 
 | Provider | Comportamiento |
 |---|---|
-| `Mock` | Movimientos de prueba (desarrollo) |
-| `Stub` | Sin importación; solo log |
+| `Mock` | Movimientos de prueba (solo `Development` / `IntegrationTests` sin credenciales) |
+| `Stub` | Sin importación; solo log (Production sin credenciales, o `Provider=Stub` explícito) |
 | `GoCardless` / `Nordigen` / `Configurable` | `ConfigurableOpenBankingProvider`: OAuth `token/new/` + GET transacciones |
+| *(auto)* | Si `ClientId` + `ClientSecret` + `ApiBaseUrl` están configurados, se usa `Configurable` aunque `Provider=Mock` |
 
 ## Flujo
 

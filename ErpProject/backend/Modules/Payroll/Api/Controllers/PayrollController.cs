@@ -1,8 +1,12 @@
 using Erp.Application.Common.Attributes;
 using Erp.Application.Common.Fiscal;
+using Erp.Modules.Payroll.Application.Features.Calculation;
+using Erp.Modules.Payroll.Application.Features.Concepts;
 using Erp.Modules.Payroll.Application.Features.Employees;
 using Erp.Modules.Payroll.Application.Features.Exports;
+using Erp.Modules.Payroll.Application.Features.Pdf;
 using Erp.Modules.Payroll.Application.Features.Settlements;
+using Erp.Modules.Payroll.Application.Features.Templates;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -81,6 +85,23 @@ public class PayrollController : ControllerBase
         catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
     }
 
+    [HttpGet("settlements/{id:guid}/lines")]
+    [RequirePermission(Permissions.Settlement.Read)]
+    public async Task<IActionResult> ListSettlementLines(Guid id, CancellationToken ct)
+        => Ok(await _mediator.Send(new GetSettlementLinesQuery(id), ct));
+
+    [HttpGet("lines/{lineId:guid}/pdf")]
+    [RequirePermission(Permissions.Settlement.Read)]
+    public async Task<IActionResult> DownloadLinePdf(Guid lineId, CancellationToken ct)
+    {
+        try
+        {
+            var result = await _mediator.Send(new GetPayrollLinePdfQuery(lineId), ct);
+            return File(result.PdfBytes, "application/pdf", result.FileName);
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+    }
+
     [HttpPost("settlements/{id:guid}/finalize")]
     [RequirePermission(Permissions.Settlement.Manage)]
     public async Task<IActionResult> Finalize(Guid id, CancellationToken ct)
@@ -91,6 +112,69 @@ public class PayrollController : ControllerBase
             return Ok(new { message = result.Message, journalEntryId = result.JournalEntryId });
         }
         catch (KeyNotFoundException) { return NotFound(); }
+        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
+    // ── Fase 1: plantillas, cálculo automático, conceptos ───────────────────
+
+    [HttpGet("templates")]
+    [RequirePermission(Permissions.Settlement.Read)]
+    public async Task<IActionResult> ListTemplates(CancellationToken ct)
+        => Ok(await _mediator.Send(new GetPayrollTemplatesQuery(), ct));
+
+    [HttpPost("templates")]
+    [RequirePermission(Permissions.Settlement.Manage)]
+    public async Task<IActionResult> CreateTemplate([FromBody] CreateTemplateBody body, CancellationToken ct)
+    {
+        try
+        {
+            var result = await _mediator.Send(new CreatePayrollTemplateCommand(
+                body.Name, body.Description, body.DefaultContractType,
+                body.DefaultWeeklyHours, body.EmployeeSsRatePercent,
+                body.EmployerSsRatePercent, body.DefaultIrpfRatePercent, body.IsDefault), ct);
+            return Created($"/api/payroll/templates/{result.Id}", new { result.Id });
+        }
+        catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
+    [HttpPost("settlements/{id:guid}/calculate-line")]
+    [RequirePermission(Permissions.Settlement.Manage)]
+    public async Task<IActionResult> CalculateLine(Guid id, [FromBody] CalculateLineBody body, CancellationToken ct)
+    {
+        try
+        {
+            var result = await _mediator.Send(new CalculatePayrollLineCommand(
+                id, body.EmployeeId, body.GrossSalary, body.TemplateId, body.IrpfRatePercentOverride), ct);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+        catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
+    [HttpGet("lines/{lineId:guid}/concepts")]
+    [RequirePermission(Permissions.Settlement.Read)]
+    public async Task<IActionResult> GetLineConcepts(Guid lineId, CancellationToken ct)
+    {
+        try
+        {
+            return Ok(await _mediator.Send(new GetPayrollLineConceptsQuery(lineId), ct));
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+    }
+
+    [HttpPost("lines/{lineId:guid}/deductions")]
+    [RequirePermission(Permissions.Settlement.Manage)]
+    public async Task<IActionResult> AddDeduction(Guid lineId, [FromBody] AddDeductionBody body, CancellationToken ct)
+    {
+        try
+        {
+            var result = await _mediator.Send(new AddPayrollDeductionCommand(
+                lineId, body.Code, body.Description, body.Amount, body.Category), ct);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+        catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
         catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
     }
 
@@ -113,6 +197,16 @@ public class PayrollController : ControllerBase
     [RequirePermission(Permissions.Settlement.Export)]
     public async Task<IActionResult> ExportRed([FromQuery] int year, [FromQuery] int month, CancellationToken ct)
         => await SendPayrollExport(new ExportRedQuery(year, month), ct);
+
+    [HttpGet("export/model-111")]
+    [RequirePermission(Permissions.Settlement.Export)]
+    public async Task<IActionResult> ExportModel111([FromQuery] int year, [FromQuery] int quarter, CancellationToken ct)
+        => await SendPayrollExport(new ExportModel111Query(year, quarter), ct);
+
+    [HttpGet("export/model-190")]
+    [RequirePermission(Permissions.Settlement.Export)]
+    public async Task<IActionResult> ExportModel190([FromQuery] int year, CancellationToken ct)
+        => await SendPayrollExport(new ExportModel190Query(year), ct);
 
     private async Task<IActionResult> SendPayrollExport<TQuery>(TQuery query, CancellationToken ct)
         where TQuery : IRequest<PayrollFiscalExportResult>
@@ -156,5 +250,33 @@ public class PayrollController : ControllerBase
         public decimal IrpfRate { get; set; }
         public decimal IrpfWithheld { get; set; }
         public decimal NetPay { get; set; }
+    }
+
+    public sealed class CreateTemplateBody
+    {
+        public string Name { get; set; } = "";
+        public string? Description { get; set; }
+        public string? DefaultContractType { get; set; }
+        public decimal? DefaultWeeklyHours { get; set; }
+        public decimal? EmployeeSsRatePercent { get; set; }
+        public decimal? EmployerSsRatePercent { get; set; }
+        public decimal? DefaultIrpfRatePercent { get; set; }
+        public bool IsDefault { get; set; }
+    }
+
+    public sealed class CalculateLineBody
+    {
+        public Guid EmployeeId { get; set; }
+        public decimal GrossSalary { get; set; }
+        public Guid? TemplateId { get; set; }
+        public decimal? IrpfRatePercentOverride { get; set; }
+    }
+
+    public sealed class AddDeductionBody
+    {
+        public string Code { get; set; } = "";
+        public string? Description { get; set; }
+        public decimal Amount { get; set; }
+        public string? Category { get; set; }
     }
 }

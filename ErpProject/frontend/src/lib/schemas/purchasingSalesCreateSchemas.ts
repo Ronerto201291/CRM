@@ -50,6 +50,7 @@ export const deliveryNoteCreateSchema = z.object({
 });
 
 export const supplierInvoiceCreateSchema = z.object({
+    supplierId: z.string().min(1, 'Selecciona un proveedor'),
     purchaseOrderId: z.string().min(1, 'Selecciona un pedido de compra'),
     number: z.string().min(1, 'Número de factura obligatorio'),
     invoiceDate: z.string().min(1, 'Fecha obligatoria'),

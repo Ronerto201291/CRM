@@ -28,6 +28,17 @@ public record FinalizeSettlementCommand(Guid SettlementId) : IRequest<FinalizeSe
 
 public record FinalizeSettlementResult(string Message, Guid JournalEntryId, bool AlreadyFinalized);
 
+public record SettlementLineListItemDto(
+    Guid Id,
+    Guid EmployeeId,
+    string EmployeeName,
+    string TaxId,
+    decimal GrossSalary,
+    decimal IrpfWithheld,
+    decimal NetPay);
+
+public record GetSettlementLinesQuery(Guid SettlementId) : IRequest<IReadOnlyList<SettlementLineListItemDto>>;
+
 public class GetSettlementsHandler : IRequestHandler<GetSettlementsQuery, IReadOnlyList<SettlementListItemDto>>
 {
     private readonly IPayrollDbContext _ctx;
@@ -178,5 +189,30 @@ public class FinalizeSettlementHandler : IRequestHandler<FinalizeSettlementComma
 
         return new FinalizeSettlementResult(
             "Liquidación cerrada y asiento contable generado.", entryId, AlreadyFinalized: false);
+    }
+}
+
+public class GetSettlementLinesHandler : IRequestHandler<GetSettlementLinesQuery, IReadOnlyList<SettlementLineListItemDto>>
+{
+    private readonly IPayrollDbContext _ctx;
+
+    public GetSettlementLinesHandler(IPayrollDbContext ctx) => _ctx = ctx;
+
+    public async Task<IReadOnlyList<SettlementLineListItemDto>> Handle(GetSettlementLinesQuery request, CancellationToken ct)
+    {
+        return await _ctx.PayrollLines
+            .Include(l => l.Employee)
+            .Where(l => l.PayrollSettlementId == request.SettlementId)
+            .AsNoTracking()
+            .OrderBy(l => l.Employee!.FullName)
+            .Select(l => new SettlementLineListItemDto(
+                l.Id,
+                l.EmployeeId,
+                l.Employee!.FullName,
+                l.Employee.TaxId,
+                l.GrossSalary,
+                l.IrpfWithheld,
+                l.NetPay))
+            .ToListAsync(ct);
     }
 }

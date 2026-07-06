@@ -1,6 +1,8 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import PageContainer from '@/components/PageContainer';
+import LegalDisclaimer, { FISCAL_EXPORT_DISCLAIMER_TEXT } from '@/components/LegalDisclaimer';
+import { accountantExportSettingsSchema } from '@/lib/schemas/settingsFiscalFormSchemas';
 
 export default function AccountantExportClient() {
     const [email, setEmail] = useState('');
@@ -24,6 +26,11 @@ export default function AccountantExportClient() {
     }, [load]);
 
     const save = async () => {
+        const parsed = accountantExportSettingsSchema.safeParse({ accountantEmail: email, frequency });
+        if (!parsed.success) {
+            setMessage(parsed.error.issues[0]?.message ?? 'Revisa el formulario');
+            return;
+        }
         setSaving(true);
         setMessage(null);
         const r = await fetch('/api/proxy/accountant-export/settings', {
@@ -79,6 +86,10 @@ export default function AccountantExportClient() {
                     <p className="page-subtitle">ZIP periódico: libros IVA, asientos contables, PDFs facturas emitidas y documentos de gastos (ADR-0018 #42e)</p>
                 </div>
             </div>
+
+            <LegalDisclaimer title="Aviso legal — export gestoría">
+                {FISCAL_EXPORT_DISCLAIMER_TEXT} El paquete ZIP incluye datos contables y fiscales orientativos; la gestoría debe validarlos antes de cualquier presentación.
+            </LegalDisclaimer>
 
             <div className="erp-card" style={{ padding: '24px', maxWidth: '560px' }}>
                 {message && <div style={{ marginBottom: 12, fontSize: 13, color: 'var(--success)' }}>{message}</div>}

@@ -3,6 +3,15 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import PageContainer from '@/components/PageContainer';
 import AccessibleModal from '@/components/AccessibleModal';
 import { parseListResponse } from '@/lib/parseListResponse';
+import {
+    treasuryBankAccountSchema,
+    treasuryCashEffectSchema,
+    treasuryPaymentOrderSchema,
+    treasuryPosTerminalSchema,
+    treasuryPosPaymentSchema,
+    treasuryCashSessionOpenSchema,
+    treasuryCashSessionCloseSchema,
+} from '@/lib/schemas/legacyFormSchemas';
 import type { BankAccount } from './page';
 
 type TreasuryTab = 'accounts' | 'movements' | 'effects' | 'orders' | 'forecast' | 'cash' | 'pos';
@@ -156,6 +165,11 @@ export default function TreasuryClient({ initialAccounts }: TreasuryClientProps)
     }, [tab, selectedAccount, loadMovements, loadEffects, loadOrders, loadForecast, loadCashSession, loadPosTerminals]);
 
     const openCashSession = async () => {
+        const parsed = treasuryCashSessionOpenSchema.safeParse({ openingBalance: cashOpeningBalance });
+        if (!parsed.success) {
+            setCashMessage({ type: 'error', text: parsed.error.issues[0]?.message ?? 'Revisa el formulario' });
+            return;
+        }
         setCashSaving(true);
         setCashMessage(null);
         try {
@@ -177,6 +191,11 @@ export default function TreasuryClient({ initialAccounts }: TreasuryClientProps)
 
     const closeCashSession = async () => {
         if (!openCashSessionData) return;
+        const parsed = treasuryCashSessionCloseSchema.safeParse({ countedClosingBalance: cashCountedBalance });
+        if (!parsed.success) {
+            setCashMessage({ type: 'error', text: parsed.error.issues[0]?.message ?? 'Revisa el formulario' });
+            return;
+        }
         setCashSaving(true);
         setCashMessage(null);
         try {
@@ -198,7 +217,11 @@ export default function TreasuryClient({ initialAccounts }: TreasuryClientProps)
     };
 
     const createPosTerminal = async () => {
-        if (!posName.trim() || !posCode.trim()) return;
+        const parsed = treasuryPosTerminalSchema.safeParse({ name: posName, terminalCode: posCode });
+        if (!parsed.success) {
+            setPosMessage({ type: 'error', text: parsed.error.issues[0]?.message ?? 'Revisa el formulario' });
+            return;
+        }
         setCashSaving(true);
         setPosMessage(null);
         try {
@@ -222,7 +245,15 @@ export default function TreasuryClient({ initialAccounts }: TreasuryClientProps)
     };
 
     const registerPosPayment = async () => {
-        if (!posPaymentTerminalId || !posPaymentInvoiceId.trim()) return;
+        const parsed = treasuryPosPaymentSchema.safeParse({
+            terminalId: posPaymentTerminalId,
+            invoiceId: posPaymentInvoiceId,
+            amount: posPaymentAmount || '0',
+        });
+        if (!parsed.success) {
+            setPosMessage({ type: 'error', text: parsed.error.issues[0]?.message ?? 'Revisa el formulario' });
+            return;
+        }
         setCashSaving(true);
         setPosMessage(null);
         try {
@@ -252,6 +283,8 @@ export default function TreasuryClient({ initialAccounts }: TreasuryClientProps)
     };
 
     const saveAccount = async () => {
+        const parsed = treasuryBankAccountSchema.safeParse(form);
+        if (!parsed.success) { alert(parsed.error.issues[0]?.message ?? 'Revisa el formulario'); return; }
         setSaving(true);
         const r = await fetch('/api/proxy/treasury/bank-accounts', {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
@@ -261,6 +294,8 @@ export default function TreasuryClient({ initialAccounts }: TreasuryClientProps)
     };
 
     const saveEffect = async () => {
+        const parsed = treasuryCashEffectSchema.safeParse(form);
+        if (!parsed.success) { alert(parsed.error.issues[0]?.message ?? 'Revisa el formulario'); return; }
         setSaving(true);
         const r = await fetch('/api/proxy/treasury/effects', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -279,6 +314,8 @@ export default function TreasuryClient({ initialAccounts }: TreasuryClientProps)
     };
 
     const saveOrder = async () => {
+        const parsed = treasuryPaymentOrderSchema.safeParse(form);
+        if (!parsed.success) { alert(parsed.error.issues[0]?.message ?? 'Revisa el formulario'); return; }
         setSaving(true);
         const r = await fetch('/api/proxy/treasury/payment-orders', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },

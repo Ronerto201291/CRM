@@ -38,7 +38,8 @@ public class PurchaseOrderApprovalHandlerTests
         await ctx.SaveChangesAsync();
 
         var approval = new FakeApprovalThresholdService(500m);
-        var handler = new SubmitPurchaseOrderForApprovalHandler(ctx, tenant, approval);
+        var supplierInfo = new FakeSupplierInfoService();
+        var handler = new SubmitPurchaseOrderForApprovalHandler(ctx, tenant, approval, supplierInfo);
         var result = await handler.Handle(new SubmitPurchaseOrderForApprovalCommand(poId), CancellationToken.None);
 
         Assert.Equal(PurchaseOrderStatuses.Approved, result.Status);
@@ -73,11 +74,12 @@ public class PurchaseOrderApprovalHandlerTests
         await ctx.SaveChangesAsync();
 
         var approval = new FakeApprovalThresholdService(500m);
-        var submit = new SubmitPurchaseOrderForApprovalHandler(ctx, tenant, approval);
+        var supplierInfo = new FakeSupplierInfoService();
+        var submit = new SubmitPurchaseOrderForApprovalHandler(ctx, tenant, approval, supplierInfo);
         var pending = await submit.Handle(new SubmitPurchaseOrderForApprovalCommand(poId), CancellationToken.None);
         Assert.Equal(PurchaseOrderStatuses.PendingApproval, pending.Status);
 
-        var approve = new ApprovePurchaseOrderHandler(ctx, tenant);
+        var approve = new ApprovePurchaseOrderHandler(ctx, tenant, supplierInfo);
         var approved = await approve.Handle(new ApprovePurchaseOrderCommand(poId), CancellationToken.None);
         Assert.Equal(PurchaseOrderStatuses.Approved, approved.Status);
     }

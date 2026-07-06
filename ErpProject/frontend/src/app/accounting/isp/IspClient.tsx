@@ -1,5 +1,6 @@
 "use client";
 import React, { useState } from "react";
+import { ispCreateSchema } from '@/lib/schemas/accountingLegacyFormSchemas';
 
 interface IspRecord {
   id: string;
@@ -27,6 +28,11 @@ export default function IspClient({ initialIspList }: { initialIspList: IspRecor
   const create = async () => {
     setFormError(null);
     setSuccessMsg(null);
+    const parsed = ispCreateSchema.safeParse({ supplierCountryCode: countryCode, vatableBase: base, vatRate });
+    if (!parsed.success) {
+      setFormError(parsed.error.issues[0]?.message ?? 'Revisa el formulario');
+      return;
+    }
     const res = await fetch(`/api/proxy/v1/accounting/isp`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

@@ -1,6 +1,8 @@
 'use client';
 import { useState } from 'react';
 import AccessibleModal from '@/components/AccessibleModal';
+import LegalDisclaimer, { FISCAL_EXPORT_DISCLAIMER_TEXT } from '@/components/LegalDisclaimer';
+import { siiSubmitSchema } from '@/lib/schemas/settingsFiscalFormSchemas';
 
 type SiiType = 'emitidas' | 'recibidas';
 
@@ -56,6 +58,11 @@ export default function SettingsSiiClient() {
     };
 
     const handleSubmit = async () => {
+        const parsed = siiSubmitSchema.safeParse({ type, year, month });
+        if (!parsed.success) {
+            setMessage({ text: parsed.error.issues[0]?.message ?? 'Revisa el formulario', ok: false });
+            return;
+        }
         if (!confirm(`¿Enviar las facturas ${type} de ${String(month).padStart(2, '0')}/${year} a la AEAT? Esta acción no se puede deshacer.`)) return;
         setLoading('submit');
         setMessage(null);
@@ -90,6 +97,10 @@ export default function SettingsSiiClient() {
                     <p className="page-subtitle">Generación y envío de libros de IVA a la AEAT</p>
                 </div>
             </div>
+
+            <LegalDisclaimer title="Aviso legal — SII / AEAT">
+                {FISCAL_EXPORT_DISCLAIMER_TEXT}
+            </LegalDisclaimer>
 
             <div className="erp-card" style={{ padding: '28px', marginBottom: '20px' }}>
                 <h2 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '20px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>Parámetros de Exportación</h2>

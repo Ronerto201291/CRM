@@ -44,6 +44,7 @@ public class UpdatePurchaseOrderHandlerTests
     {
         var companyId = Guid.NewGuid();
         var orderId = Guid.NewGuid();
+        var supplierId = Guid.NewGuid();
         var tenant = new FakeTenantContext();
         tenant.SetTenant(companyId, "Empresa test");
 
@@ -56,14 +57,20 @@ public class UpdatePurchaseOrderHandlerTests
         {
             Id = orderId,
             CompanyId = companyId,
+            SupplierId = supplierId,
             Number = "PO-OLD",
             OrderDate = DateTime.UtcNow,
             Lines = [new PurchaseOrderLine { Quantity = 1, UnitPrice = 50m }],
         });
         await ctx.SaveChangesAsync();
 
-        var result = await new UpdatePurchaseOrderHandler(ctx, tenant).Handle(new UpdatePurchaseOrderCommand(
+        var supplierInfo = new FakeSupplierInfoService(new Dictionary<Guid, Erp.Application.Common.Interfaces.SupplierInfoDto>
+        {
+            [supplierId] = new Erp.Application.Common.Interfaces.SupplierInfoDto("Proveedor", "B12345674", "", ""),
+        });
+        var result = await new UpdatePurchaseOrderHandler(ctx, tenant, supplierInfo).Handle(new UpdatePurchaseOrderCommand(
             orderId,
+            supplierId,
             "PO-NEW",
             DateTime.UtcNow,
             [new PurchaseOrderLineDto(Guid.NewGuid(), null, 2m, 25m)]), CancellationToken.None);

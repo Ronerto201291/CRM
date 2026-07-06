@@ -24,6 +24,7 @@ public static class DependencyInjection
 
         services.AddScoped<IPayrollDbContext>(p => p.GetRequiredService<PayrollDbContext>());
         services.AddScoped<IAutomationPayrollQuery, AutomationPayrollQuery>();
+        services.AddSingleton<IPayrollPayslipPdfService, PayrollPayslipPdfService>();
         return services;
     }
 }

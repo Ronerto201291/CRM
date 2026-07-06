@@ -1,6 +1,8 @@
 'use client';
 import { useState } from 'react';
 import AccessibleModal from '@/components/AccessibleModal';
+import LegalDisclaimer, { FISCAL_EXPORT_DISCLAIMER_TEXT } from '@/components/LegalDisclaimer';
+import { siiSubmitSchema } from '@/lib/schemas/settingsFiscalFormSchemas';
 
 type SiiType = 'emitidas' | 'recibidas';
 
@@ -59,6 +61,11 @@ export default function SiiClient() {
     };
 
     const handleSubmit = async () => {
+        const parsed = siiSubmitSchema.safeParse({ type, year, month });
+        if (!parsed.success) {
+            setMessage({ text: parsed.error.issues[0]?.message ?? 'Revisa el formulario', ok: false });
+            return;
+        }
         const label = type === 'emitidas' ? 'Facturas Emitidas' : 'Facturas Recibidas';
         if (!confirm(`¿Firmar y enviar ${label} de ${MONTHS[month - 1]} ${year} a la AEAT?\n\nEsta acción requiere certificado digital configurado en el servidor.`)) return;
         setLoading('submit'); reset();
@@ -99,6 +106,10 @@ export default function SiiClient() {
                     </p>
                 </div>
             </div>
+
+            <LegalDisclaimer title="Aviso legal — SII / AEAT">
+                {FISCAL_EXPORT_DISCLAIMER_TEXT} El envío SOAP requiere certificado digital configurado en el servidor.
+            </LegalDisclaimer>
 
             {/* Info banner — differentiating SII vs Verifactu */}
             <div style={{

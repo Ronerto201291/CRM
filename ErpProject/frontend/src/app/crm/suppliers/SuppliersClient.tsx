@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { parseListResponse } from '@/lib/parseListResponse';
 import AccessibleModal from '@/components/AccessibleModal';
 import { useCachedApi } from '@/hooks/useCachedApi';
+import { supplierCreateSchema } from '@/lib/schemas/legacyFormSchemas';
 
 export interface Supplier {
     id: string; name: string; taxId: string; email: string; phone: string;
@@ -62,9 +63,14 @@ export default function SuppliersClient({ initialSuppliers }: SuppliersClientPro
     };
 
     const save = async () => {
+        const parsed = supplierCreateSchema.safeParse(form);
+        if (!parsed.success) {
+            alert(parsed.error.issues[0]?.message ?? 'Revisa el formulario');
+            return;
+        }
         setSaving(true);
         const r = await fetch('/api/proxy/suppliers', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(parsed.data),
         });
         setSaving(false);
         if (r.ok) { setShowModal(false); setForm(EMPTY_FORM); refresh(); }

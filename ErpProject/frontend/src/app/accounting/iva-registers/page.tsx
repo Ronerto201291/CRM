@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import PageContainer from "@/components/PageContainer";
+import LegalDisclaimer, { FISCAL_EXPORT_DISCLAIMER_TEXT } from "@/components/LegalDisclaimer";
 
 interface Summary {
   totalRecords: number;
@@ -118,6 +119,10 @@ export default function IvaRegistersPage() {
           <p className="page-subtitle">Datos reales de facturas emitidas y gastos aprobados</p>
         </div>
       </div>
+
+      <LegalDisclaimer title="Aviso legal — libros IVA y SII">
+        {FISCAL_EXPORT_DISCLAIMER_TEXT} Los ficheros RIVA .TXT y envíos SII son orientativos hasta validación con asesoría.
+      </LegalDisclaimer>
 
       {error && <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div>}
       {message && <div className="mb-4 rounded border border-green-200 bg-green-50 p-3 text-sm text-green-800">{message}</div>}

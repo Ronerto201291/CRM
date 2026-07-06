@@ -4,6 +4,7 @@ import { supplierInvoiceCreateSchema } from '@/lib/schemas/purchasingSalesCreate
 describe('supplierInvoiceCreateSchema', () => {
     it('valida número e importes mínimos', () => {
         const result = supplierInvoiceCreateSchema.safeParse({
+            supplierId: '00000000-0000-0000-0000-000000000099',
             purchaseOrderId: '00000000-0000-0000-0000-000000000001',
             number: 'FAC-001',
             invoiceDate: '2026-07-01',
@@ -14,6 +15,7 @@ describe('supplierInvoiceCreateSchema', () => {
 
     it('rechaza sin líneas', () => {
         const result = supplierInvoiceCreateSchema.safeParse({
+            supplierId: '00000000-0000-0000-0000-000000000099',
             purchaseOrderId: '00000000-0000-0000-0000-000000000001',
             number: 'FAC-001',
             invoiceDate: '2026-07-01',

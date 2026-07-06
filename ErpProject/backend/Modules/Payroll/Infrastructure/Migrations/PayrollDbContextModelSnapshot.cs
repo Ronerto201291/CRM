@@ -73,6 +73,44 @@ namespace Erp.Modules.Payroll.Infrastructure.Migrations
                     b.ToTable("Employees", "payroll");
                 });
 
+            modelBuilder.Entity("Erp.Modules.Payroll.Domain.Entities.PayrollDeduction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("PayrollLineId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PayrollLineId");
+
+                    b.ToTable("PayrollDeductions", "payroll");
+                });
+
             modelBuilder.Entity("Erp.Modules.Payroll.Domain.Entities.PayrollLine", b =>
                 {
                     b.Property<Guid>("Id")
@@ -168,6 +206,162 @@ namespace Erp.Modules.Payroll.Infrastructure.Migrations
                     b.ToTable("PayrollSettlements", "payroll");
                 });
 
+            modelBuilder.Entity("Erp.Modules.Payroll.Domain.Entities.PayrollTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DefaultContractType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("DefaultIrpfRatePercent")
+                        .HasPrecision(8, 4)
+                        .HasColumnType("numeric(8,4)");
+
+                    b.Property<decimal>("DefaultWeeklyHours")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("EmployeeSsRatePercent")
+                        .HasPrecision(8, 4)
+                        .HasColumnType("numeric(8,4)");
+
+                    b.Property<decimal>("EmployerSsRatePercent")
+                        .HasPrecision(8, 4)
+                        .HasColumnType("numeric(8,4)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId", "Name");
+
+                    b.ToTable("PayrollTemplates", "payroll");
+                });
+
+            modelBuilder.Entity("Erp.Modules.Payroll.Domain.Entities.SocialSecurityContribution", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("BaseAmount")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContingencyType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("EmployeeAmount")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<decimal>("EmployeeRatePercent")
+                        .HasPrecision(8, 4)
+                        .HasColumnType("numeric(8,4)");
+
+                    b.Property<decimal>("EmployerAmount")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<decimal>("EmployerRatePercent")
+                        .HasPrecision(8, 4)
+                        .HasColumnType("numeric(8,4)");
+
+                    b.Property<Guid>("PayrollLineId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PayrollLineId");
+
+                    b.ToTable("SocialSecurityContributions", "payroll");
+                });
+
+            modelBuilder.Entity("Erp.Modules.Payroll.Domain.Entities.TaxableBase", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<string>("BaseType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("IrpfRatePercent")
+                        .HasPrecision(8, 4)
+                        .HasColumnType("numeric(8,4)");
+
+                    b.Property<decimal>("IrpfWithheld")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<Guid>("PayrollLineId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PayrollLineId");
+
+                    b.ToTable("TaxableBases", "payroll");
+                });
+
+            modelBuilder.Entity("Erp.Modules.Payroll.Domain.Entities.PayrollDeduction", b =>
+                {
+                    b.HasOne("Erp.Modules.Payroll.Domain.Entities.PayrollLine", "PayrollLine")
+                        .WithMany("Deductions")
+                        .HasForeignKey("PayrollLineId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("PayrollLine");
+                });
+
             modelBuilder.Entity("Erp.Modules.Payroll.Domain.Entities.PayrollLine", b =>
                 {
                     b.HasOne("Erp.Modules.Payroll.Domain.Entities.Employee", "Employee")
@@ -187,9 +381,40 @@ namespace Erp.Modules.Payroll.Infrastructure.Migrations
                     b.Navigation("Settlement");
                 });
 
+            modelBuilder.Entity("Erp.Modules.Payroll.Domain.Entities.SocialSecurityContribution", b =>
+                {
+                    b.HasOne("Erp.Modules.Payroll.Domain.Entities.PayrollLine", "PayrollLine")
+                        .WithMany("SocialSecurityContributions")
+                        .HasForeignKey("PayrollLineId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("PayrollLine");
+                });
+
+            modelBuilder.Entity("Erp.Modules.Payroll.Domain.Entities.TaxableBase", b =>
+                {
+                    b.HasOne("Erp.Modules.Payroll.Domain.Entities.PayrollLine", "PayrollLine")
+                        .WithMany("TaxableBases")
+                        .HasForeignKey("PayrollLineId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("PayrollLine");
+                });
+
             modelBuilder.Entity("Erp.Modules.Payroll.Domain.Entities.Employee", b =>
                 {
                     b.Navigation("PayrollLines");
+                });
+
+            modelBuilder.Entity("Erp.Modules.Payroll.Domain.Entities.PayrollLine", b =>
+                {
+                    b.Navigation("Deductions");
+
+                    b.Navigation("SocialSecurityContributions");
+
+                    b.Navigation("TaxableBases");
                 });
 
             modelBuilder.Entity("Erp.Modules.Payroll.Domain.Entities.PayrollSettlement", b =>

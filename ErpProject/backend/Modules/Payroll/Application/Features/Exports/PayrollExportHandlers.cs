@@ -16,6 +16,8 @@ public record ExportTc1Query(int Year, int Month) : IRequest<PayrollFiscalExport
 public record ExportTc2Query(int Year, int Month) : IRequest<PayrollFiscalExportResult>;
 public record ExportTcRedOrientativoQuery(int Year, int Month) : IRequest<PayrollFiscalExportResult>;
 public record ExportRedQuery(int Year, int Month) : IRequest<PayrollFiscalExportResult>;
+public record ExportModel111Query(int Year, int Quarter) : IRequest<PayrollFiscalExportResult>;
+public record ExportModel190Query(int Year) : IRequest<PayrollFiscalExportResult>;
 
 internal static class PayrollExportLineLoader
 {
@@ -228,5 +230,133 @@ internal static class PayrollExportValidators
     {
         if (month is < 1 or > 12)
             throw new ArgumentException("Month debe ser 1–12.");
+    }
+
+    internal static void ValidateQuarter(int quarter)
+    {
+        if (quarter is < 1 or > 4)
+            throw new ArgumentException("Quarter debe ser 1–4.");
+    }
+
+    internal static (int StartMonth, int EndMonth) QuarterMonths(int quarter) => quarter switch
+    {
+        1 => (1, 3),
+        2 => (4, 6),
+        3 => (7, 9),
+        4 => (10, 12),
+        _ => throw new ArgumentException("Quarter debe ser 1–4."),
+    };
+}
+
+public class ExportModel111Handler : IRequestHandler<ExportModel111Query, PayrollFiscalExportResult>
+{
+    private readonly IPayrollDbContext _ctx;
+    private readonly IApplicationDbContext _app;
+    private readonly ITenantContext _tenant;
+
+    public ExportModel111Handler(IPayrollDbContext ctx, IApplicationDbContext app, ITenantContext tenant)
+    {
+        _ctx = ctx;
+        _app = app;
+        _tenant = tenant;
+    }
+
+    public async Task<PayrollFiscalExportResult> Handle(ExportModel111Query request, CancellationToken ct)
+    {
+        PayrollExportValidators.ValidateQuarter(request.Quarter);
+        var (startMonth, endMonth) = PayrollExportValidators.QuarterMonths(request.Quarter);
+        var company = await PayrollExportCompanyLoader.LoadAsync(_app, _tenant, ct);
+
+        var lines = await _ctx.PayrollLines
+            .Include(l => l.Settlement)
+            .Include(l => l.Employee)
+            .Where(l => l.Settlement!.Year == request.Year
+                && l.Settlement.Month >= startMonth
+                && l.Settlement.Month <= endMonth
+                && l.Settlement.Status == "Final")
+            .AsNoTracking()
+            .OrderBy(l => l.Employee!.TaxId)
+            .ThenBy(l => l.Settlement!.Month)
+            .ToListAsync(ct);
+
+        var sb = new StringBuilder();
+        sb.AppendLine("MODELO_111_ORIENTATIVO;Retenciones IRPF trabajadores — NO presentable en AEAT");
+        sb.AppendLine($"Ejercicio;{request.Year};Trimestre;{request.Quarter}");
+        sb.AppendLine($"EmpresaNIF;{company.TaxId};Empresa;{company.Name.Replace(";", " ")}");
+        sb.AppendLine("NIF;Nombre;Mes;BaseRetencion;TipoRetencion;RetencionPracticada");
+        var es = CultureInfo.InvariantCulture;
+        foreach (var l in lines)
+        {
+            sb.AppendLine(string.Join(";",
+                l.Employee!.TaxId,
+                l.Employee.FullName.Replace(";", " "),
+                l.Settlement!.Month.ToString(es),
+                l.IrpfBase.ToString("F2", es),
+                l.IrpfRate.ToString("F2", es),
+                l.IrpfWithheld.ToString("F2", es)));
+        }
+
+        var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray();
+        return new PayrollFiscalExportResult(
+            bytes,
+            "text/csv",
+            $"Modelo111_orientativo_{request.Year}_T{request.Quarter}.csv",
+            "Modelo 111 orientativo desde nóminas: no sustituye presentación oficial AEAT ni validación por asesor fiscal.");
+    }
+}
+
+public class ExportModel190Handler : IRequestHandler<ExportModel190Query, PayrollFiscalExportResult>
+{
+    private readonly IPayrollDbContext _ctx;
+    private readonly IApplicationDbContext _app;
+    private readonly ITenantContext _tenant;
+
+    public ExportModel190Handler(IPayrollDbContext ctx, IApplicationDbContext app, ITenantContext tenant)
+    {
+        _ctx = ctx;
+        _app = app;
+        _tenant = tenant;
+    }
+
+    public async Task<PayrollFiscalExportResult> Handle(ExportModel190Query request, CancellationToken ct)
+    {
+        var company = await PayrollExportCompanyLoader.LoadAsync(_app, _tenant, ct);
+
+        var lines = await _ctx.PayrollLines
+            .Include(l => l.Settlement)
+            .Include(l => l.Employee)
+            .Where(l => l.Settlement!.Year == request.Year && l.Settlement.Status == "Final")
+            .AsNoTracking()
+            .ToListAsync(ct);
+
+        var grouped = lines
+            .GroupBy(l => new { l.EmployeeId, l.Employee!.TaxId, l.Employee.FullName })
+            .OrderBy(g => g.Key.TaxId);
+
+        var sb = new StringBuilder();
+        sb.AppendLine("MODELO_190_ORIENTATIVO;Resumen anual retenciones — NO presentable en AEAT");
+        sb.AppendLine($"Ejercicio;{request.Year}");
+        sb.AppendLine($"EmpresaNIF;{company.TaxId};Empresa;{company.Name.Replace(";", " ")}");
+        sb.AppendLine("NIF;Nombre;TotalBaseRetencion;TotalRetencionPracticada;MesesConRetencion");
+        var es = CultureInfo.InvariantCulture;
+        foreach (var g in grouped)
+        {
+            var totalBase = g.Sum(l => l.IrpfBase);
+            var totalRet = g.Sum(l => l.IrpfWithheld);
+            var months = g.Select(l => l.Settlement!.Month).Distinct().Count();
+            sb.AppendLine(string.Join(";",
+                g.Key.TaxId,
+                g.Key.FullName.Replace(";", " "),
+                totalBase.ToString("F2", es),
+                totalRet.ToString("F2", es),
+                months.ToString(es)));
+        }
+
+        var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray();
+        return new PayrollFiscalExportResult(
+            bytes,
+            "text/csv",
+            $"Modelo190_orientativo_{request.Year}.csv",
+            "Modelo 190 orientativo desde nóminas: no sustituye presentación oficial AEAT ni validación por asesor fiscal.");
     }
 }

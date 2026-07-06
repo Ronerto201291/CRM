@@ -22,8 +22,20 @@ public class ModuleFlowPostgresTests : IClassFixture<PostgresWebApplicationFacto
 
         var (client, companyId) = await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"purch-flow-{Guid.NewGuid():N}"[..18], withApiKey: true);
 
+        var createSupplier = await client.PostAsJsonAsync("/api/suppliers", new
+        {
+            name = "Proveedor integración",
+            taxId = "B12345674",
+            email = "prov@test.com",
+            phone = "600000000",
+            address = "Calle 1",
+        });
+        Assert.Equal(HttpStatusCode.Created, createSupplier.StatusCode);
+        var supplierId = (await createSupplier.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
         var poResponse = await client.PostAsJsonAsync("/api/v1/purchasing/orders", new
         {
+            supplierId,
             number = $"PO-{Guid.NewGuid():N}"[..12],
             orderDate = DateTime.UtcNow.ToString("O"),
             lines = new[] { new { quantity = 10m, unitPrice = 5m } },
@@ -56,6 +68,7 @@ public class ModuleFlowPostgresTests : IClassFixture<PostgresWebApplicationFacto
 
         var siResponse = await client.PostAsJsonAsync("/api/v1/purchasing/invoices", new
         {
+            supplierId,
             purchaseOrderId = poId,
             number = $"SI-{Guid.NewGuid():N}"[..12],
             invoiceDate = DateTime.UtcNow.ToString("O"),

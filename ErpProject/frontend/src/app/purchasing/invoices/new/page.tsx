@@ -6,8 +6,9 @@ import PageListLayout from "@/components/PageListLayout";
 import FormErrorBanner from "@/components/FormErrorBanner";
 import FormLabel from "@/components/FormLabel";
 import { updateLineAt } from "@/lib/lineForm";
+import { parseListResponse } from "@/lib/parseListResponse";
 import { supplierInvoiceCreateSchema } from "@/lib/schemas/purchasingSalesCreateSchemas";
-import { PurchaseOrder } from "@/types/api";
+import { PurchaseOrder, Supplier } from "@/types/api";
 
 interface PurchaseOrderLine {
     id: string;
@@ -39,7 +40,9 @@ const emptyLine = (): InvoiceLine => ({
 
 export default function NewSupplierInvoicePage() {
     const [orders, setOrders] = useState<PurchaseOrder[]>([]);
+    const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [form, setForm] = useState({
+        supplierId: '',
         purchaseOrderId: '',
         number: '',
         invoiceDate: new Date().toISOString().slice(0, 10),
@@ -52,6 +55,10 @@ export default function NewSupplierInvoicePage() {
         fetch('/api/proxy/v1/purchasing/orders')
             .then(r => r.ok ? r.json() : [])
             .then(data => setOrders(Array.isArray(data) ? data : (data.items ?? [])))
+            .catch(() => {});
+        fetch('/api/proxy/suppliers?pageSize=500')
+            .then(r => r.ok ? r.json() : [])
+            .then(data => setSuppliers(parseListResponse<Supplier>(data)))
             .catch(() => {});
     }, []);
 
@@ -69,6 +76,7 @@ export default function NewSupplierInvoicePage() {
         setForm(f => ({
             ...f,
             purchaseOrderId: orderId,
+            supplierId: order.supplierId ?? f.supplierId,
             lines: order.lines.length > 0
                 ? order.lines.map(l => ({
                     purchaseOrderLineId: l.id,
@@ -102,6 +110,7 @@ export default function NewSupplierInvoicePage() {
         setSaving(true);
         try {
             const body = {
+                supplierId: form.supplierId,
                 purchaseOrderId: form.purchaseOrderId,
                 number: form.number,
                 invoiceDate: form.invoiceDate,
@@ -138,6 +147,16 @@ export default function NewSupplierInvoicePage() {
             <FormErrorBanner message={formError} />
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
+                <div className="form-group">
+                    <FormLabel htmlFor="pi-supplier" required>Proveedor (CRM)</FormLabel>
+                    <select id="pi-supplier" className="erp-input" value={form.supplierId}
+                        onChange={e => setForm({ ...form, supplierId: e.target.value })}>
+                        <option value="">Seleccionar proveedor...</option>
+                        {suppliers.map(s => (
+                            <option key={s.id} value={s.id}>{s.name} ({s.taxId})</option>
+                        ))}
+                    </select>
+                </div>
                 <div className="form-group">
                     <FormLabel htmlFor="pi-order" required>Pedido de compra</FormLabel>
                     <select id="pi-order" className="erp-input" value={form.purchaseOrderId}

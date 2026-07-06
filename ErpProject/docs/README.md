@@ -36,7 +36,7 @@ varios módulos tienen hallazgos así (ver tabla).
 | [0003](adr/0003-despliegue-infraestructura.md) | Despliegue e infraestructura | Health-check post-deploy roto (puerto equivocado), TLS desactivado con HSTS activo, Postgres expuesto a internet — ver ADR-0018 |
 | [0004](adr/0004-crm.md) | CRM | Clients, Contacts, Leads, Suppliers, Notes, Alerts |
 | [0005](adr/0005-billing.md) | Billing (Facturación) | Invoices, Quotes, FacturaE, hash-chain, normativa antifraude |
-| [0006](adr/0006-accounting.md) | Accounting (Contabilidad) | Controllers antes mock (AEAT, VAT, VIES, Prorrata...) reescritos con MediatR real; export periódico para gestoría (ZIP libro IVA); queda `VatController.DeclareModelo330` sin implementar |
+| [0006](adr/0006-accounting.md) | Accounting (Contabilidad) | Controllers antes mock (AEAT, VAT, VIES, Prorrata...) reescritos con MediatR real; `POST .../vat/declare/modelo330` registra autoliquidación trimestral real (`VatLiquidation` vía `DeclareModelo330Command`, nombre legacy 330 → modelo 303); export periódico para gestoría (ZIP libro IVA) |
 | [0007](adr/0007-expenses.md) | Expenses | Captura OCR (Tesseract) de tickets vía QR público |
 | [0008](adr/0008-inventory.md) | Inventory | Productos, Stock, Lotes/Series; movimientos de stock reales desde Billing, Expenses, Sales y Purchasing; el doble descuento de stock en el ciclo completo de venta ya está corregido (ver ADR-0018 ítem 66) |
 | [0009](adr/0009-payroll.md) | Payroll (Nóminas) | CQRS/MediatR completo (`PayrollController` solo `IMediator`); frontend rotulado "Fase 0" a propósito (alcance inicial deliberado, no desconexión); export RED/SILTRA orientativo, no homologado TGSS |

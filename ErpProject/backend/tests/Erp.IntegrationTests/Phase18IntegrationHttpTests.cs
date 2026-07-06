@@ -45,8 +45,20 @@ public class Phase18IntegrationHttpTests : IClassFixture<PostgresWebApplicationF
 
         var (client, _) = await IntegrationTestAuth.RegisterEnterpriseAsync(_factory, $"po-appr-{Guid.NewGuid():N}"[..18], withApiKey: true);
 
+        var createSupplier = await client.PostAsJsonAsync("/api/suppliers", new
+        {
+            name = "Proveedor aprobación",
+            taxId = "B12345674",
+            email = "prov@test.com",
+            phone = "600000000",
+            address = "Calle 1",
+        });
+        Assert.Equal(HttpStatusCode.Created, createSupplier.StatusCode);
+        var supplierId = (await createSupplier.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
         var poResponse = await client.PostAsJsonAsync("/api/v1/purchasing/orders", new
         {
+            supplierId,
             number = $"PO-AP-{Guid.NewGuid():N}"[..10],
             orderDate = DateTime.UtcNow.ToString("O"),
             lines = new[] { new { quantity = 1m, unitPrice = 10m } },

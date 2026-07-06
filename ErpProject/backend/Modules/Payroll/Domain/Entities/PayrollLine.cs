@@ -23,4 +23,8 @@ public class PayrollLine : AuditableEntity
     public decimal IrpfRate { get; set; }
     public decimal IrpfWithheld { get; set; }
     public decimal NetPay { get; set; }
+
+    public ICollection<PayrollDeduction> Deductions { get; set; } = new List<PayrollDeduction>();
+    public ICollection<SocialSecurityContribution> SocialSecurityContributions { get; set; } = new List<SocialSecurityContribution>();
+    public ICollection<TaxableBase> TaxableBases { get; set; } = new List<TaxableBase>();
 }

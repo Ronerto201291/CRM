@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import PageContainer from '@/components/PageContainer';
+import LegalDisclaimer, { FISCAL_EXPORT_DISCLAIMER_TEXT } from '@/components/LegalDisclaimer';
 
 interface ViesResult {
     isValid: boolean;
@@ -119,6 +120,10 @@ export default function AeatPage() {
                     <p className="page-subtitle">Exportación XML oficial · FacturaE · VIES · Mod. 303, 349</p>
                 </div>
             </div>
+
+            <LegalDisclaimer title="Aviso legal — modelos AEAT y exportes fiscales">
+                {FISCAL_EXPORT_DISCLAIMER_TEXT} Los modelos 303, 349, 347, 111, 190 y libros IVA son orientativos hasta validación con asesoría y programa AEAT oficial.
+            </LegalDisclaimer>
 
             {/* Selector período */}
             <div className="erp-card" style={{ padding: '16px 20px', marginBottom: '20px', display: 'flex', gap: '16px', alignItems: 'flex-end' }}>

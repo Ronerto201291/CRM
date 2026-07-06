@@ -116,9 +116,17 @@ persistence"`) — la corrección se hizo pero no se actualizó este párrafo en
 el mismo cambio, exactamente el tipo de desfase que la regla de "no cerrar
 sin actualizar el ADR" de `CLAUDE.md` busca evitar.
 `VatController.CalculateVat` y `ProrrataController.CalculateProrrata` dejaron
-de ser mock (ver Evaluación de calidad arquitectónica más abajo); `VatController.declare/modelo330`
-persiste una `VatLiquidation` real vía `DeclareModelo330Handler` + `IModelo303Reader`
-(el nombre legacy «330» corresponde al modelo 303 vigente). Validación VIES real disponible en dos rutas equivalentes:
+de ser mock (ver Evaluación de calidad arquitectónica más abajo).
+`VatController.declare/modelo330` (`POST api/v1/accounting/vat/declare/modelo330`,
+permiso `Vat.Manage`) despacha `DeclareModelo330Command` vía `IMediator`: valida
+trimestre 1–4, impide duplicados por tenant/año/trimestre, agrega totales
+trimestrales con `IModelo303Reader` (facturas bloqueadas emitidas + IVA deducible
+en cuentas 472 del diario) y persiste una `VatLiquidation` con `ModeloCode="303"`,
+importes devengado/deducible/resultado y `Status="Declared"`. No presenta
+telemáticamente ante la AEAT — la exportación CSV/JSON/XML del 303 permanece en
+`AccountingExportController`; frontend `accounting/aeat/page.tsx` conectado.
+El nombre legacy «330» corresponde al modelo 303 vigente (obsoleto desde 2014).
+Validación VIES real disponible en dos rutas equivalentes:
 `TaxController` (`api/tax/vies/validate`, ver ADR-0013) y `ViesController`
 (`api/v1/accounting/vies/validate`, con persistencia en `IntraEuOperations`).
 `FinancialStatementsController` (`cash-flow`, `equity`, `income-statement`, `balance-sheet`)
@@ -280,7 +288,9 @@ la misma fuente de datos que usa el handler — ya no hay dos tablas de tasas
 independientes. De paso, `CalculateVatCommand` dejó de aceptar `CompanyId`
 como campo del body (el cliente podía enviar cualquier tenant) y ahora lo
 resuelve del `ITenantContext` del handler, igual que el resto de comandos de
-Accounting. `VatController.DeclareModelo330` sigue siendo un stub sin tocar.
+**Corregido (ADR-0018 #3c):** `VatController.DeclareModelo330` ya no es stub:
+despacha `DeclareModelo330Command` vía `IMediator`, agrega datos reales con
+`IModelo303Reader` y persiste `VatLiquidation` (ver Decisión más arriba).
 
 **Corregido:** `RecargoController` inyectaba `IBillingDbContext` directamente
 con toda la lógica inline (queries a facturas con `SurchargeRate > 0`, agrupación

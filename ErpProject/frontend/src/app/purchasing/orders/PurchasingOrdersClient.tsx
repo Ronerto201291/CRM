@@ -9,6 +9,8 @@ export interface PurchaseOrder {
     id: string;
     number: string;
     orderDate: string;
+    supplierId?: string;
+    supplierName?: string;
     status: string;
     totalAmount: number;
     lines?: { productId?: string; quantity: number; unitPrice: number }[];
@@ -83,6 +85,7 @@ export default function PurchasingOrdersClient({ initialOrders }: PurchasingOrde
                     <thead>
                         <tr>
                             <th>Número</th>
+                            <th>Proveedor</th>
                             <th>Fecha</th>
                             <th style={{ textAlign: 'right' }}>Total</th>
                             <th>Estado</th>
@@ -90,9 +93,9 @@ export default function PurchasingOrdersClient({ initialOrders }: PurchasingOrde
                         </tr>
                     </thead>
                     <tbody>
-                        {loading && <tr><td colSpan={5} style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>Cargando...</td></tr>}
+                        {loading && <tr><td colSpan={6} style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>Cargando...</td></tr>}
                         {!loading && filtered.length === 0 && (
-                            <tr><td colSpan={5}>
+                            <tr><td colSpan={6}>
                                 <div className="empty-state">
                                     <div className="empty-state-icon">🛒</div>
                                     <div className="empty-state-title">Sin pedidos de compra</div>
@@ -104,6 +107,7 @@ export default function PurchasingOrdersClient({ initialOrders }: PurchasingOrde
                                 <td style={{ fontWeight: 700, fontFamily: 'monospace', fontSize: '12px' }}>
                                     <Link href={`/purchasing/orders/${o.id}`} style={{ color: 'var(--brand-primary)' }}>{o.number}</Link>
                                 </td>
+                                <td style={{ color: 'var(--text-secondary)' }}>{o.supplierName || '—'}</td>
                                 <td style={{ color: 'var(--text-secondary)' }}>{new Date(o.orderDate).toLocaleDateString('es-ES')}</td>
                                 <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(o.totalAmount)}</td>
                                 <td><span className={`badge ${STATUS_MAP[o.status]?.cls ?? 'badge-gray'}`}>{STATUS_MAP[o.status]?.label ?? o.status}</span></td>

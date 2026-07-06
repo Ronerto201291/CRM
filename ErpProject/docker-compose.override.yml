@@ -7,7 +7,7 @@ services:
       - "8081:8080"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
-      Seed__AdminPassword: DevChangeMe2026!!
+      Seed__AdminPassword: ${Seed__AdminPassword:-DevChangeMe2026!!}
       Postgres__RlsEnabled: "true"
       OpenTelemetry__OtlpEndpoint: http://otel-collector:4317
     volumes:

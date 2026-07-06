@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import PageContainer from "@/components/PageContainer";
+import LegalDisclaimer, { FISCAL_EXPORT_DISCLAIMER_TEXT } from "@/components/LegalDisclaimer";
 
 interface AeatModel {
   id: string;
@@ -103,6 +104,10 @@ export default function AeatModelsPage() {
           <p className="page-subtitle">Generación y seguimiento desde facturas y gastos reales</p>
         </div>
       </div>
+
+      <LegalDisclaimer title="Aviso legal — modelos AEAT">
+        {FISCAL_EXPORT_DISCLAIMER_TEXT} Los TXT/XML generados no sustituyen la presentación oficial en Sede AEAT.
+      </LegalDisclaimer>
 
       {error && (
         <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div>

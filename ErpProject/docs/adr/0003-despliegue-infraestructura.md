@@ -207,22 +207,17 @@ certificados de firma electrónica de SII/VeriFactu (ADR-0013).
 
 Auditoría dedicada de infraestructura (ADR-0018 §"Ítems 52-64") encontró
 varios **bugs confirmados**, no solo deuda de diseño: el health-check
-post-deploy (`deploy/deploy.sh`) apunta al puerto 5000 pero el backend
-escucha en 8080 y no publica ningún puerto en `docker-compose.yml`, así que
-el deploy siempre "tiene éxito" aunque el backend esté caído (ítem 52); TLS
-está desactivado en `deploy/nginx/erp.conf` (sin `listen 443`) pese a que
-este ADR y el README afirman Let's Encrypt, pero el mismo archivo sigue
-enviando el header `Strict-Transport-Security` — cualquier cliente que lo
-reciba queda bloqueado a HTTPS durante un año sobre un sitio que no la sirve
-(ítem 53); y el propio `setup-vps.sh` instala nginx a nivel de SO para TLS y
-luego pide arrancar el nginx en contenedor, que intenta publicar los mismos
-puertos 80/443 — configuración auto-contradictoria (ítem 54). Además,
-Postgres publica el 5432 a `0.0.0.0` sin que `setup-vps.sh` lo bloquee
-explícitamente en el firewall (ítem 55), y las imágenes que construye CI
-nunca llegan a ningún registro ni se conectan con lo que el deploy real
-descarga (ítem 59). `git log` confirma que ningún commit ha tocado
-`deploy/`, `docker-compose.yml` ni `.github/workflows/` desde `FirstVersion`
-— es infraestructura nunca ejercitada contra un cambio real.
+post-deploy (`deploy/deploy.sh` y job `deploy` en `ci-cd.yml`) apuntaba al
+puerto 5000 pero el backend escucha en **8080** (`ASPNETCORE_URLS` /
+`backend/Dockerfile`) — **✅ Corregido (jul 2026)**: ambos scripts usan
+`http://localhost:8080/health/live`; el job CI falla explícitamente si el
+healthcheck no responde. El backend en `docker-compose.yml` sigue sin
+publicar puertos en producción (solo nginx), por lo que el curl en el
+servidor asume acceso desde el host al contenedor backend vía red Docker
+interna o proxy — coherente con el diseño nginx-only. Otros ítems abiertos:
+TLS desactivado en `deploy/nginx/erp.conf` (ítem 53); nginx duplicado SO vs
+contenedor (ítem 54); Postgres 5432 expuesto en compose base (ítem 55);
+imágenes CI vs deploy manual (ítem 59).
 
 ## Buenas prácticas aplicables
 - Cualquier módulo nuevo que añada un esquema Postgres propio debería

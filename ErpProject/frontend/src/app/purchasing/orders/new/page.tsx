@@ -70,8 +70,10 @@ export default function NewPurchaseOrderPage() {
                 supplierId: form.supplierId,
                 number: form.number,
                 orderDate: form.orderDate,
-                notes: form.notes,
-                lines: form.lines,
+                lines: form.lines.map(l => ({
+                    quantity: l.quantity,
+                    unitPrice: l.unitPrice,
+                })),
             };
             const res = await fetch('/api/proxy/v1/purchasing/orders', {
                 method: 'POST',

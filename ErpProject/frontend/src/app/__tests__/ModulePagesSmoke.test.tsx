@@ -54,10 +54,11 @@ describe('PayrollClient smoke', () => {
             <PayrollClient
                 initialEmployees={[]}
                 initialSettlements={[]}
+                initialTemplates={[]}
                 initialYear={2026}
             />,
         );
-        expect(screen.getByRole('heading', { name: 'Nóminas (Fase 0)' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: /nóminas \(fase 2\)/i })).toBeInTheDocument();
     });
 });
 

@@ -421,7 +421,7 @@ public class StripeService : ISubscriptionBillingService, IInvoicePaymentGateway
             // entremezcladas en un único bloque sin ningún test para MaxCompanies>1.
             var existingForPlan = existingByCompany.ToDictionary(
                 kv => kv.Key,
-                kv => new ExistingSubscriptionItem(kv.Value.Id, kv.Value.Quantity ?? 0));
+                kv => new ExistingSubscriptionItem(kv.Value.Id, kv.Value.Quantity));
             var syncPlan = GestoriaStripeBilling.PlanSubscriptionItemSync(existingForPlan, companies);
 
             foreach (var action in syncPlan)

@@ -341,6 +341,26 @@ hallazgo: el cálculo está duplicado — se repite inline en
 verificar, no para generar) — riesgo de que las dos copias diverjan si se
 cambia la fórmula en un solo sitio.
 
+### Preparación homologación AEAT (sin certificado real — jul 2026)
+
+Lo siguiente **no sustituye** la homologación oficial en entorno PRE de la AEAT;
+permite preparar el despliegue y verificar el estado offline:
+
+| Paso | Acción interna | Variable / endpoint |
+|---|---|---|
+| 1 | Validación XML SII sin envío | `GET /api/sii/validate?year=&month=` |
+| 2 | Validación FacturaE offline | `GET /api/v1/billing/facturae/{id}/validate` |
+| 3 | Estado consolidado homologación | `GET /api/fiscal/homologation/status` |
+| 4 | Colocar certificado FNMT (.pfx) | `SII_CERT_PATH`, `SII_CERT_PASS` en `.env` |
+| 5 | Activar envío PRE (no prod) | `Sii__SendEnabled=true`, `Verifactu__SendEnabled=true`, `Verifactu__UseProduction=false` |
+| 6 | FACe test | `Face__SendEnabled=true` tras homologación FACe |
+
+**Bloqueos externos (no implementables sin terceros):** certificado FNMT/AC,
+homologación RED/TIKE AEAT, cuenta FACe entorno test, validación bancaria SEPA.
+
+Flags de envío permanecen **`false` por defecto** en `appsettings.json` hasta
+que exista certificado y homologación; el backend arranca igual.
+
 ## Consecuencias
 - La firma XAdES-BES y el envío SOAP/HTTP a la AEAT dependen de un
   certificado FNMT configurado en `Sii:CertPath`/`Sii:CertPass`; sin él,

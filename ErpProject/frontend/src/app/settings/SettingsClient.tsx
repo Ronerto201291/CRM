@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import PageContainer from '@/components/PageContainer';
 import type { Company } from './page';
+import { companySettingsSchema } from '@/lib/schemas/settingsFiscalFormSchemas';
 
 interface TwoFaSetupResult { qrCodeUri?: string; secret?: string; backupCodes?: string[]; }
 interface TwoFaState { step: 'idle' | 'setup' | 'enabled'; setup?: TwoFaSetupResult; }
@@ -26,6 +27,11 @@ export default function SettingsClient({ initialCompany }: SettingsClientProps) 
     };
 
     const saveCompany = async () => {
+        const parsed = companySettingsSchema.safeParse(form);
+        if (!parsed.success) {
+            alert(parsed.error.issues[0]?.message ?? 'Revisa el formulario');
+            return;
+        }
         await fetch('/api/proxy/company', {
             method: 'PUT', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ...form, qrUploadEnabled: company?.qrUploadEnabled }),

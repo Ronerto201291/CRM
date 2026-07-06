@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import PageContainer from '@/components/PageContainer';
 import AccessibleModal from '@/components/AccessibleModal';
+import { budgetCreateSchema, budgetLineSchema } from '@/lib/schemas/accountingLegacyFormSchemas';
 import type { BudgetSummary, BudgetDetail, BudgetLineAnalysis } from './page';
 
 const STATUS_MAP: Record<string, { label: string; cls: string }> = {
@@ -94,6 +95,11 @@ export default function BudgetsClient({ initialBudgets, initialYearFilter }: Bud
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    const parsed = budgetCreateSchema.safeParse({ name, fiscalYear: year });
+    if (!parsed.success) {
+      alert(parsed.error.issues[0]?.message ?? 'Revisa el formulario');
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch('/api/proxy/v1/accounting/budgets', {
@@ -132,6 +138,14 @@ export default function BudgetsClient({ initialBudgets, initialYearFilter }: Bud
   const handleAddLine = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!detail) return;
+    const parsed = budgetLineSchema.safeParse({
+      accountCode: lineForm.accountCode || '',
+      amount: lineForm.budgetedAmount,
+    });
+    if (!parsed.success) {
+      alert(parsed.error.issues[0]?.message ?? 'Revisa el formulario');
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch(`/api/proxy/v1/accounting/budgets/${detail.id}/lines`, {

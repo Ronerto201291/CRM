@@ -26,6 +26,7 @@ public static class DependencyInjection
 
         services.AddScoped<ICrmDbContext>(p => p.GetRequiredService<CrmDbContext>());
         services.AddScoped<IClientInfoService, ClientInfoService>();
+        services.AddScoped<ISupplierInfoService, SupplierInfoService>();
         services.AddScoped<IAutomationRecurringQuery, AutomationRecurringQuery>();
         services.AddValidatorsFromAssembly(typeof(CreateClientValidator).Assembly);
 

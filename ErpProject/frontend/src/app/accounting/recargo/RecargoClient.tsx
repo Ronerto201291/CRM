@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useCallback } from "react";
+import { recargoCreateSchema } from '@/lib/schemas/accountingLegacyFormSchemas';
 
 interface RecargoItem {
   invoiceId: string;
@@ -51,6 +52,13 @@ export default function RecargoClient({
 
   const create = async () => {
     setError(null);
+    const parsed = recargoCreateSchema.safeParse({
+      supplierVat, supplierIsRE, baseAmount, rechargeRate,
+    });
+    if (!parsed.success) {
+      setError(parsed.error.issues[0]?.message ?? 'Revisa el formulario');
+      return;
+    }
     const res = await fetch('/api/proxy/v1/accounting/recargo', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

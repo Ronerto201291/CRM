@@ -15,6 +15,7 @@ namespace Erp.Modules.Purchasing.Domain.Entities
         public Guid CompanyId { get; set; }
         public string Number { get; set; } = string.Empty;
         public DateTime OrderDate { get; set; }
+        public Guid? SupplierId { get; set; }
         /// <summary>Draft | PendingApproval | Approved | Rejected</summary>
         public string Status { get; set; } = PurchaseOrderStatuses.Draft;
         public ICollection<PurchaseOrderLine> Lines { get; set; } = new List<PurchaseOrderLine>();

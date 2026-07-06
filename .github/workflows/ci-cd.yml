@@ -271,15 +271,23 @@ jobs:
             # Re-create only changed containers; leave postgres/redis/nginx untouched
             docker compose up -d --no-deps --remove-orphans backend frontend
 
-            # Wait for backend health check
+            # Wait for backend health check (backend escucha en 8080 — ver backend/Dockerfile)
             echo "Waiting for backend to be healthy..."
+            healthy=0
             for i in $(seq 1 20); do
-              if curl -sf http://localhost:5000/health/live > /dev/null; then
+              if curl -sf http://localhost:8080/health/live > /dev/null; then
                 echo "Backend healthy after ${i}s"
+                healthy=1
                 break
               fi
               sleep 3
             done
+            if [ "$healthy" != "1" ]; then
+              echo "::error::Backend health check failed on :8080/health/live"
+              docker compose ps
+              docker compose logs --tail=40 backend
+              exit 1
+            fi
 
             # Prune dangling images to reclaim disk
             docker image prune -f

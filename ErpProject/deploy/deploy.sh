@@ -25,8 +25,8 @@ sleep 20
 
 # Health check — uses /health/ready (DB + Redis) and /health/live (liveness)
 echo "🏥 Health check..."
-curl -sf http://localhost:5000/health/live > /dev/null  && echo "✅ Backend live"  || echo "❌ Backend FAILED"
-curl -sf http://localhost:5000/health/ready > /dev/null && echo "✅ Backend ready" || echo "⚠️  Backend not ready (DB/Redis may still be starting)"
+curl -sf http://localhost:8080/health/live > /dev/null  && echo "✅ Backend live"  || echo "❌ Backend FAILED"
+curl -sf http://localhost:8080/health/ready > /dev/null && echo "✅ Backend ready" || echo "⚠️  Backend not ready (DB/Redis may still be starting)"
 curl -sf http://localhost:3000 > /dev/null              && echo "✅ Frontend OK"   || echo "❌ Frontend FAILED"
 
 echo "🎉 Deployment complete!"

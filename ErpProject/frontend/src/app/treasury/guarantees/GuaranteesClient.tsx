@@ -3,6 +3,7 @@
 import React, { useState, useCallback } from "react";
 import PageContainer from "@/components/PageContainer";
 import AccessibleModal from "@/components/AccessibleModal";
+import { guaranteeCreateSchema } from "@/lib/schemas/legacyFormSchemas";
 
 interface Guarantee {
     id: string;
@@ -60,10 +61,14 @@ export default function GuaranteesClient({
 
     const submit = async () => {
         setFormError(null);
-        if (!form.beneficiary || !form.amount) { setFormError('Beneficiario y monto son obligatorios'); return; }
+        const parsed = guaranteeCreateSchema.safeParse(form);
+        if (!parsed.success) {
+            setFormError(parsed.error.issues[0]?.message ?? 'Revisa el formulario');
+            return;
+        }
         setSaving(true);
         try {
-            const body = { ...form, amount: parseFloat(form.amount) };
+            const body = { ...parsed.data, amount: parseFloat(parsed.data.amount) };
             const res = await fetch('/api/proxy/v1/treasury/guarantees', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

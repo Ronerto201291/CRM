@@ -36,6 +36,7 @@ public class PurchaseOrdersController : ControllerBase
     public async Task<IActionResult> Create([FromBody] CreatePoDto dto, CancellationToken ct)
     {
         var result = await _mediator.Send(new CreatePurchaseOrderCommand(
+            dto.SupplierId,
             dto.Number,
             dto.OrderDate,
             dto.Lines.Select(l => new PurchaseOrderLineDto(Guid.Empty, l.ProductId, l.Quantity, l.UnitPrice)).ToList()), ct);
@@ -48,6 +49,7 @@ public class PurchaseOrdersController : ControllerBase
     {
         var result = await _mediator.Send(new UpdatePurchaseOrderCommand(
             id,
+            dto.SupplierId,
             dto.Number,
             dto.OrderDate,
             dto.Lines.Select(l => new PurchaseOrderLineDto(Guid.Empty, l.ProductId, l.Quantity, l.UnitPrice)).ToList()), ct);
@@ -98,6 +100,7 @@ public class PurchaseOrdersController : ControllerBase
 
 public class CreatePoDto
 {
+    public Guid SupplierId { get; set; }
     public string Number { get; set; } = string.Empty;
     public DateTime OrderDate { get; set; }
     public List<CreatePoLineDto> Lines { get; set; } = new();

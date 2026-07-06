@@ -1,6 +1,8 @@
 'use client';
 import { useState } from 'react';
 import PageContainer from '@/components/PageContainer';
+import LegalDisclaimer, { FISCAL_EXPORT_DISCLAIMER_TEXT } from '@/components/LegalDisclaimer';
+import { verifactuSubmitSchema } from '@/lib/schemas/settingsFiscalFormSchemas';
 
 const MONTHS = [
     'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -38,6 +40,11 @@ export default function VerifactuClient() {
     };
 
     const handleSubmit = async () => {
+        const parsed = verifactuSubmitSchema.safeParse({ year, month });
+        if (!parsed.success) {
+            setMessage({ text: parsed.error.issues[0]?.message ?? 'Revisa el formulario', ok: false });
+            return;
+        }
         if (!confirm(`¿Firmar y enviar VERI*FACTU de ${MONTHS[month - 1]} ${year} a la AEAT?\n\nEntorno: ${useProd ? 'PRODUCCIÓN (Real)' : 'PRUEBAS (Test)'}`)) return;
         setLoading('submit'); reset();
         try {
@@ -66,6 +73,10 @@ export default function VerifactuClient() {
                     </p>
                 </div>
             </div>
+
+            <LegalDisclaimer title="Aviso legal — VERI*FACTU / AEAT">
+                {FISCAL_EXPORT_DISCLAIMER_TEXT} El envío a producción requiere certificado digital válido y homologación AEAT.
+            </LegalDisclaimer>
 
             {/* Info banner */}
             <div style={{

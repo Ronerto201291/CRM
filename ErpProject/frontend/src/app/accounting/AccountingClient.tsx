@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import PageContainer from '@/components/PageContainer';
+import LegalDisclaimer, { FISCAL_EXPORT_DISCLAIMER_TEXT } from '@/components/LegalDisclaimer';
 import type { JournalEntry, BalanceRow, IvaSummary, LiquidacionIva } from './page';
 
 type Tab = 'diario' | 'balance' | 'iva' | 'liquidacion';
@@ -56,6 +57,10 @@ export default function AccountingClient({
                     <p className="page-subtitle">Doble partida · Plan General Contable español · Ejercicio {year}</p>
                 </div>
             </div>
+
+            <LegalDisclaimer title="Aviso legal — contabilidad e IVA">
+                {FISCAL_EXPORT_DISCLAIMER_TEXT}
+            </LegalDisclaimer>
 
             {/* Summary stats */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px', marginBottom: '24px' }}>

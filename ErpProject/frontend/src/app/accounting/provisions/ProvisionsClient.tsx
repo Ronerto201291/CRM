@@ -2,6 +2,7 @@
 import { useState, useCallback } from 'react';
 import PageContainer from '@/components/PageContainer';
 import AccessibleModal from '@/components/AccessibleModal';
+import { provisionCreateSchema } from '@/lib/schemas/accountingLegacyFormSchemas';
 
 interface Provision {
   id: string;
@@ -70,6 +71,11 @@ export default function ProvisionsClient({
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    const parsed = provisionCreateSchema.safeParse(form);
+    if (!parsed.success) {
+      setError(parsed.error.issues[0]?.message ?? 'Revisa el formulario');
+      return;
+    }
     setSaving(true);
     setError(null);
     try {

@@ -20,7 +20,7 @@ public class GetPurchaseOrdersHandlerTests
             .Options;
 
         await using var ctx = new PurchasingDbContext(options, tenant);
-        var handler = new GetPurchaseOrdersHandler(ctx, tenant);
+        var handler = new GetPurchaseOrdersHandler(ctx, tenant, new FakeSupplierInfoService());
         var result = await handler.Handle(new GetPurchaseOrdersQuery(), CancellationToken.None);
 
         Assert.Empty(result);

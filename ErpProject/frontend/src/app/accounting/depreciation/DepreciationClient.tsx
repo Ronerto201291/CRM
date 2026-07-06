@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import PageContainer from '@/components/PageContainer';
 import AccessibleModal from '@/components/AccessibleModal';
+import { depreciationAssetSchema } from '@/lib/schemas/accountingLegacyFormSchemas';
 import type { FixedAsset } from './page';
 
 const METHODS = ['Linear', 'Declining', 'Accelerated'];
@@ -74,6 +75,11 @@ export default function DepreciationClient({ initialAssets, initialStatusFilter 
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    const parsed = depreciationAssetSchema.safeParse(form);
+    if (!parsed.success) {
+      setError(parsed.error.issues[0]?.message ?? 'Revisa el formulario');
+      return;
+    }
     setSaving(true);
     setError(null);
     try {

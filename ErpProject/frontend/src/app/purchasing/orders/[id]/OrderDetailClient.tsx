@@ -8,6 +8,8 @@ export interface PurchaseOrderDetail {
     id: string;
     number: string;
     orderDate: string;
+    supplierId?: string;
+    supplierName?: string;
     status: string;
     totalAmount: number;
     lines: { productId?: string; quantity: number; unitPrice: number }[];
@@ -85,6 +87,9 @@ export default function OrderDetailClient({ id, initialOrder }: OrderDetailClien
                     {STATUS_MAP[order.status]?.label ?? order.status}
                 </span>
                 <div style={{ marginTop: '12px', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                    Proveedor: {order.supplierName || '—'}
+                </div>
+                <div style={{ marginTop: '6px', color: 'var(--text-secondary)', fontSize: '13px' }}>
                     Fecha: {new Date(order.orderDate).toLocaleDateString('es-ES')}
                 </div>
             </div>

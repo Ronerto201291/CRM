@@ -1,3 +1,5 @@
+# DEPRECATED — ver k8s/README.md. Producción usa Docker Compose, no este manifiesto.
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:

@@ -6,6 +6,7 @@ namespace Erp.Modules.Purchasing.Domain.Entities
     {
         public Guid CompanyId { get; set; }
         public Guid PurchaseOrderId { get; set; }
+        public Guid? SupplierId { get; set; }
         public string Number { get; set; } = string.Empty;
         public DateTime InvoiceDate { get; set; }
         public decimal TotalAmount { get; set; }

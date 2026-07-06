@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { parseListResponse } from '@/lib/parseListResponse';
 import PageContainer from '@/components/PageContainer';
 import AccessibleModal from '@/components/AccessibleModal';
+import { creditNoteCreateSchema } from '@/lib/schemas/legacyFormSchemas';
 
 interface Invoice {
     id: string;
@@ -65,13 +66,14 @@ export default function CreditNotesClient({
     }, []);
 
     const handleCreateCreditNote = async () => {
-        if (!form.invoiceId || !form.reason) {
-            setMessage({ type: 'error', text: 'Completa todos los campos requeridos' });
+        const parsed = creditNoteCreateSchema.safeParse(form);
+        if (!parsed.success) {
+            setMessage({ type: 'error', text: parsed.error.issues[0]?.message ?? 'Revisa el formulario' });
             return;
         }
 
         try {
-            const response = await fetch(`/api/proxy/invoices/${form.invoiceId}/credit-note`, {
+            const response = await fetch(`/api/proxy/invoices/${parsed.data.invoiceId}/credit-note`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(form),

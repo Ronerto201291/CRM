@@ -38,6 +38,7 @@ describe('CurrenciesClient', () => {
 
         fireEvent.change(screen.getByPlaceholderText('USD'), { target: { value: 'GBP' } });
         fireEvent.change(screen.getByPlaceholderText('Dólar estadounidense'), { target: { value: 'Libra esterlina' } });
+        fireEvent.change(screen.getByPlaceholderText('1.0000'), { target: { value: '0.85' } });
         fireEvent.click(screen.getByRole('button', { name: /^crear$/i }));
 
         await waitFor(() => {

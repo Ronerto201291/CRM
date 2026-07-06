@@ -1,0 +1,26 @@
+---
+description: Al editar Erp.Domain, Erp.Application o Erp.Infrastructure — contratos en Common/Interfaces, sin DbContext de módulos, test de arquitectura obligatorio.
+globs: ErpProject/backend/Erp.Domain/**/*,ErpProject/backend/Erp.Application/**/*,ErpProject/backend/Erp.Infrastructure/**/*
+alwaysApply: false
+---
+
+# Core backend — restricciones extra
+
+Estás tocando el **core** (`Erp.Domain`, `Erp.Application`, `Erp.Infrastructure`).
+
+## Antes de escribir código
+
+1. ¿Necesitas datos de Billing, Expenses, CRM, etc.? → **No** importes `IXxxDbContext` ni handlers del módulo.
+2. Crea `I…Query` / `I…Service` en `Erp.Application/Common/Interfaces/` con DTOs del core.
+3. Implementa en `Modules/<Módulo>/Infrastructure/Services/`.
+4. Registra en DI del módulo.
+
+## Antes de cerrar el cambio
+
+```bash
+cd ErpProject/backend
+dotnet test tests/Erp.ArchitectureTests/Erp.ArchitectureTests.csproj
+dotnet build
+```
+
+Si añades `<ProjectReference>` a un `.csproj` del core, comprueba que solo apunte a `*.Domain` de módulos, nunca a `*.Application`.

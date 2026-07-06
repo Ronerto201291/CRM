@@ -16,13 +16,18 @@ public class SubmitPurchaseOrderForApprovalHandler
     private readonly IPurchasingDbContext _ctx;
     private readonly ITenantContext _tenant;
     private readonly IApprovalThresholdService _approval;
+    private readonly ISupplierInfoService _supplierInfo;
 
     public SubmitPurchaseOrderForApprovalHandler(
-        IPurchasingDbContext ctx, ITenantContext tenant, IApprovalThresholdService approval)
+        IPurchasingDbContext ctx,
+        ITenantContext tenant,
+        IApprovalThresholdService approval,
+        ISupplierInfoService supplierInfo)
     {
         _ctx = ctx;
         _tenant = tenant;
         _approval = approval;
+        _supplierInfo = supplierInfo;
     }
 
     public async Task<PurchaseOrderDto> Handle(SubmitPurchaseOrderForApprovalCommand request, CancellationToken ct)
@@ -39,7 +44,7 @@ public class SubmitPurchaseOrderForApprovalHandler
             : PurchaseOrderStatuses.Approved;
 
         await _ctx.SaveChangesAsync(ct);
-        return PurchaseOrderMapper.ToDto(po);
+        return await PurchaseOrderMapper.ToDtoAsync(po, _supplierInfo, ct);
     }
 }
 
@@ -47,11 +52,16 @@ public class ApprovePurchaseOrderHandler : IRequestHandler<ApprovePurchaseOrderC
 {
     private readonly IPurchasingDbContext _ctx;
     private readonly ITenantContext _tenant;
+    private readonly ISupplierInfoService _supplierInfo;
 
-    public ApprovePurchaseOrderHandler(IPurchasingDbContext ctx, ITenantContext tenant)
+    public ApprovePurchaseOrderHandler(
+        IPurchasingDbContext ctx,
+        ITenantContext tenant,
+        ISupplierInfoService supplierInfo)
     {
         _ctx = ctx;
         _tenant = tenant;
+        _supplierInfo = supplierInfo;
     }
 
     public async Task<PurchaseOrderDto> Handle(ApprovePurchaseOrderCommand request, CancellationToken ct)
@@ -64,7 +74,7 @@ public class ApprovePurchaseOrderHandler : IRequestHandler<ApprovePurchaseOrderC
 
         po.Status = PurchaseOrderStatuses.Approved;
         await _ctx.SaveChangesAsync(ct);
-        return PurchaseOrderMapper.ToDto(po);
+        return await PurchaseOrderMapper.ToDtoAsync(po, _supplierInfo, ct);
     }
 }
 
@@ -72,11 +82,16 @@ public class RejectPurchaseOrderHandler : IRequestHandler<RejectPurchaseOrderCom
 {
     private readonly IPurchasingDbContext _ctx;
     private readonly ITenantContext _tenant;
+    private readonly ISupplierInfoService _supplierInfo;
 
-    public RejectPurchaseOrderHandler(IPurchasingDbContext ctx, ITenantContext tenant)
+    public RejectPurchaseOrderHandler(
+        IPurchasingDbContext ctx,
+        ITenantContext tenant,
+        ISupplierInfoService supplierInfo)
     {
         _ctx = ctx;
         _tenant = tenant;
+        _supplierInfo = supplierInfo;
     }
 
     public async Task<PurchaseOrderDto> Handle(RejectPurchaseOrderCommand request, CancellationToken ct)
@@ -89,7 +104,7 @@ public class RejectPurchaseOrderHandler : IRequestHandler<RejectPurchaseOrderCom
 
         po.Status = PurchaseOrderStatuses.Rejected;
         await _ctx.SaveChangesAsync(ct);
-        return PurchaseOrderMapper.ToDto(po);
+        return await PurchaseOrderMapper.ToDtoAsync(po, _supplierInfo, ct);
     }
 }
 
@@ -102,12 +117,27 @@ internal static class PurchaseOrderMapper
             .FirstOrDefaultAsync(p => p.Id == id && p.CompanyId == tenantId, ct)
             ?? throw new KeyNotFoundException("Pedido no encontrado.");
 
-    internal static PurchaseOrderDto ToDto(PurchaseOrder po) =>
+    internal static PurchaseOrderDto ToDto(PurchaseOrder po, string supplierName = "") =>
         new(
             po.Id,
             po.Number,
             po.OrderDate,
+            po.SupplierId,
+            supplierName,
             po.Status,
             po.TotalAmount,
             po.Lines.Select(l => new PurchaseOrderLineDto(l.Id, l.ProductId, l.Quantity, l.UnitPrice)).ToList());
+
+    internal static async Task<PurchaseOrderDto> ToDtoAsync(
+        PurchaseOrder po, ISupplierInfoService supplierInfo, CancellationToken ct)
+    {
+        var supplierName = string.Empty;
+        if (po.SupplierId is Guid supplierId)
+        {
+            var supplier = await supplierInfo.GetByIdAsync(supplierId, ct);
+            supplierName = supplier?.Name ?? string.Empty;
+        }
+
+        return ToDto(po, supplierName);
+    }
 }

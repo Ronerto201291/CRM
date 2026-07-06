@@ -33,21 +33,7 @@ public static class DependencyInjection
         services.AddScoped<IBankReconciliationService>(sp => sp.GetRequiredService<BankReconciliationService>());
         services.AddScoped<ISepaXmlGenerator, SepaXmlGenerator>();
 
-        services.Configure<Erp.Modules.Treasury.Application.Options.OpenBankingOptions>(
-            configuration.GetSection(Erp.Modules.Treasury.Application.Options.OpenBankingOptions.SectionName));
-        var openBankingProvider = configuration["OpenBanking:Provider"] ?? "Mock";
-        if (string.Equals(openBankingProvider, "Stub", StringComparison.OrdinalIgnoreCase))
-            services.AddScoped<IOpenBankingProvider, StubOpenBankingProvider>();
-        else if (string.Equals(openBankingProvider, "GoCardless", StringComparison.OrdinalIgnoreCase)
-                 || string.Equals(openBankingProvider, "Nordigen", StringComparison.OrdinalIgnoreCase)
-                 || string.Equals(openBankingProvider, "Configurable", StringComparison.OrdinalIgnoreCase))
-        {
-            services.AddHttpClient(nameof(ConfigurableOpenBankingProvider));
-            services.AddHttpClient(nameof(ConfigurableOpenBankingProvider) + "-token");
-            services.AddScoped<IOpenBankingProvider, ConfigurableOpenBankingProvider>();
-        }
-        else
-            services.AddScoped<IOpenBankingProvider, MockOpenBankingProvider>();
+        services.AddOpenBankingProvider(configuration);
 
         services.AddScoped<IExchangeRateLookup, ExchangeRateLookupAdapter>();
 

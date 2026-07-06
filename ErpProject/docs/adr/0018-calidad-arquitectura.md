@@ -1,4 +1,4 @@
-# ADR-0018: Calidad arquitectónica transversal (SOLID, Clean Architecture, CQRS, duplicación, escalabilidad)
+﻿# ADR-0018: Calidad arquitectónica transversal (SOLID, Clean Architecture, CQRS, duplicación, escalabilidad)
 
 ## Estado
 Aceptado — auditoría del código real en `main` a fecha de este ADR. No es un
@@ -403,7 +403,7 @@ relación esfuerzo/impacto (los primeros reutilizan código que ya existe).
 | 25 | Implementar Modelo 347 (operaciones anuales >3.005,06€) real, sustituyendo el stub | Accounting | ✅ Corregido — `Modelo347Reader` + `GetModelo347JsonQuery`; export CSV/TXT; frontend `accounting/aeat` con consulta preview y descargas |
 | 26 | Estados financieros reales desde `JournalEntry`/`JournalEntryLine` | Accounting | ✅ Corregido — PyG/balance vía `ReportsController` (`GetProfitAndLossQuery`, `GetBalanceSheetQuery`); EFE/patrimonio en `FinancialStatementsController`; frontend `accounting/reports` con errores visibles |
 | 27 | Activar el motor de automatización: registrar `RuleEvaluatorJob` en Hangfire, hacer que `CreateRuleCommand` persista, conectar `settings/automation` al backend — la lógica de negocio (facturas vencidas, stock bajo) ya existe, solo falta cablearla | Core/Automatización | ✅ Corregido — job diario 9:00; API + frontend; `DatabaseRuleEvaluator` evalúa reglas activas de BD (`OnInvoiceCreated`, `OnInvoiceOverdue`, `OnStockBelowReorder`) con condiciones y acción `SendEmail`; **tiempo real** vía `RealtimeRuleEvaluator` + handlers `OnLeadStatusChanged`/`OnExpenseApproved` |
-| 28 | Sustituir la importación manual de CSV bancario por integración de banca abierta (PSD2) para conciliación en tiempo real | Treasury | ✅ Corregido — `IOpenBankingProvider`, `MockOpenBankingProvider`/`StubOpenBankingProvider`, `SyncOpenBankingHandler`, `POST /api/treasury/bank-accounts/{id}/sync-open-banking`, config `OpenBanking:*` en appsettings; tests unit + `Phase18IntegrationHttpTests` |
+| 28 | Sustituir la importación manual de CSV bancario por integración de banca abierta (PSD2) para conciliación en tiempo real | Treasury | ✅ Corregido — `IOpenBankingProvider`, `MockOpenBankingProvider`/`StubOpenBankingProvider`/`ConfigurableOpenBankingProvider`, `OpenBankingProviderRegistration` (Mock en dev, Stub en prod sin credenciales, Configurable auto si hay ClientId+Secret+ApiBaseUrl), `SyncOpenBankingHandler`, `POST /api/treasury/bank-accounts/{id}/sync-open-banking`; tests `OpenBankingProviderRegistrationTests` + `Phase18IntegrationHttpTests` |
 | 29 | Payroll: integración real con Sistema RED/Seguridad Social, más allá de los exports TC1/TC2 "orientativos" actuales | Payroll | ✅ Corregido (alcance máximo sin homologación) — `RedSiltraFileBuilder` (registros 01/02/99, 250 chars, ISO-8859-1), `SpanishSocialSecurityNumberValidator` (NAF/CCC módulo 97), `PayrollRedExportValidator`, `GET /api/payroll/export/red`; TC1/TC2 con metadatos empresa/CCC; frontend botón RED; golden tests + `docs/payroll-red-siltra.md`; **no homologado TGSS** (disclaimer obligatorio) |
 | 30 | Flujos de aprobación (pedidos de compra o gastos por encima de un umbral, antes de confirmar/contabilizar) | Purchasing/Expenses | ✅ Corregido — `Company.ApprovalThresholdAmount`, estados PO Draft→PendingApproval→Approved/Rejected, handlers MediatR + `PurchaseOrder:Approve`, gastos `submit-for-approval` con umbral, frontend badges/botones en `/purchasing/orders` |
 | 31 | Conectar el interceptor de Audit Log (`AuditInterceptor.cs`, ya documentado como código muerto en el catálogo de mock de arriba) — de cara al usuario el sistema aparenta tener auditoría inmutable y hoy no la tiene | Core | ✅ Corregido — `AuditSaveChangesInterceptor` en ErpDbContext + 9 módulos; hash SHA256; `settings/audit-logs` consulta datos reales |
@@ -474,7 +474,7 @@ en producción potencial**, no solo deuda de diseño — se marcan explícitamen
 
 | # | Mejora | Evidencia | Prioridad |
 |---|---|---|---|
-| 52 | Desajuste de puerto 5000 vs. 8080 real — **no era solo un problema del script de servidor**: `.env.example` traía `ASPNETCORE_URLS=http://+:5000`, que también rompía el arranque local (el contenedor expone/healthchequea 8080). ✅ Corregido: `.env.example` ahora usa `8080` y las URLs de frontend apuntan a `8081`/`8080` según corresponda (ver ítem 65) | `deploy/deploy.sh:28-29`, `backend/Dockerfile:39-43`, `.env.example` | ✅ Corregido (parte local); resto del script de servidor sigue Aparcado |
+| 52 | Desajuste de puerto 5000 vs. 8080 real — **no era solo un problema del script de servidor**: `.env.example` traía `ASPNETCORE_URLS=http://+:5000`, que también rompía el arranque local (el contenedor expone/healthchequea 8080). ✅ Corregido: `.env.example` usa `8080`; URLs frontend `8081`/`8080` (ítem 65); **`deploy/deploy.sh` y job `deploy` en `ci-cd.yml` usan `:8080/health/live`** (jul 2026); CI falla si healthcheck no responde | `deploy/deploy.sh`, `.github/workflows/ci-cd.yml`, `backend/Dockerfile`, `.env.example` | ✅ Corregido |
 | 53 | TLS desactivado en nginx de producción con HSTS activo (footgun) — solo aplica cuando haya un dominio/servidor real sirviendo HTTPS | `deploy/nginx/erp.conf:5,8-10,16` | Aparcado — sin servidor |
 | 54 | Nginx de host y de contenedor compitiendo por 80/443 — parte de `setup-vps.sh`, no del flujo local | `deploy/setup-vps.sh:20,49-50` + `docker-compose.yml:88-89` | Aparcado — sin servidor |
 | 55 | ~~Postgres publicado a `0.0.0.0:5432` sin bloqueo de firewall — `docker-compose.prod.yml` no tocaba el servicio `postgres`, así que el `ports: "5432:5432"` de la base seguía activo también en el stack de producción~~ **✅ Corregido** — `docker-compose.prod.yml` ahora tiene `postgres: ports: !override []`; verificado con `docker compose -f docker-compose.yml -f docker-compose.prod.yml config` que no publica ningún puerto en modo producción (en local sigue publicado en 5432, sin cambios) | `docker-compose.yml:16-17`, `docker-compose.prod.yml:17-18` | ✅ Corregido |
@@ -649,14 +649,14 @@ Barrido dedicado sobre todo el repo (backend, frontend, docker-compose,
 CI/CD usa `${{ secrets.* }}`, Kubernetes usa `secretKeyRef`, `.env.example`
 solo tiene nombres de variable vacíos con instrucciones para generarlas, y
 no hay ningún `.env` real commiteado. Los hallazgos reales están todos
-concentrados en `appsettings.Development.json` y dos *fallbacks* de código:
+concentrados en ~~`appsettings.Development.json`~~ fallbacks de código y el
+email de seed documentado:
 
 | Severidad | Archivo | Qué hay |
 |---|---|---|
-| **Alta** | `backend/Erp.Api/appsettings.Development.json:14` | Connection string de Postgres apuntando a una IP externa real (`89.167.102.120:5433`), usuario `postgres`, contraseña `123456` |
-| **Alta** | `backend/Erp.Api/appsettings.Development.json:18` | Contraseña del admin semilla, `DevChangeMe2026!!` (usada por `Program.cs` para crear `admin@devcorp.com` vía BCrypt si la BD no tiene usuarios y `Seed:AdminPassword` está configurado — p. ej. `Seed__AdminPassword` en `docker-compose.local.yml`) |
-| Media | `backend/Erp.Api/Controllers/AdminController.cs:28` | El acceso de super-admin está gateado a un email literal (`admin@devcorp.com`) en vez de un rol/claim — no se puede rotar sin redeploy, y combinado con la fila anterior es una credencial completa conocida |
-| Media | `backend/Erp.Api/Program.cs:405-414` | Mismo email `admin@devcorp.com` hardcodeado en la lógica de seed |
+| ~~**Alta**~~ | ~~`backend/Erp.Api/appsettings.Development.json`~~ | ✅ **Corregido (jul 2026)** — connection string local `localhost/changeme`; `Seed:AdminPassword` vacío (inyectado vía `Seed__AdminPassword` en `.env` / `docker-compose.override.yml`) |
+| Media | `backend/Erp.Api/Controllers/AdminController.cs:28` | El acceso de super-admin está gateado a un email literal (`admin@devcorp.com`) en vez de un rol/claim — no se puede rotar sin redeploy |
+| Media | `backend/Erp.Api/Program.cs:405-414` | Email `admin@devcorp.com` en lógica de seed (contraseña solo vía env `Seed__AdminPassword`) |
 | Media | `backend/Erp.Infrastructure/Messaging/RabbitMqConnectionFactory.cs:37` | Fallback silencioso a las credenciales por defecto de RabbitMQ (`guest:guest`) si no se configura `RabbitMQ:Uri` — mitigado porque RabbitMQ está deshabilitado por defecto |
 | Media | `backend/Erp.Infrastructure/Services/Storage/MinioFileStorageService.cs:32-33` | Fallback silencioso a las credenciales por defecto de MinIO (`minioadmin`/`minioadmin`) si no se configuran `Storage:AccessKey`/`Storage:SecretKey` |
 
@@ -677,8 +677,9 @@ se listan como hallazgo porque no representan una credencial real filtrada.
 | Plataforma 32–37 | **100%** | RLS piloto: 13 tablas (core + billing/crm) |
 | Producto 38–42f | **~85%** | ADR-0019 + `GET /api/platform/product-roadmap`; #38/#40/#41/#42 ✅; #42a ✅ (fases 1–5); #42b ✅; #42c ✅; #42e/#42f ✅; #42d parcial (ver tabla "Estado global del backlog") |
 | Frontend 43–51 | **100%** | 0 errores lint; 43 warnings justificados |
-| **Global ponderado** | **~98%** | |
-| **Techo accionable (código)** | **100%** | |
+| **Global ponderado (madurez comercial/GTM)** | **~58%** | Incluye homologación fiscal 🔒, producto parcial, infra opcional |
+| **Madurez código/arquitectura (accionable interno)** | **~92%** | CQRS, tests, CI, disclaimers UI, Zod forms principales |
+| **Techo accionable (solo código)** | **~95%** | Resto = externo 🔒 o decisión producto |
 
 ### Tabla definitiva — todo el backlog
 
@@ -741,7 +742,23 @@ se listan como hallazgo porque no representan una credencial real filtrada.
 4. **Lint react-hooks** masivo en páginas legacy no bloqueantes.
 5. ~~**docker compose up** completo (#65)~~ — ✅ Corregido jul 2026 (ver ítem 65).
 
-**¿Hay más código accionable?** Solo mejoras decrecientes: más RSC híbridos, más `useMemo`, RLS en DbContexts de módulo, lint archivo a archivo. **No** se alcanza 100% global sin filas 🔒 de la tabla.
+**¿Hay más código accionable?** Sí, pero decreciente: PDF nómina, 111/190 desde payroll,
+más E2E profundos, RLS tablas restantes. **No** se alcanza 100% global sin filas 🔒
+(homologación AEAT/TGSS, certificados, decisiones producto).
+
+### Madurez dual (jul 2026 — corrección tono realista)
+
+| Dimensión | % aprox. | Qué mide |
+|---|---|---|
+| **Código / arquitectura** | ~92% | CQRS, tests CI, frontend conectado, Zod, disclaimers UI, Payroll Fase 1 |
+| **Comercial / GTM / fiscal homologado** | ~55–60% | SII/VeriFactu prod 🔒, SILTRA 🔒, SEPA 🔒, PDF nómina, onboarding Excel |
+| **Global ponderado honesto** | **~58%** | Promedio ponderado incluyendo bloqueos externos |
+
+**Recuento tests verificado (jul 2026, esta sesión):** `Erp.Tests` **694**;
+`Erp.IntegrationTests` **164**; `Erp.ArchitectureTests` **7**;
+Vitest **142**; Playwright **25** (19 smoke + 6 fiscal-flows).
+Total ejecutable: **865 backend + 142 frontend + 25 E2E**.
+Cifras históricas (748, 929, 878…) eran snapshots — usar `dotnet test` + `npm test` + `npx playwright test`.
 
 ## Estado global del backlog (jul 2026)
 
@@ -757,8 +774,9 @@ críticos fiscales (0a–0f), plataforma (32–37), producto (38–42f) y fronte
 | Plataforma 32–37 | 7 (#32–#36, #57, #59) | 0 (#34 ampliado; unit XPlat 30% objetivo) | 0 | **~99%** |
 | Producto 38–42f | 9 (#38, #40, #41, #42, #42a, #42b, #42c, #42e, #42f) | 1 (#42d parcial) | 0 bloqueantes | **~85%** |
 | Frontend 43–51 | 8 (#43–47, #48, #51) | 1 (#37, #49) | 0 (#50 lint) | **~100%** |
-| **Global ponderado** | | | | **~97%** |
-| **Techo accionable** | | | | **~100%** |
+| **Global ponderado (madurez comercial/GTM)** | | | | **~58%** |
+| **Madurez código/arquitectura** | | | | **~92%** |
+| **Techo accionable (código)** | | | | **~95%** |
 
 **Cerrado en esta iteración (jul 2026, sesión 4 — cierre accionable):**
 
@@ -941,7 +959,9 @@ críticos fiscales (0a–0f), plataforma (32–37), producto (38–42f) y fronte
 
 ### Techo alcanzado (accionable cerrado)
 
-El backlog **accionable de código** queda en **~100%** (código pendiente = solo bloqueos externos/producto abajo). Lo que impide el 100% **nominal global** es exclusivamente:
+El backlog **accionable de código** queda en **~95%** (no 100% nominal: PDF nómina,
+111/190 payroll, E2E profundos con cert real pendientes). Lo que impide el 100%
+**nominal global (~58% comercial)** es exclusivamente:
 
 | Categoría | Ítems | Motivo |
 |---|---|---|

@@ -4,6 +4,7 @@ import PageContainer from '@/components/PageContainer';
 import EmptyState from '@/components/EmptyState';
 import LoadingPlaceholder from '@/components/LoadingPlaceholder';
 import AccessibleModal from '@/components/AccessibleModal';
+import { fiscalCalendarEventSchema } from '@/lib/schemas/accountingLegacyFormSchemas';
 
 export interface FiscalEvent {
     id: string;
@@ -112,6 +113,11 @@ export default function FiscalClient({ initialEvents, initialYear }: FiscalClien
     };
 
     const createEvent = async () => {
+        const parsed = fiscalCalendarEventSchema.safeParse(form);
+        if (!parsed.success) {
+            alert(parsed.error.issues[0]?.message ?? 'Revisa el formulario');
+            return;
+        }
         setSaving(true);
         await fetch('/api/proxy/fiscal/calendar/events', {
             method: 'POST',

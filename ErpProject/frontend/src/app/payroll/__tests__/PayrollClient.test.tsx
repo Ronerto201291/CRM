@@ -28,18 +28,21 @@ describe('PayrollClient', () => {
                         totalEmployerSs: 0,
                     },
                 ]}
+                initialTemplates={[]}
                 initialYear={2026}
             />,
         );
 
         expect(screen.getByRole('heading', { name: /nóminas/i })).toBeInTheDocument();
+        expect(screen.getByTestId('legal-disclaimer-payroll-module')).toBeInTheDocument();
+        expect(screen.getByTestId('legal-disclaimer-payroll-export')).toBeInTheDocument();
         expect(screen.getAllByText('Ana García').length).toBeGreaterThanOrEqual(1);
         expect(screen.getByText('6/2026')).toBeInTheDocument();
     });
 
     it('crea empleado vía POST', async () => {
         const fetchMock = vi.fn().mockImplementation((url: string) => {
-            if (url.includes('/employees')) {
+            if (url.includes('/employees') || url.includes('/templates')) {
                 return Promise.resolve({ ok: true, json: async () => [] });
             }
             if (url.includes('/settlements')) {
@@ -50,7 +53,7 @@ describe('PayrollClient', () => {
         vi.stubGlobal('fetch', fetchMock);
 
         render(
-            <PayrollClient initialEmployees={[]} initialSettlements={[]} initialYear={2026} />,
+            <PayrollClient initialEmployees={[]} initialSettlements={[]} initialTemplates={[]} initialYear={2026} />,
         );
 
         fireEvent.change(screen.getByPlaceholderText('NIF'), { target: { value: '87654321X' } });
@@ -68,6 +71,7 @@ describe('PayrollClient', () => {
     it('descarga RED vía GET export/red', async () => {
         const fetchMock = vi.fn().mockResolvedValue({
             ok: true,
+            headers: { get: (k: string) => k.includes('disclaimer') ? 'Export orientativo TGSS' : null },
             blob: async () => new Blob(['01'], { type: 'text/plain' }),
         });
         vi.stubGlobal('fetch', fetchMock);
@@ -77,7 +81,7 @@ describe('PayrollClient', () => {
         });
 
         render(
-            <PayrollClient initialEmployees={[]} initialSettlements={[]} initialYear={2026} />,
+            <PayrollClient initialEmployees={[]} initialSettlements={[]} initialTemplates={[]} initialYear={2026} />,
         );
 
         fireEvent.click(screen.getByRole('button', { name: /RED\/SILTRA/i }));

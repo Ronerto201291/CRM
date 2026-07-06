@@ -3,6 +3,7 @@
 import React, { useState, useCallback } from "react";
 import PageContainer from "@/components/PageContainer";
 import AccessibleModal from "@/components/AccessibleModal";
+import { currencyCreateSchema } from "@/lib/schemas/legacyFormSchemas";
 
 interface Currency {
     id: string;
@@ -38,14 +39,22 @@ export default function CurrenciesClient({ initialCurrencies }: { initialCurrenc
 
     const submit = async () => {
         setFormError(null);
-        if (!form.code || !form.name) { setFormError('Código y nombre son obligatorios'); return; }
+        const parsed = currencyCreateSchema.safeParse(form);
+        if (!parsed.success) {
+            setFormError(parsed.error.issues[0]?.message ?? 'Revisa el formulario');
+            return;
+        }
         setSaving(true);
         try {
-            const rate = parseFloat(form.exchangeRateToEur);
+            const rate = parseFloat(parsed.data.exchangeRateToEur);
             const res = await fetch('/api/proxy/v1/treasury/currencies', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code: form.code.toUpperCase(), name: form.name, exchangeRateToEur: rate || 1 }),
+                body: JSON.stringify({
+                    code: parsed.data.code.toUpperCase(),
+                    name: parsed.data.name,
+                    exchangeRateToEur: rate,
+                }),
             });
             if (res.ok) { setShowCreate(false); setForm({ code: '', name: '', exchangeRateToEur: '' }); load(); }
             else { const e = await res.json(); setFormError(e.error || 'Error'); }

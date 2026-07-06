@@ -110,6 +110,9 @@ namespace Erp.Modules.Purchasing.Infrastructure.Migrations
                     b.Property<DateTime>("OrderDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("SupplierId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -117,6 +120,8 @@ namespace Erp.Modules.Purchasing.Infrastructure.Migrations
 
                     b.HasIndex("CompanyId", "Number")
                         .IsUnique();
+
+                    b.HasIndex("SupplierId");
 
                     b.ToTable("PurchaseOrders", "purchasing");
                 });
@@ -176,6 +181,9 @@ namespace Erp.Modules.Purchasing.Infrastructure.Migrations
                     b.Property<Guid>("PurchaseOrderId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("SupplierId")
+                        .HasColumnType("uuid");
+
                     b.Property<decimal>("TotalAmount")
                         .HasPrecision(18, 4)
                         .HasColumnType("numeric(18,4)");
@@ -186,6 +194,8 @@ namespace Erp.Modules.Purchasing.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("PurchaseOrderId");
+
+                    b.HasIndex("SupplierId");
 
                     b.ToTable("SupplierInvoices", "purchasing");
                 });
