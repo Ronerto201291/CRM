@@ -1,3 +1,4 @@
+using Erp.Application.Common.Events;
 using Erp.Application.Common.Interfaces;
 using Erp.Domain.Entities.Core;
 using Erp.Domain.Entities.Licensing;
@@ -53,7 +54,8 @@ public class RegisterCompanyHandler : IRequestHandler<RegisterCompanyCommand, Re
         // Validar unicidad de email
         var emailExists = await _ctx.Users.IgnoreQueryFilters()
             .AnyAsync(u => u.Email == req.AdminEmail, ct);
-        if (emailExists) throw new InvalidOperationException("El email ya está registrado.");
+        if (emailExists)
+            throw new InvalidOperationException("El email ya está registrado. Usa «Añadir empresa» si ya tienes cuenta.");
 
         // Crear suscripción Free
         var subscription = new Subscription
@@ -61,7 +63,6 @@ public class RegisterCompanyHandler : IRequestHandler<RegisterCompanyCommand, Re
             Id = Guid.NewGuid(),
             PlanName = "Free",
             ExpirationDate = DateTime.UtcNow.AddYears(100),
-            ActiveModules = """["Billing","Crm"]""",
             IsActive = true,
             StripeStatus = "active"
         };
@@ -104,7 +105,20 @@ public class RegisterCompanyHandler : IRequestHandler<RegisterCompanyCommand, Re
         };
         _ctx.Users.Add(user);
 
+        _ctx.UserCompanies.Add(new UserCompany
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            CompanyId = company.Id,
+            RoleId = adminRole.Id,
+            IsDefault = true
+        });
+
         await _ctx.SaveChangesAsync(ct);
+
+        // Sembrar plan contable PGC (Accounting escucha este evento) — sin esto
+        // ninguna factura de esta empresa podría cobrarse (ver ADR-0018 #42b/#0g).
+        await _mediator.Publish(new CompanyCreatedEvent { CompanyId = company.Id }, ct);
 
         // Send email confirmation (fire-and-forget: registration succeeds even if email fails)
         _ = Task.Run(() => _mediator.Send(new SendEmailConfirmationCommand(user.Id), CancellationToken.None));

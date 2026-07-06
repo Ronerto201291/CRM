@@ -21,6 +21,20 @@ public class Company : AuditableEntity
     // Purchase matching tolerance (per-tenant). Amount in currency units. If 0, no tolerance allowed.
     public decimal MatchingToleranceAmount { get; set; } = 0m;
 
+    /// <summary>Importe a partir del cual pedidos/gastos requieren aprobación manual (0 = desactivado).</summary>
+    public decimal ApprovalThresholdAmount { get; set; } = 0m;
+
+    /// <summary>Email de la gestoría externa para export periódico (ADR-0018 #42e).</summary>
+    public string? AccountantEmail { get; set; }
+
+    /// <summary>disabled | monthly | quarterly</summary>
+    public string AccountantExportFrequency { get; set; } = "disabled";
+
+    public DateTime? AccountantExportLastRunAt { get; set; }
+
+    /// <summary>disabled | daily | weekly — notificaciones proactivas (#42).</summary>
+    public string ProactiveNotificationsFrequency { get; set; } = "daily";
+
     public ICollection<User> Users { get; set; } = new List<User>();
     public ICollection<Role> Roles { get; set; } = new List<Role>();
 }

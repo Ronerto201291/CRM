@@ -1,0 +1,25 @@
+-- ADR-0018 #34 — Piloto Row-Level Security (referencia manual)
+-- NOTA: no ejecutar en docker-entrypoint-initdb.d — las tablas EF aún no existen.
+-- La aplicación aplica estas políticas tras MigrateAsync vía PostgresRlsBootstrap
+-- cuando Postgres:RlsEnabled=true (docker-compose.override.yml lo activa en local).
+--
+-- Tablas cubiertas por PostgresRlsBootstrap:
+--   Companies     → USING ("Id" = app.current_tenant)
+--   Users, Roles, TenantModules, TenantInvitations, FiscalEvents,
+--   Subscriptions, ApiKeys, AuditLogs, Rules
+--     → USING ("CompanyId" = app.current_tenant)
+--   billing."Invoices", billing."Quotes"
+--   crm."Clients", crm."Suppliers", crm."Leads", crm."Contacts"
+--   expenses."ExpenseDocuments"
+--   sales."SalesOrders", purchasing."PurchaseOrders"
+--     → USING ("CompanyId" = app.current_tenant)
+--
+-- Ejemplo manual (Companies):
+-- ALTER TABLE "Companies" ENABLE ROW LEVEL SECURITY;
+-- CREATE POLICY companies_tenant_isolation ON "Companies"
+--   USING ("Id" = NULLIF(current_setting('app.current_tenant', true), '')::uuid);
+--
+-- Ejemplo manual (tablas con CompanyId):
+-- ALTER TABLE "Users" ENABLE ROW LEVEL SECURITY;
+-- CREATE POLICY users_tenant_isolation ON "Users"
+--   USING ("CompanyId" = NULLIF(current_setting('app.current_tenant', true), '')::uuid);

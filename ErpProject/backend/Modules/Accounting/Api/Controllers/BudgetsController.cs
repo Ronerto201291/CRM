@@ -1,3 +1,4 @@
+using Erp.Application.Common.Attributes;
 using Erp.Modules.Accounting.Application.Commands;
 using Erp.Modules.Accounting.Application.Queries;
 using MediatR;
@@ -9,6 +10,7 @@ namespace Erp.Modules.Accounting.Api.Controllers;
 [ApiController]
 [Route("api/v1/accounting/budgets")]
 [Authorize]
+[RequiredModule("Accounting")]
 public class BudgetsController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -17,11 +19,13 @@ public class BudgetsController : ControllerBase
 
     /// <summary>GET /api/v1/accounting/budgets?fiscalYear=2026</summary>
     [HttpGet]
+    [RequirePermission(Permissions.Budget.Read)]
     public async Task<IActionResult> GetAll([FromQuery] int? fiscalYear, CancellationToken ct)
         => Ok(await _mediator.Send(new GetBudgetsQuery(fiscalYear), ct));
 
     /// <summary>GET /api/v1/accounting/budgets/{id}</summary>
     [HttpGet("{id:guid}")]
+    [RequirePermission(Permissions.Budget.Read)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var budget = await _mediator.Send(new GetBudgetQuery(id), ct);
@@ -33,6 +37,7 @@ public class BudgetsController : ControllerBase
     /// Devuelve presupuesto vs real por línea, calculado desde los asientos contables reales.
     /// </summary>
     [HttpGet("{id:guid}/analysis")]
+    [RequirePermission(Permissions.Budget.Read)]
     public async Task<IActionResult> GetAnalysis(Guid id, CancellationToken ct)
     {
         try
@@ -44,6 +49,7 @@ public class BudgetsController : ControllerBase
 
     /// <summary>POST /api/v1/accounting/budgets — Crear presupuesto en estado Draft</summary>
     [HttpPost]
+    [RequirePermission(Permissions.Budget.Create)]
     public async Task<IActionResult> Create([FromBody] CreateBudgetRequest req, CancellationToken ct)
     {
         var id = await _mediator.Send(new CreateBudgetCommand(
@@ -54,6 +60,7 @@ public class BudgetsController : ControllerBase
 
     /// <summary>POST /api/v1/accounting/budgets/{id}/approve — Cambiar estado a Approved</summary>
     [HttpPost("{id:guid}/approve")]
+    [RequirePermission(Permissions.Budget.Approve)]
     public async Task<IActionResult> Approve(Guid id, CancellationToken ct)
     {
         try
@@ -67,6 +74,7 @@ public class BudgetsController : ControllerBase
 
     /// <summary>POST /api/v1/accounting/budgets/{id}/close — Cerrar el presupuesto</summary>
     [HttpPost("{id:guid}/close")]
+    [RequirePermission(Permissions.Budget.Manage)]
     public async Task<IActionResult> Close(Guid id, CancellationToken ct)
     {
         try
@@ -80,6 +88,7 @@ public class BudgetsController : ControllerBase
 
     /// <summary>POST /api/v1/accounting/budgets/{id}/lines — Añadir línea al presupuesto</summary>
     [HttpPost("{id:guid}/lines")]
+    [RequirePermission(Permissions.Budget.Manage)]
     public async Task<IActionResult> AddLine(Guid id, [FromBody] AddBudgetLineRequest req, CancellationToken ct)
     {
         try
@@ -95,6 +104,7 @@ public class BudgetsController : ControllerBase
 
     /// <summary>PUT /api/v1/accounting/budgets/lines/{lineId} — Actualizar importe línea</summary>
     [HttpPut("lines/{lineId:guid}")]
+    [RequirePermission(Permissions.Budget.Manage)]
     public async Task<IActionResult> UpdateLine(Guid lineId, [FromBody] UpdateBudgetLineRequest req, CancellationToken ct)
     {
         try
@@ -107,6 +117,7 @@ public class BudgetsController : ControllerBase
 
     /// <summary>DELETE /api/v1/accounting/budgets/lines/{lineId}</summary>
     [HttpDelete("lines/{lineId:guid}")]
+    [RequirePermission(Permissions.Budget.Manage)]
     public async Task<IActionResult> DeleteLine(Guid lineId, CancellationToken ct)
     {
         try

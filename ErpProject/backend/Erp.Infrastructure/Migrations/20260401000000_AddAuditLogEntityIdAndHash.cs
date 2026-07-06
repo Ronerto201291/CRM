@@ -1,3 +1,5 @@
+using Erp.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -5,22 +7,17 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Erp.Infrastructure.Migrations;
 
 /// <inheritdoc />
+[DbContext(typeof(ErpDbContext))]
+[Migration("20260401000000_AddAuditLogEntityIdAndHash")]
 public partial class AddAuditLogEntityIdAndHash : Migration
 {
     /// <inheritdoc />
     protected override void Up(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.AddColumn<Guid>(
-            name: "EntityId",
-            table: "AuditLogs",
-            type: "uuid",
-            nullable: true);
-
-        migrationBuilder.AddColumn<string>(
-            name: "Hash",
-            table: "AuditLogs",
-            type: "text",
-            nullable: true);
+        migrationBuilder.Sql("""
+            ALTER TABLE "AuditLogs" ADD COLUMN IF NOT EXISTS "EntityId" uuid;
+            ALTER TABLE "AuditLogs" ADD COLUMN IF NOT EXISTS "Hash" text;
+            """);
     }
 
     /// <inheritdoc />

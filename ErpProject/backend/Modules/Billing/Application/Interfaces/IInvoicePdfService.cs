@@ -59,6 +59,7 @@ public record InvoicePdfData(
     string? Hash,
     string? VerifactuHuella,
     string? VerifactuQrUrl,
+    bool VerifactuRealtimeSubmission,
 
     // ── Partes ──
     CompanyPdfInfo Company,

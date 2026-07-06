@@ -1,3 +1,4 @@
+using Erp.Application.Common.Attributes;
 using Erp.Modules.Accounting.Application.Commands;
 using Erp.Modules.Accounting.Application.Queries;
 using MediatR;
@@ -9,6 +10,7 @@ namespace Erp.Modules.Accounting.Api.Controllers;
 [ApiController]
 [Route("api/v1/accounting/fixed-assets")]
 [Authorize]
+[RequiredModule("Accounting")]
 public class FixedAssetsController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -17,11 +19,13 @@ public class FixedAssetsController : ControllerBase
 
     /// <summary>GET /api/v1/accounting/fixed-assets?status=Active</summary>
     [HttpGet]
+    [RequirePermission(Permissions.FixedAsset.Read)]
     public async Task<IActionResult> GetAll([FromQuery] string? status, CancellationToken ct)
         => Ok(await _mediator.Send(new GetFixedAssetsQuery(status), ct));
 
     /// <summary>GET /api/v1/accounting/fixed-assets/{id}</summary>
     [HttpGet("{id:guid}")]
+    [RequirePermission(Permissions.FixedAsset.Read)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var asset = await _mediator.Send(new GetFixedAssetQuery(id), ct);
@@ -30,6 +34,7 @@ public class FixedAssetsController : ControllerBase
 
     /// <summary>POST /api/v1/accounting/fixed-assets — Registrar nuevo activo fijo</summary>
     [HttpPost]
+    [RequirePermission(Permissions.FixedAsset.Create)]
     public async Task<IActionResult> Create([FromBody] CreateFixedAssetRequest req, CancellationToken ct)
     {
         var id = await _mediator.Send(new CreateFixedAssetCommand(
@@ -52,6 +57,7 @@ public class FixedAssetsController : ControllerBase
 
     /// <summary>PUT /api/v1/accounting/fixed-assets/{id} — Actualizar metadatos del activo</summary>
     [HttpPut("{id:guid}")]
+    [RequirePermission(Permissions.FixedAsset.Update)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateFixedAssetRequest req, CancellationToken ct)
     {
         try
@@ -66,6 +72,7 @@ public class FixedAssetsController : ControllerBase
 
     /// <summary>POST /api/v1/accounting/fixed-assets/{id}/dispose — Dar de baja el activo</summary>
     [HttpPost("{id:guid}/dispose")]
+    [RequirePermission(Permissions.FixedAsset.Manage)]
     public async Task<IActionResult> Dispose(Guid id, [FromBody] DisposeFixedAssetRequest req, CancellationToken ct)
     {
         try
@@ -83,6 +90,7 @@ public class FixedAssetsController : ControllerBase
     /// Si no se especifica mes/año, usa el mes actual.
     /// </summary>
     [HttpPost("{id:guid}/depreciate")]
+    [RequirePermission(Permissions.FixedAsset.Manage)]
     public async Task<IActionResult> Depreciate(Guid id, [FromBody] PostAmortizationRequest? req, CancellationToken ct)
     {
         var now   = DateTime.UtcNow;

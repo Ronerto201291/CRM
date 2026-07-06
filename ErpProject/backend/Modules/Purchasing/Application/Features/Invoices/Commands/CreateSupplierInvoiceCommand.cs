@@ -5,6 +5,7 @@ namespace Erp.Modules.Purchasing.Application.Features.Invoices.Commands;
 public class CreateSupplierInvoiceCommand : IRequest<Guid>
 {
     public Guid PurchaseOrderId { get; set; }
+    public Guid SupplierId { get; set; }
     public string Number { get; set; } = string.Empty;
     public DateTime InvoiceDate { get; set; }
     public decimal TotalAmount { get; set; }

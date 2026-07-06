@@ -214,15 +214,22 @@ public class UpdateQuoteHandler : IRequestHandler<UpdateQuoteCommand, bool>
 
     public async Task<bool> Handle(UpdateQuoteCommand req, CancellationToken ct)
     {
-        var quote = await _ctx.Quotes
-            .Include(q => q.Lines)
-            .FirstOrDefaultAsync(q => q.Id == req.Id, ct);
+        var status = await _ctx.Quotes
+            .Where(q => q.Id == req.Id)
+            .Select(q => q.Status)
+            .FirstOrDefaultAsync(ct);
 
-        if (quote is null) return false;
+        if (status is null) return false;
 
-        if (quote.Status != "Draft")
+        if (status != "Draft")
             throw new InvalidOperationException(
-                $"Solo se puede editar un presupuesto en estado Draft. Estado actual: {quote.Status}.");
+                $"Solo se puede editar un presupuesto en estado Draft. Estado actual: {status}.");
+
+        await _ctx.QuoteLines.Where(l => l.QuoteId == req.Id).ExecuteDeleteAsync(ct);
+
+        var quote = await _ctx.Quotes
+            .AsNoTracking()
+            .FirstAsync(q => q.Id == req.Id, ct);
 
         quote.ClientId = req.ClientId;
         quote.ClientType = req.ClientType;
@@ -238,11 +245,37 @@ public class UpdateQuoteHandler : IRequestHandler<UpdateQuoteCommand, bool>
         quote.Notes = req.Notes;
         quote.InternalNotes = req.InternalNotes;
 
-        // Borrar líneas y recalcular desde cero
-        foreach (var line in quote.Lines.ToList())
-            _ctx.QuoteLines.Remove(line);
-
         QuoteTotalsCalculator.Recalculate(quote, req.Lines);
+
+        await _ctx.Quotes
+            .Where(q => q.Id == req.Id)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(q => q.ClientId, req.ClientId)
+                .SetProperty(q => q.ClientType, req.ClientType)
+                .SetProperty(q => q.ClientName, req.ClientName)
+                .SetProperty(q => q.ClientTaxId, req.ClientTaxId)
+                .SetProperty(q => q.ClientEmail, req.ClientEmail)
+                .SetProperty(q => q.ClientPhone, req.ClientPhone)
+                .SetProperty(q => q.ClientAddress, req.ClientAddress)
+                .SetProperty(q => q.IssueDate, req.IssueDate)
+                .SetProperty(q => q.ValidUntil, req.ValidUntil)
+                .SetProperty(q => q.Currency, req.Currency)
+                .SetProperty(q => q.GlobalDiscountPct, req.GlobalDiscountPct)
+                .SetProperty(q => q.Notes, req.Notes)
+                .SetProperty(q => q.InternalNotes, req.InternalNotes)
+                .SetProperty(q => q.GlobalDiscountAmount, quote.GlobalDiscountAmount)
+                .SetProperty(q => q.SubtotalBeforeDisc, quote.SubtotalBeforeDisc)
+                .SetProperty(q => q.SubtotalAfterDisc, quote.SubtotalAfterDisc)
+                .SetProperty(q => q.TaxBaseAmount, quote.TaxBaseAmount)
+                .SetProperty(q => q.TaxAmount, quote.TaxAmount)
+                .SetProperty(q => q.TotalAmount, quote.TotalAmount)
+                .SetProperty(q => q.TaxBreakdown, quote.TaxBreakdown), ct);
+
+        foreach (var line in quote.Lines)
+        {
+            line.QuoteId = req.Id;
+            _ctx.QuoteLines.Add(line);
+        }
 
         await _ctx.SaveChangesAsync(ct);
         return true;
@@ -278,8 +311,8 @@ public class SendQuoteHandler : IRequestHandler<SendQuoteCommand, SendQuoteResul
     public async Task<SendQuoteResult> Handle(SendQuoteCommand req, CancellationToken ct)
     {
         var quote = await _ctx.Quotes
+            .AsNoTracking()
             .Include(q => q.Lines)
-            .Include(q => q.StatusHistory)
             .FirstOrDefaultAsync(q => q.Id == req.Id, ct)
             ?? throw new KeyNotFoundException($"Presupuesto '{req.Id}' no encontrado.");
 
@@ -321,17 +354,23 @@ public class SendQuoteHandler : IRequestHandler<SendQuoteCommand, SendQuoteResul
             pdfAttachment: pdfBytes,
             ct: ct);
 
-        // Actualizar estado
+        // Actualizar estado (ExecuteUpdate evita conflictos de tracking en Postgres)
         var prev = quote.Status;
-        quote.Status = "Sent";
-        quote.SentAt = DateTime.UtcNow;
+        var sentAt = DateTime.UtcNow;
 
-        quote.StatusHistory.Add(new QuoteStatusHistory
+        _ctx.QuoteStatusHistory.Add(new QuoteStatusHistory
         {
+            QuoteId = quote.Id,
             FromStatus = prev,
             ToStatus = "Sent",
-            ChangedAt = DateTime.UtcNow
+            ChangedAt = sentAt
         });
+
+        await _ctx.Quotes
+            .Where(q => q.Id == quote.Id)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(q => q.Status, "Sent")
+                .SetProperty(q => q.SentAt, sentAt), ct);
 
         await _ctx.SaveChangesAsync(ct);
 
@@ -401,16 +440,15 @@ public class AcceptQuoteHandler : IRequestHandler<AcceptQuoteCommand, bool>
 
         if (!string.IsNullOrEmpty(req.AcceptanceToken))
         {
-            // Búsqueda por token (portal del cliente — sin filtro de tenant)
             quote = await _ctx.Quotes
                 .IgnoreQueryFilters()
-                .Include(q => q.StatusHistory)
+                .AsNoTracking()
                 .FirstOrDefaultAsync(q => q.AcceptanceToken == req.AcceptanceToken, ct);
         }
         else
         {
             quote = await _ctx.Quotes
-                .Include(q => q.StatusHistory)
+                .AsNoTracking()
                 .FirstOrDefaultAsync(q => q.Id == req.Id, ct);
         }
 
@@ -430,16 +468,22 @@ public class AcceptQuoteHandler : IRequestHandler<AcceptQuoteCommand, bool>
         };
 
         var prev = quote.Status;
-        quote.Status = "Accepted";
-        quote.AcceptedAt = DateTime.UtcNow;
+        var acceptedAt = DateTime.UtcNow;
 
-        quote.StatusHistory.Add(new QuoteStatusHistory
+        _ctx.QuoteStatusHistory.Add(new QuoteStatusHistory
         {
+            QuoteId = quote.Id,
             FromStatus = prev,
             ToStatus = "Accepted",
-            ChangedAt = DateTime.UtcNow,
+            ChangedAt = acceptedAt,
             Metadata = JsonSerializer.Serialize(metadata)
         });
+
+        await _ctx.Quotes
+            .Where(q => q.Id == quote.Id)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(q => q.Status, "Accepted")
+                .SetProperty(q => q.AcceptedAt, acceptedAt), ct);
 
         await _ctx.SaveChangesAsync(ct);
 
@@ -476,13 +520,13 @@ public class RejectQuoteHandler : IRequestHandler<RejectQuoteCommand, bool>
         {
             quote = await _ctx.Quotes
                 .IgnoreQueryFilters()
-                .Include(q => q.StatusHistory)
+                .AsNoTracking()
                 .FirstOrDefaultAsync(q => q.AcceptanceToken == req.AcceptanceToken, ct);
         }
         else
         {
             quote = await _ctx.Quotes
-                .Include(q => q.StatusHistory)
+                .AsNoTracking()
                 .FirstOrDefaultAsync(q => q.Id == req.Id, ct);
         }
 
@@ -496,17 +540,23 @@ public class RejectQuoteHandler : IRequestHandler<RejectQuoteCommand, bool>
             : JsonSerializer.Serialize(new { ip = req.IpAddress, userAgent = req.UserAgent, timestamp = DateTime.UtcNow });
 
         var prev = quote.Status;
-        quote.Status = "Rejected";
-        quote.RejectedAt = DateTime.UtcNow;
+        var rejectedAt = DateTime.UtcNow;
 
-        quote.StatusHistory.Add(new QuoteStatusHistory
+        _ctx.QuoteStatusHistory.Add(new QuoteStatusHistory
         {
+            QuoteId = quote.Id,
             FromStatus = prev,
             ToStatus = "Rejected",
-            ChangedAt = DateTime.UtcNow,
+            ChangedAt = rejectedAt,
             Reason = req.Reason,
             Metadata = metadata
         });
+
+        await _ctx.Quotes
+            .Where(q => q.Id == quote.Id)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(q => q.Status, "Rejected")
+                .SetProperty(q => q.RejectedAt, rejectedAt), ct);
 
         await _ctx.SaveChangesAsync(ct);
         return true;
@@ -531,8 +581,8 @@ public class ConvertQuoteToInvoiceHandler : IRequestHandler<ConvertQuoteToInvoic
     public async Task<ConvertQuoteResult> Handle(ConvertQuoteToInvoiceCommand req, CancellationToken ct)
     {
         var quote = await _ctx.Quotes
+            .AsNoTracking()
             .Include(q => q.Lines)
-            .Include(q => q.StatusHistory)
             .FirstOrDefaultAsync(q => q.Id == req.Id, ct)
             ?? throw new KeyNotFoundException($"Presupuesto '{req.Id}' no encontrado.");
 
@@ -604,19 +654,25 @@ public class ConvertQuoteToInvoiceHandler : IRequestHandler<ConvertQuoteToInvoic
 
         _ctx.Invoices.Add(invoice);
 
-        // Actualizar presupuesto
         var prev = quote.Status;
-        quote.Status = "Converted";
-        quote.ConvertedToInvoiceId = invoice.Id;
-        quote.ConvertedAt = DateTime.UtcNow;
+        var convertedAt = DateTime.UtcNow;
+        var invoiceId = invoice.Id;
 
-        quote.StatusHistory.Add(new QuoteStatusHistory
+        _ctx.QuoteStatusHistory.Add(new QuoteStatusHistory
         {
+            QuoteId = quote.Id,
             FromStatus = prev,
             ToStatus = "Converted",
-            ChangedAt = DateTime.UtcNow,
-            Metadata = JsonSerializer.Serialize(new { invoiceId = invoice.Id, invoiceNumber })
+            ChangedAt = convertedAt,
+            Metadata = JsonSerializer.Serialize(new { invoiceId, invoiceNumber })
         });
+
+        await _ctx.Quotes
+            .Where(q => q.Id == quote.Id)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(q => q.Status, "Converted")
+                .SetProperty(q => q.ConvertedToInvoiceId, invoiceId)
+                .SetProperty(q => q.ConvertedAt, convertedAt), ct);
 
         await _ctx.SaveChangesAsync(ct);
 
@@ -839,14 +895,17 @@ public class NewQuoteVersionHandler : IRequestHandler<NewQuoteVersionCommand, Gu
 // QUERIES
 // ═════════════════════════════════════════════════════════════════════════════
 
-public class GetQuotesHandler : IRequestHandler<GetQuotesQuery, List<QuoteSummaryDto>>
+public class GetQuotesHandler : IRequestHandler<GetQuotesQuery, PaginatedQuotesResult>
 {
     private readonly IBillingDbContext _ctx;
 
     public GetQuotesHandler(IBillingDbContext ctx) => _ctx = ctx;
 
-    public async Task<List<QuoteSummaryDto>> Handle(GetQuotesQuery req, CancellationToken ct)
+    public async Task<PaginatedQuotesResult> Handle(GetQuotesQuery req, CancellationToken ct)
     {
+        var page = Math.Max(1, req.Page);
+        var pageSize = Math.Clamp(req.PageSize, 1, 500);
+
         var q = _ctx.Quotes.AsQueryable();
 
         if (!string.IsNullOrEmpty(req.Status))
@@ -861,13 +920,19 @@ public class GetQuotesHandler : IRequestHandler<GetQuotesQuery, List<QuoteSummar
         if (req.DateTo.HasValue)
             q = q.Where(x => x.IssueDate <= req.DateTo.Value);
 
-        return await q
+        var totalCount = await q.CountAsync(ct);
+
+        var items = await q
             .OrderByDescending(x => x.IssueDate)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(x => new QuoteSummaryDto(
                 x.Id, x.Number, x.Version, x.Status,
                 x.ClientName, x.ClientTaxId,
                 x.IssueDate, x.ValidUntil, x.TotalAmount, x.Currency, x.CreatedAt))
             .ToListAsync(ct);
+
+        return new PaginatedQuotesResult(items, totalCount, page, pageSize);
     }
 }
 

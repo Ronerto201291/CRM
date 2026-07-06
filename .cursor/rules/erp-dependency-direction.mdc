@@ -1,0 +1,43 @@
+---
+description: REGLA ESTRICTA — el core NUNCA depende de módulos. Ejecutar DependencyDirectionArchitectureTests antes de cerrar cambios en Erp.Domain/Application/Infrastructure.
+alwaysApply: true
+---
+
+# Dirección de dependencias — OBLIGATORIO
+
+**Prohibido** que `Erp.Domain/`, `Erp.Application/` o `Erp.Infrastructure/` importen o referencien tipos de `Modules/*/Application/` (ni vía `<ProjectReference>` en `.csproj`).
+
+## Patrón correcto (único permitido)
+
+1. **Contrato** en `Erp.Application/Common/Interfaces/` (`IAutomationXxxQuery`, DTOs propios). Nunca reutilizar `IXxxDbContext` del módulo como parámetro en el core.
+2. **Implementación** en `Modules/<Módulo>/Infrastructure/Services/` (ahí sí usar su `IXxxDbContext`).
+3. **Registro DI** en el `DependencyInjection.cs` del módulo, no en el del core.
+
+## Antipatrón (rechazar siempre)
+
+```csharp
+// ❌ PROHIBIDO en Erp.Infrastructure
+public class FooService(IBillingDbContext billing, IExpensesDbContext expenses) { }
+```
+
+```csharp
+// ✅ CORRECTO
+// Erp.Application/Common/Interfaces/IBillingInvoiceSalesLinkQuery.cs
+// Modules/Billing/Infrastructure/Services/BillingInvoiceSalesLinkQuery.cs
+// Registro en Modules/Billing/Infrastructure/DependencyInjection.cs
+```
+
+## Verificación obligatoria
+
+Antes de dar por cerrado cualquier cambio que toque `Erp.Domain`, `Erp.Application` o `Erp.Infrastructure`:
+
+```bash
+cd ErpProject/backend
+dotnet test tests/Erp.ArchitectureTests/Erp.ArchitectureTests.csproj --filter DependencyDirectionArchitectureTests
+```
+
+El test falla citando archivo y referencia exacta. **No asumir que CI lo detectará** — ejecútalo tú.
+
+## Caso real (jul 2026)
+
+Un commit marcó en ADR-0018 la violación como "✅ Corregido" y en el mismo cambio añadió código en `Erp.Infrastructure` que volvía a inyectar `IBillingDbContext`/`IExpensesDbContext`. No repetir.

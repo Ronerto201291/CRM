@@ -1,4 +1,4 @@
-using Erp.Modules.Treasury.Infrastructure.Services;
+using Erp.Modules.Treasury.Application.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -43,7 +43,7 @@ public class ExchangeRateRefreshJob : BackgroundService
             {
                 using var scope = _serviceProvider.CreateScope();
                 var rateService = scope.ServiceProvider.GetRequiredService<IExchangeRateService>();
-                await rateService.RefreshRatesAsync(stoppingToken);
+                await rateService.RefreshAllTenantsRatesAsync(stoppingToken);
             }
             catch (Exception ex)
             {

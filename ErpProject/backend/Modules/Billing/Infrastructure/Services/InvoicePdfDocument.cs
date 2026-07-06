@@ -350,11 +350,36 @@ internal sealed class InvoicePdfDocument : IDocument
                         });
 
                     if (!string.IsNullOrWhiteSpace(_d.VerifactuHuella))
+                    {
+                        if (_d.VerifactuRealtimeSubmission)
+                        {
+                            c.Item().Text(t =>
+                            {
+                                t.Span("VERI*FACTU — Factura verificable en la sede de la AEAT. ")
+                                 .Bold().FontSize(7f).FontColor(ColorPrimary);
+                                t.Span("Sistema de facturación conforme al RD 1007/2023.")
+                                 .FontSize(6.5f).FontColor(ColorMuted);
+                            });
+                        }
+                        else
+                        {
+                            c.Item().Text(t =>
+                            {
+                                t.Span("Factura emitida por SIF en modalidad sin remisión de registros ")
+                                 .Bold().FontSize(6.5f).FontColor(ColorPrimary);
+                                t.Span("(no VERI*FACTU) conforme al RD 1007/2023. Los registros se conservan de forma local.")
+                                 .FontSize(6.5f).FontColor(ColorMuted);
+                            });
+                        }
+
+                        c.Item().Height(3);
+
                         c.Item().Text(t =>
                         {
                             t.Span("Huella Verifactu (Anexo II): ").Bold().FontSize(6).FontColor(ColorMuted);
                             t.Span(_d.VerifactuHuella).FontSize(6).FontColor(ColorText);
                         });
+                    }
 
                     c.Item().Height(5);
 
@@ -381,8 +406,8 @@ internal sealed class InvoicePdfDocument : IDocument
                     });
                 });
 
-                // ── QR Verifactu ──────────────────────────────────────────────
-                if (!string.IsNullOrWhiteSpace(_d.VerifactuQrUrl))
+                // ── QR Verifactu (solo modo remisión TIKE) ───────────────────
+                if (_d.VerifactuRealtimeSubmission && !string.IsNullOrWhiteSpace(_d.VerifactuQrUrl))
                 {
                     row.ConstantItem(8);
                     row.ConstantItem(68).Column(qrCol =>

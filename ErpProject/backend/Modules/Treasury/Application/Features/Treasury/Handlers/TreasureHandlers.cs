@@ -1,7 +1,6 @@
 using System.Globalization;
 using Erp.Application.Common.Interfaces;
-using Erp.Domain.Entities.Accounting;
-using Erp.Modules.Accounting.Application.Interfaces;
+using Erp.Application.Common.Validation;
 using Erp.Modules.Treasury.Application.Features.Treasury.Commands;
 using Erp.Modules.Treasury.Application.Interfaces;
 using Erp.Modules.Treasury.Domain.Entities;
@@ -15,12 +14,18 @@ namespace Erp.Modules.Treasury.Application.Features.Treasury.Handlers;
 public class CreateBankAccountHandler : IRequestHandler<CreateBankAccountCommand, BankAccountDto>
 {
     private readonly ITreasuryDbContext _ctx;
+    private readonly ITenantContext _tenant;
 
-    public CreateBankAccountHandler(ITreasuryDbContext ctx) => _ctx = ctx;
+    public CreateBankAccountHandler(ITreasuryDbContext ctx, ITenantContext tenant)
+    {
+        _ctx = ctx;
+        _tenant = tenant;
+    }
 
     public async Task<BankAccountDto> Handle(CreateBankAccountCommand req, CancellationToken ct)
     {
-        var tenantId = GetTenantId();
+        var tenantId = _tenant.TenantId
+            ?? throw new InvalidOperationException("Tenant not resolved");
         var entity = new BankAccount
         {
             Id = Guid.NewGuid(),
@@ -41,43 +46,69 @@ public class CreateBankAccountHandler : IRequestHandler<CreateBankAccountCommand
         return ToDto(entity);
     }
 
-    private Guid GetTenantId() => _ctx.BankAccounts
-        .IgnoreQueryFilters()
-        .Where(b => b.CompanyId != Guid.Empty)
-        .Select(b => b.CompanyId)
-        .FirstOrDefault();
-
     private static BankAccountDto ToDto(BankAccount b) => new(
         b.Id, b.Name, b.Iban, b.BIC, b.BankName,
-        b.CurrentBalance, b.CurrencyCode, b.IsActive, b.Notes);
+        b.CurrentBalance, b.CurrencyCode, b.IsActive, b.Notes, b.AccountingAccountCode);
 }
+
+public class GetBankAccountHandler : IRequestHandler<GetBankAccountQuery, BankAccountDto?>
+{
+    private readonly ITreasuryDbContext _ctx;
+    private readonly ITenantContext _tenant;
+
+    public GetBankAccountHandler(ITreasuryDbContext ctx, ITenantContext tenant)
+    {
+        _ctx = ctx;
+        _tenant = tenant;
+    }
+
+    public async Task<BankAccountDto?> Handle(GetBankAccountQuery req, CancellationToken ct)
+    {
+        var tenantId = _tenant.TenantId
+            ?? throw new InvalidOperationException("Tenant not resolved");
+        var account = await _ctx.BankAccounts
+            .Where(b => b.Id == req.Id && b.CompanyId == tenantId)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(ct);
+        return account == null ? null : new BankAccountDto(
+            account.Id, account.Name, account.Iban, account.BIC, account.BankName,
+            account.CurrentBalance, account.CurrencyCode, account.IsActive, account.Notes,
+            account.AccountingAccountCode);
+    }
+}
+
+public record GetBankAccountQuery(Guid Id) : IRequest<BankAccountDto?>;
 
 public class GetBankAccountsHandler : IRequestHandler<GetBankAccountsQuery, List<BankAccountDto>>
 {
     private readonly ITreasuryDbContext _ctx;
+    private readonly ITenantContext _tenant;
 
-    public GetBankAccountsHandler(ITreasuryDbContext ctx) => _ctx = ctx;
+    public GetBankAccountsHandler(ITreasuryDbContext ctx, ITenantContext tenant)
+    {
+        _ctx = ctx;
+        _tenant = tenant;
+    }
 
     public async Task<List<BankAccountDto>> Handle(GetBankAccountsQuery req, CancellationToken ct)
     {
-        var q = _ctx.BankAccounts.AsQueryable();
+        var tenantId = _tenant.TenantId
+            ?? throw new InvalidOperationException("Tenant not resolved");
+        var q = _ctx.BankAccounts.Where(b => b.CompanyId == tenantId);
         if (req.OnlyActive) q = q.Where(b => b.IsActive);
 
         var accounts = await q.AsNoTracking().ToListAsync(ct);
 
-        // Recalcular saldo desde movimientos
         foreach (var account in accounts)
         {
-            var movements = await _ctx.BankMovements
+            account.CurrentBalance = await _ctx.BankMovements
                 .Where(m => m.BankAccountId == account.Id)
-                .AsNoTracking()
-                .ToListAsync(ct);
-            account.CurrentBalance = movements.Sum(m => m.Amount);
+                .SumAsync(m => m.Amount, ct);
         }
 
         return accounts.Select(a => new BankAccountDto(
             a.Id, a.Name, a.Iban, a.BIC, a.BankName,
-            a.CurrentBalance, a.CurrencyCode, a.IsActive, a.Notes)).ToList();
+            a.CurrentBalance, a.CurrencyCode, a.IsActive, a.Notes, a.AccountingAccountCode)).ToList();
     }
 }
 
@@ -192,32 +223,45 @@ public class CreateBankMovementHandler : IRequestHandler<CreateBankMovementComma
     }
 }
 
-public class GetBankMovementsHandler : IRequestHandler<GetBankMovementsQuery, List<BankMovementDto>>
+public record PaginatedBankMovementsResult(
+    IReadOnlyList<BankMovementDto> Items,
+    int TotalCount,
+    int Page,
+    int PageSize);
+
+public class GetBankMovementsHandler : IRequestHandler<GetBankMovementsQuery, PaginatedBankMovementsResult>
 {
     private readonly ITreasuryDbContext _ctx;
 
     public GetBankMovementsHandler(ITreasuryDbContext ctx) => _ctx = ctx;
 
-    public async Task<List<BankMovementDto>> Handle(GetBankMovementsQuery req, CancellationToken ct)
+    public async Task<PaginatedBankMovementsResult> Handle(GetBankMovementsQuery req, CancellationToken ct)
     {
+        var page = Math.Max(1, req.Page);
+        var pageSize = Math.Clamp(req.PageSize, 1, 500);
+
         var q = _ctx.BankMovements
             .Where(m => m.BankAccountId == req.BankAccountId)
             .AsQueryable();
 
         if (req.OnlyUnreconciled)
             q = q.Where(m => !m.IsReconciled);
-
         if (req.From.HasValue)
             q = q.Where(m => m.Date >= req.From.Value);
         if (req.To.HasValue)
             q = q.Where(m => m.Date <= req.To.Value);
 
+        var totalCount = await q.CountAsync(ct);
         var movements = await q.OrderByDescending(m => m.Date)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .AsNoTracking().ToListAsync(ct);
 
-        return movements.Select(m => new BankMovementDto(
+        var items = movements.Select(m => new BankMovementDto(
             m.Id, m.BankAccountId, m.Date, m.Reference,
             m.Description, m.Amount, m.Type, m.IsReconciled, m.Origin)).ToList();
+
+        return new PaginatedBankMovementsResult(items, totalCount, page, pageSize);
     }
 }
 
@@ -225,132 +269,28 @@ public record GetBankMovementsQuery(
     Guid BankAccountId,
     bool OnlyUnreconciled = false,
     DateTime? From = null,
-    DateTime? To = null) : IRequest<List<BankMovementDto>>;
+    DateTime? To = null,
+    int Page = 1,
+    int PageSize = 50) : IRequest<PaginatedBankMovementsResult>;
 
 // ─── Reconciliation Handler ────────────────────────────────────────────────────
 
 public class ReconcileBankAccountHandler : IRequestHandler<ReconcileBankAccountCommand, ReconciliationResultDto>
 {
-    private readonly ITreasuryDbContext _ctx;
-    private readonly IAccountingDbContext _accCtx;
-    private readonly ITenantContext _tenant;
+    private readonly IBankReconciliationService _reconciliation;
 
-    public ReconcileBankAccountHandler(
-        ITreasuryDbContext ctx,
-        IAccountingDbContext accCtx,
-        ITenantContext tenant)
-    {
-        _ctx = ctx;
-        _accCtx = accCtx;
-        _tenant = tenant;
-    }
+    public ReconcileBankAccountHandler(IBankReconciliationService reconciliation) =>
+        _reconciliation = reconciliation;
 
     public async Task<ReconciliationResultDto> Handle(ReconcileBankAccountCommand req, CancellationToken ct)
     {
-        var companyId = _tenant.TenantId
-            ?? throw new InvalidOperationException("Tenant not resolved");
-
-        var movements = await _ctx.BankMovements
-            .Where(m => m.BankAccountId == req.BankAccountId && !m.IsReconciled && m.Origin != "System")
-            .OrderBy(m => m.Date)
-            .ToListAsync(ct);
-
-        var bankAccount = await _ctx.BankAccounts
-            .Where(b => b.Id == req.BankAccountId)
-            .AsNoTracking().FirstOrDefaultAsync(ct);
-
-        var accountCode = bankAccount?.AccountingAccountCode ?? "572";
-        var accountLines = await _accCtx.JournalEntryLines
-            .Include(l => l.JournalEntry)
-            .Where(l => l.JournalEntry.CompanyId == companyId
-                     && l.AccountCode.StartsWith("572")
-                     && l.JournalEntry.IsPosted)
-            .AsNoTracking().ToListAsync(ct);
-
-        var unmatchedLines = accountLines
-            .Where(l => l.Credit > 0 || l.Debit > 0)
-            .ToList();
-
-        var result = new ReconciliationResultDto(0, 0, string.Empty);
-        var batchId = Guid.NewGuid();
-
-        foreach (var movement in movements)
-        {
-            var match = FindMatch(movement, unmatchedLines);
-            if (match == null) continue;
-
-            movement.IsReconciled = true;
-            movement.MatchedJournalEntryLineId = match.Id;
-            movement.ReconciliationBatchId = batchId;
-
-            result = result with
-            {
-                MatchedCount = result.MatchedCount + 1,
-                MatchedAmount = result.MatchedAmount + Math.Abs(movement.Amount)
-            };
-            unmatchedLines.Remove(match);
-        }
-
-        if (result.MatchedCount > 0)
-        {
-            var batch = new ReconciliationBatch
-            {
-                Id = batchId,
-                CompanyId = companyId,
-                BankAccountId = req.BankAccountId,
-                ReconciledAt = DateTime.UtcNow,
-                ItemsCount = result.MatchedCount,
-                TotalAmount = result.MatchedAmount,
-                Type = "Auto"
-            };
-            _ctx.ReconciliationBatches.Add(batch);
-            await _ctx.SaveChangesAsync(ct);
-            result = result with { Message = $"Conciliados {result.MatchedCount} movimientos ({result.MatchedAmount:F2} €)" };
-        }
-        else
-        {
-            result = result with { Message = "No se encontraron coincidencias automáticas" };
-        }
-
-        return result;
-    }
-
-    private JournalEntryLine? FindMatch(BankMovement movement, List<JournalEntryLine> candidates)
-    {
-        var movementAbs = Math.Abs(movement.Amount);
-
-        // Fase 1: importe exacto + fecha exacta
-        var match = candidates.FirstOrDefault(l =>
-            Math.Abs((l.Debit > 0 ? l.Debit : l.Credit) - movementAbs) < 0.01m
-            && l.JournalEntry.Date.Date == movement.Date.Date);
-        if (match != null) return match;
-
-        // Fase 2: importe + referencia factura en descripción
-        var refs = ExtractInvoiceRefs(movement.Description);
-        if (refs.Count > 0)
-        {
-            match = candidates.FirstOrDefault(l =>
-                Math.Abs((l.Debit > 0 ? l.Debit : l.Credit) - movementAbs) < 0.01m
-                && refs.Any(r =>
-                    (l.JournalEntry.Description?.Contains(r, StringComparison.OrdinalIgnoreCase) ?? false)));
-            if (match != null) return match;
-        }
-
-        // Fase 3: importe + fecha ±3 días
-        return candidates.FirstOrDefault(l =>
-            Math.Abs((l.Debit > 0 ? l.Debit : l.Credit) - movementAbs) < 0.01m
-            && Math.Abs((l.JournalEntry.Date.Date - movement.Date.Date).TotalDays) <= 3);
-    }
-
-    private static List<string> ExtractInvoiceRefs(string text)
-    {
-        if (string.IsNullOrWhiteSpace(text)) return new List<string>();
-        var refs = new List<string>();
-        var matches = System.Text.RegularExpressions.Regex.Matches(
-            text, @"[A-Z]*-?\d{4,}");
-        foreach (System.Text.RegularExpressions.Match m in matches)
-            refs.Add(m.Value);
-        return refs;
+        var result = await _reconciliation.ReconcileAsync(req.BankAccountId, ct);
+        return result.MatchedCount > 0
+            ? new ReconciliationResultDto(
+                result.MatchedCount,
+                result.MatchedAmount,
+                $"Conciliados {result.MatchedCount} movimientos ({result.MatchedAmount:F2} €)")
+            : new ReconciliationResultDto(0, 0, "No se encontraron coincidencias automáticas");
     }
 }
 
@@ -400,25 +340,61 @@ public class CreateCashEffectHandler : IRequestHandler<CreateCashEffectCommand, 
         e.Amount, e.IssueDate, e.DueDate, e.Status, e.BankAccountId, null);
 }
 
-public class GetCashEffectsHandler : IRequestHandler<GetCashEffectsQuery, List<CashEffectDto>>
+public record PaginatedCashEffectsResult(
+    IReadOnlyList<CashEffectDto> Items,
+    int TotalCount,
+    int Page,
+    int PageSize);
+
+public class GetCashEffectsHandler : IRequestHandler<GetCashEffectsQuery, PaginatedCashEffectsResult>
 {
     private readonly ITreasuryDbContext _ctx;
 
     public GetCashEffectsHandler(ITreasuryDbContext ctx) => _ctx = ctx;
 
-    public async Task<List<CashEffectDto>> Handle(GetCashEffectsQuery req, CancellationToken ct)
+    public async Task<PaginatedCashEffectsResult> Handle(GetCashEffectsQuery req, CancellationToken ct)
     {
+        var page = Math.Max(1, req.Page);
+        var pageSize = Math.Clamp(req.PageSize, 1, 500);
+
         var q = _ctx.CashEffects.AsQueryable();
         if (req.Status != null) q = q.Where(e => e.Status == req.Status);
 
-        var effects = await q.OrderBy(e => e.DueDate).AsNoTracking().ToListAsync(ct);
-        return effects.Select(e => new CashEffectDto(
+        var totalCount = await q.CountAsync(ct);
+        var effects = await q.OrderBy(e => e.DueDate)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .AsNoTracking().ToListAsync(ct);
+
+        var items = effects.Select(e => new CashEffectDto(
             e.Id, e.EffectNumber, e.ClientName, e.ClientTaxId,
             e.Amount, e.IssueDate, e.DueDate, e.Status, e.BankAccountId, null)).ToList();
+
+        return new PaginatedCashEffectsResult(items, totalCount, page, pageSize);
     }
 }
 
-public record GetCashEffectsQuery(string? Status = null) : IRequest<List<CashEffectDto>>;
+public record GetCashEffectsQuery(string? Status = null, int Page = 1, int PageSize = 50)
+    : IRequest<PaginatedCashEffectsResult>;
+
+public record GetCashEffectByIdQuery(Guid Id) : IRequest<CashEffectDto?>;
+
+public class GetCashEffectByIdHandler : IRequestHandler<GetCashEffectByIdQuery, CashEffectDto?>
+{
+    private readonly ITreasuryDbContext _ctx;
+
+    public GetCashEffectByIdHandler(ITreasuryDbContext ctx) => _ctx = ctx;
+
+    public async Task<CashEffectDto?> Handle(GetCashEffectByIdQuery req, CancellationToken ct)
+    {
+        var effect = await _ctx.CashEffects.AsNoTracking()
+            .FirstOrDefaultAsync(e => e.Id == req.Id, ct);
+        return effect is null ? null : new CashEffectDto(
+            effect.Id, effect.EffectNumber, effect.ClientName, effect.ClientTaxId,
+            effect.Amount, effect.IssueDate, effect.DueDate, effect.Status,
+            effect.BankAccountId, effect.SEPAXml);
+    }
+}
 
 public class UpdateCashEffectStatusHandler : IRequestHandler<UpdateCashEffectStatusCommand, CashEffectDto>
 {
@@ -438,6 +414,125 @@ public class UpdateCashEffectStatusHandler : IRequestHandler<UpdateCashEffectSta
         return new CashEffectDto(
             effect.Id, effect.EffectNumber, effect.ClientName, effect.ClientTaxId,
             effect.Amount, effect.IssueDate, effect.DueDate, effect.Status, effect.BankAccountId, null);
+    }
+}
+
+public class GenerateCashEffectSepaHandler
+    : IRequestHandler<GenerateCashEffectSepaCommand, CashEffectSepaResult>
+{
+    private readonly ITreasuryDbContext _ctx;
+    private readonly IApplicationDbContext _app;
+    private readonly ISepaXmlGenerator _sepa;
+    private readonly ITenantContext _tenant;
+
+    public GenerateCashEffectSepaHandler(
+        ITreasuryDbContext ctx,
+        IApplicationDbContext app,
+        ISepaXmlGenerator sepa,
+        ITenantContext tenant)
+    {
+        _ctx = ctx;
+        _app = app;
+        _sepa = sepa;
+        _tenant = tenant;
+    }
+
+    public async Task<CashEffectSepaResult> Handle(GenerateCashEffectSepaCommand req, CancellationToken ct)
+    {
+        var effect = await _ctx.CashEffects
+            .Include(e => e.BankAccount)
+            .FirstOrDefaultAsync(e => e.Id == req.EffectId, ct)
+            ?? throw new InvalidOperationException($"CashEffect {req.EffectId} no encontrado");
+
+        if (effect.BankAccount is null)
+            throw new InvalidOperationException("El efecto debe tener una cuenta bancaria de cobro asignada.");
+
+        var companyId = _tenant.TenantId ?? effect.CompanyId;
+        var company = await _app.Companies
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == companyId, ct)
+            ?? throw new InvalidOperationException("Empresa no encontrada.");
+
+        var xml = _sepa.GenerateCollectionXml(
+            company.Name,
+            effect.BankAccount.Iban,
+            effect.BankAccount.BIC,
+            effect.ClientName,
+            req.ClientIban,
+            req.ClientBic,
+            effect.Amount,
+            $"EFF{effect.EffectNumber}",
+            $"Cobro efecto {effect.EffectNumber}");
+
+        SepaXmlStructureValidator.ValidatePain001(xml);
+
+        effect.SEPAXml = xml;
+        effect.SEPADownloadUrl = $"/api/treasury/effects/{effect.Id}/sepa";
+        await _ctx.SaveChangesAsync(ct);
+
+        var fileName = $"SEPA_Cobro_{effect.EffectNumber}_{effect.DueDate:yyyyMMdd}.xml";
+        return new CashEffectSepaResult(effect.Id, System.Text.Encoding.UTF8.GetBytes(xml), fileName, true);
+    }
+}
+
+public class GenerateCashEffectSddHandler
+    : IRequestHandler<GenerateCashEffectSddCommand, CashEffectSepaResult>
+{
+    private readonly ITreasuryDbContext _ctx;
+    private readonly IApplicationDbContext _app;
+    private readonly ISepaXmlGenerator _sepa;
+    private readonly ITenantContext _tenant;
+
+    public GenerateCashEffectSddHandler(
+        ITreasuryDbContext ctx,
+        IApplicationDbContext app,
+        ISepaXmlGenerator sepa,
+        ITenantContext tenant)
+    {
+        _ctx = ctx;
+        _app = app;
+        _sepa = sepa;
+        _tenant = tenant;
+    }
+
+    public async Task<CashEffectSepaResult> Handle(GenerateCashEffectSddCommand req, CancellationToken ct)
+    {
+        var effect = await _ctx.CashEffects
+            .Include(e => e.BankAccount)
+            .FirstOrDefaultAsync(e => e.Id == req.EffectId, ct)
+            ?? throw new InvalidOperationException($"CashEffect {req.EffectId} no encontrado");
+
+        if (effect.BankAccount is null)
+            throw new InvalidOperationException("El efecto debe tener una cuenta bancaria de cobro asignada.");
+
+        var companyId = _tenant.TenantId ?? effect.CompanyId;
+        var company = await _app.Companies
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == companyId, ct)
+            ?? throw new InvalidOperationException("Empresa no encontrada.");
+
+        var xml = _sepa.GenerateDirectDebitXml(
+            company.Name,
+            effect.BankAccount.Iban,
+            effect.BankAccount.BIC,
+            req.CreditorId,
+            effect.ClientName,
+            req.ClientIban,
+            req.ClientBic,
+            req.MandateId,
+            req.MandateSignatureDate,
+            effect.Amount,
+            $"SDD{effect.EffectNumber}",
+            $"Adeudo efecto {effect.EffectNumber}");
+
+        SepaXmlStructureValidator.ValidatePain008(xml);
+
+        effect.SEPAXml = xml;
+        effect.SEPADownloadUrl = $"/api/treasury/effects/{effect.Id}/sepa/sdd";
+        await _ctx.SaveChangesAsync(ct);
+
+        var fileName = $"SEPA_SDD_{effect.EffectNumber}_{effect.DueDate:yyyyMMdd}.xml";
+        return new CashEffectSepaResult(effect.Id, System.Text.Encoding.UTF8.GetBytes(xml), fileName, true);
     }
 }
 
@@ -488,25 +583,42 @@ public class CreatePaymentOrderHandler : IRequestHandler<CreatePaymentOrderComma
         p.Amount, p.Status, p.ScheduledDate, p.ExecutedAt, p.BankAccountId, p.Notes);
 }
 
-public class GetPaymentOrdersHandler : IRequestHandler<GetPaymentOrdersQuery, List<PaymentOrderDto>>
+public record PaginatedPaymentOrdersResult(
+    IReadOnlyList<PaymentOrderDto> Items,
+    int TotalCount,
+    int Page,
+    int PageSize);
+
+public class GetPaymentOrdersHandler : IRequestHandler<GetPaymentOrdersQuery, PaginatedPaymentOrdersResult>
 {
     private readonly ITreasuryDbContext _ctx;
 
     public GetPaymentOrdersHandler(ITreasuryDbContext ctx) => _ctx = ctx;
 
-    public async Task<List<PaymentOrderDto>> Handle(GetPaymentOrdersQuery req, CancellationToken ct)
+    public async Task<PaginatedPaymentOrdersResult> Handle(GetPaymentOrdersQuery req, CancellationToken ct)
     {
+        var page = Math.Max(1, req.Page);
+        var pageSize = Math.Clamp(req.PageSize, 1, 500);
+
         var q = _ctx.PaymentOrders.AsQueryable();
         if (req.Status != null) q = q.Where(p => p.Status == req.Status);
 
-        var orders = await q.OrderBy(p => p.ScheduledDate).AsNoTracking().ToListAsync(ct);
-        return orders.Select(p => new PaymentOrderDto(
+        var totalCount = await q.CountAsync(ct);
+        var orders = await q.OrderBy(p => p.ScheduledDate)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .AsNoTracking().ToListAsync(ct);
+
+        var items = orders.Select(p => new PaymentOrderDto(
             p.Id, p.PaymentType, p.BeneficiaryName, p.BeneficiaryIban,
             p.Amount, p.Status, p.ScheduledDate, p.ExecutedAt, p.BankAccountId, p.Notes)).ToList();
+
+        return new PaginatedPaymentOrdersResult(items, totalCount, page, pageSize);
     }
 }
 
-public record GetPaymentOrdersQuery(string? Status = null) : IRequest<List<PaymentOrderDto>>;
+public record GetPaymentOrdersQuery(string? Status = null, int Page = 1, int PageSize = 50)
+    : IRequest<PaginatedPaymentOrdersResult>;
 
 public class ExecutePaymentOrderHandler : IRequestHandler<ExecutePaymentOrderCommand, PaymentOrderDto>
 {

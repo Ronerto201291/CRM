@@ -16,7 +16,8 @@
       "Bash(xargs basename:*)",
       "Bash(wc -l /c/CRM/ErpProject/backend/Modules/Accounting/Api/Controllers/*.cs)",
       "Bash(grep -n \"// TODO\\\\|// FIXME\\\\|NotImplemented\\\\|hardcoded\\\\|stub\" /c/CRM/ErpProject/backend/Modules/Crm/Application/Features/Crm/Handlers/*.cs)",
-      "Bash(grep -n \"CashFlowForecast \" c:/CRM/ErpProject/backend/Modules/Treasury/Domain/Entities/*.cs)"
+      "Bash(grep -n \"CashFlowForecast \" c:/CRM/ErpProject/backend/Modules/Treasury/Domain/Entities/*.cs)",
+      "Bash(docker buildx *)"
     ]
   }
 }

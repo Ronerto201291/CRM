@@ -1,7 +1,13 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import PageContainer from "@/components/PageContainer";
+import Link from "next/link";
+import PageListLayout from "@/components/PageListLayout";
+import FormErrorBanner from "@/components/FormErrorBanner";
+import FormLabel from "@/components/FormLabel";
+import { updateLineAt } from "@/lib/lineForm";
+import { parseListResponse } from "@/lib/parseListResponse";
+import { purchaseOrderCreateSchema } from "@/lib/schemas/purchasingSalesCreateSchemas";
 import { Supplier } from "@/types/api";
 
 interface OrderLine {
@@ -26,19 +32,17 @@ export default function NewPurchaseOrderPage() {
         lines: [emptyLine()] as OrderLine[],
     });
     const [saving, setSaving] = useState(false);
+    const [formError, setFormError] = useState<string | null>(null);
 
     useEffect(() => {
-        fetch('/api/proxy/suppliers')
+        fetch('/api/proxy/suppliers?pageSize=500')
             .then(r => r.ok ? r.json() : [])
-            .then(data => setSuppliers(Array.isArray(data) ? data : (data.items ?? [])))
+            .then(data => setSuppliers(parseListResponse<Supplier>(data)))
             .catch(() => {});
     }, []);
 
-    const updateLine = (i: number, key: keyof OrderLine, val: any) => {
-        const lines = [...form.lines];
-        (lines[i] as any)[key] = val;
-        setForm({ ...form, lines });
-    };
+    const updateLine = <K extends keyof OrderLine>(i: number, key: K, val: OrderLine[K]) =>
+        setForm({ ...form, lines: updateLineAt(form.lines, i, key, val) });
     const addLine = () => setForm({ ...form, lines: [...form.lines, emptyLine()] });
     const removeLine = (i: number) => setForm({ ...form, lines: form.lines.filter((_, idx) => idx !== i) });
 
@@ -48,16 +52,28 @@ export default function NewPurchaseOrderPage() {
     const fmt = (n: number) => `€ ${n.toLocaleString('es-ES', { minimumFractionDigits: 2 })}`;
 
     const submit = async () => {
-        if (!form.supplierId) { alert('Selecciona un proveedor'); return; }
-        if (!form.number) { alert('Introduce el número de pedido'); return; }
+        setFormError(null);
+        const parsed = purchaseOrderCreateSchema.safeParse({
+            supplierId: form.supplierId,
+            number: form.number,
+            orderDate: form.orderDate,
+            notes: form.notes,
+            lines: form.lines,
+        });
+        if (!parsed.success) {
+            setFormError(parsed.error.issues[0]?.message ?? 'Revisa el formulario');
+            return;
+        }
         setSaving(true);
         try {
             const body = {
                 supplierId: form.supplierId,
                 number: form.number,
                 orderDate: form.orderDate,
-                notes: form.notes,
-                lines: form.lines,
+                lines: form.lines.map(l => ({
+                    quantity: l.quantity,
+                    unitPrice: l.unitPrice,
+                })),
             };
             const res = await fetch('/api/proxy/v1/purchasing/orders', {
                 method: 'POST',
@@ -65,11 +81,10 @@ export default function NewPurchaseOrderPage() {
                 body: JSON.stringify(body),
             });
             if (res.ok) {
-                alert('Pedido creado correctamente');
                 window.location.href = '/purchasing/orders';
             } else {
                 const e = await res.json();
-                alert(e.error || e.message || 'Error al crear el pedido');
+                setFormError(e.error || e.message || 'Error al crear el pedido');
             }
         } finally {
             setSaving(false);
@@ -77,27 +92,25 @@ export default function NewPurchaseOrderPage() {
     };
 
     return (
-        <PageContainer>
-            <div className="page-header">
-                <div>
-                    <h1 className="page-title">Nuevo Pedido de Compra</h1>
-                    <p className="page-subtitle">Registrar pedido a proveedor</p>
-                </div>
-                <a href="/purchasing/orders" className="btn btn-secondary">← Volver</a>
-            </div>
+        <PageListLayout
+            title="Nuevo Pedido de Compra"
+            subtitle="Registrar pedido a proveedor"
+            actions={<Link href="/purchasing/orders" className="btn btn-secondary">← Volver</Link>}
+        >
+            {formError && <FormErrorBanner message={formError} />}
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
                 <div className="form-group">
-                    <label className="erp-label">PROVEEDOR *</label>
-                    <select className="erp-input" value={form.supplierId}
+                    <FormLabel htmlFor="po-supplier" required>Proveedor</FormLabel>
+                    <select id="po-supplier" className="erp-input" value={form.supplierId}
                         onChange={e => setForm({ ...form, supplierId: e.target.value })}>
                         <option value="">Seleccionar proveedor...</option>
                         {suppliers.map(s => <option key={s.id} value={s.id}>{s.name} {s.taxId ? `(${s.taxId})` : ''}</option>)}
                     </select>
                 </div>
                 <div className="form-group">
-                    <label className="erp-label">NÚMERO DE PEDIDO *</label>
-                    <input className="erp-input" value={form.number}
+                    <FormLabel htmlFor="po-number" required>Número de pedido</FormLabel>
+                    <input id="po-number" className="erp-input" value={form.number}
                         onChange={e => setForm({ ...form, number: e.target.value })}
                         placeholder="PC-2026-0001" />
                 </div>
@@ -105,14 +118,14 @@ export default function NewPurchaseOrderPage() {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
                 <div className="form-group">
-                    <label className="erp-label">FECHA DE PEDIDO</label>
-                    <input type="date" className="erp-input" value={form.orderDate}
+                    <FormLabel htmlFor="po-date">Fecha de pedido</FormLabel>
+                    <input id="po-date" type="date" className="erp-input" value={form.orderDate}
                         onChange={e => setForm({ ...form, orderDate: e.target.value })}
                         style={{ maxWidth: '200px' }} />
                 </div>
                 <div className="form-group">
-                    <label className="erp-label">NOTAS</label>
-                    <input className="erp-input" value={form.notes}
+                    <FormLabel htmlFor="po-notes">Notas</FormLabel>
+                    <input id="po-notes" className="erp-input" value={form.notes}
                         onChange={e => setForm({ ...form, notes: e.target.value })}
                         placeholder="Notas internas opcionales" />
                 </div>
@@ -193,11 +206,11 @@ export default function NewPurchaseOrderPage() {
             </div>
 
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                <a href="/purchasing/orders" className="btn btn-secondary">Cancelar</a>
+                <Link href="/purchasing/orders" className="btn btn-secondary">Cancelar</Link>
                 <button className="btn btn-primary" onClick={submit} disabled={saving}>
                     {saving ? 'Creando...' : '✓ Crear Pedido'}
                 </button>
             </div>
-        </PageContainer>
+        </PageListLayout>
     );
 }

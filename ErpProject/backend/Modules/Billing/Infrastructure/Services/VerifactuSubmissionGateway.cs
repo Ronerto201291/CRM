@@ -9,10 +9,9 @@ namespace Erp.Modules.Billing.Infrastructure.Services;
 /// </summary>
 public class VerifactuSubmissionGateway : IVerifactuSubmissionGateway
 {
-    public void EnqueueVerifactuSubmission(Guid invoiceId)
-    {
-        // Static method on the Hangfire job — resolved via DI is not needed here
-        // because BackgroundJob.Enqueue works with the type directly.
+    public void EnqueueVerifactuSubmission(Guid invoiceId) =>
         VerifactuSubmissionJob.Enqueue(invoiceId);
-    }
+
+    public void EnqueueVerifactuAnulacion(Guid invoiceId) =>
+        VerifactuSubmissionJob.EnqueueAnulacion(invoiceId);
 }

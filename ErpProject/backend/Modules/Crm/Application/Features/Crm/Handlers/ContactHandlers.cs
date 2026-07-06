@@ -10,13 +10,16 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Erp.Modules.Crm.Application.Features.Crm.Handlers;
 
-public class GetContactsHandler : IRequestHandler<GetContactsQuery, List<ContactDto>>
+public class GetContactsHandler : IRequestHandler<GetContactsQuery, PaginatedContactsResult>
 {
     private readonly ICrmDbContext _ctx;
     public GetContactsHandler(ICrmDbContext ctx) => _ctx = ctx;
 
-    public async Task<List<ContactDto>> Handle(GetContactsQuery request, CancellationToken ct)
+    public async Task<PaginatedContactsResult> Handle(GetContactsQuery request, CancellationToken ct)
     {
+        var page = Math.Max(1, request.Page);
+        var pageSize = Math.Clamp(request.PageSize, 1, 500);
+
         var query = _ctx.Contacts.AsQueryable();
 
         if (request.ClientId.HasValue)
@@ -28,7 +31,12 @@ public class GetContactsHandler : IRequestHandler<GetContactsQuery, List<Contact
                                   || c.Email.Contains(request.Search)
                                   || c.Position.Contains(request.Search));
 
-        return await query
+        var totalCount = await query.CountAsync(ct);
+
+        var items = await query
+            .OrderBy(c => c.Name)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(c => new ContactDto
             {
                 Id = c.Id, Name = c.Name, Email = c.Email, Phone = c.Phone,
@@ -37,8 +45,9 @@ public class GetContactsHandler : IRequestHandler<GetContactsQuery, List<Contact
                 SupplierName = c.Supplier != null ? c.Supplier.Name : null,
                 CreatedAt = c.CreatedAt
             })
-            .OrderBy(c => c.Name)
             .ToListAsync(ct);
+
+        return new PaginatedContactsResult(items, totalCount, page, pageSize);
     }
 }
 

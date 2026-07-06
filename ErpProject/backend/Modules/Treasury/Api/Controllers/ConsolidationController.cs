@@ -1,191 +1,82 @@
-using Erp.Application.Common.Interfaces;
-using Erp.Modules.Treasury.Application.Interfaces;
-using Erp.Modules.Treasury.Domain.Entities;
+using Erp.Application.Common.Attributes;
+using Erp.Modules.Treasury.Application.Features.Consolidation;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace Erp.Modules.Treasury.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/treasury/consolidation")]
 [Authorize]
+[RequiredModule("Treasury")]
 public class ConsolidationController : ControllerBase
 {
-    private readonly ITreasuryDbContext _ctx;
-    private readonly ITenantContext _tenantContext;
+    private readonly IMediator _mediator;
 
-    public ConsolidationController(ITreasuryDbContext ctx, ITenantContext tenantContext)
-    {
-        _ctx = ctx;
-        _tenantContext = tenantContext;
-    }
+    public ConsolidationController(IMediator mediator) => _mediator = mediator;
 
     [HttpGet]
+    [RequirePermission(Permissions.Consolidation.Read)]
     public async Task<IActionResult> GetAll(CancellationToken ct)
-    {
-        var tenantId = _tenantContext.TenantId
-            ?? throw new InvalidOperationException("Tenant not resolved");
-        var groups = await _ctx.ConsolidationGroups
-            .Where(g => g.ParentCompanyId == tenantId)
-            .AsNoTracking()
-            .ToListAsync(ct);
-        return Ok(groups.Select(g => new
-        {
-            g.Id,
-            g.Name,
-            g.Code,
-            g.ParentCompanyId,
-            g.ConsolidationPercentage,
-            g.ConsolidationDate,
-            g.Method,
-            g.Status
-        }));
-    }
+        => Ok(await _mediator.Send(new GetConsolidationGroupsQuery(), ct));
 
     [HttpPost]
+    [RequirePermission(Permissions.Consolidation.Create)]
     public async Task<IActionResult> CreateGroup([FromBody] CreateGroupDto dto, CancellationToken ct)
     {
-        var tenantId = _tenantContext.TenantId
-            ?? throw new InvalidOperationException("Tenant not resolved");
-        var group = new ConsolidationGroup
-        {
-            Id = Guid.NewGuid(),
-            Name = dto.Name,
-            Code = dto.Code,
-            ParentCompanyId = tenantId,
-            ConsolidationPercentage = dto.ConsolidationPercentage,
-            ConsolidationDate = DateTime.UtcNow,
-            Method = dto.Method,
-            Status = "Active",
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
-        _ctx.ConsolidationGroups.Add(group);
-        await _ctx.SaveChangesAsync(ct);
-        return Created("", new { id = group.Id, status = group.Status });
+        var result = await _mediator.Send(new CreateConsolidationGroupCommand(
+            dto.Name, dto.Code, dto.ConsolidationPercentage, dto.Method), ct);
+        return Created("", result);
     }
 
     [HttpGet("{groupId:guid}/subsidiaries")]
+    [RequirePermission(Permissions.Consolidation.Read)]
     public async Task<IActionResult> GetSubsidiaries(Guid groupId, CancellationToken ct)
-    {
-        var tenantId = _tenantContext.TenantId
-            ?? throw new InvalidOperationException("Tenant not resolved");
-        var subs = await _ctx.SubsidiaryCompanies
-            .Where(s => s.ParentCompanyId == tenantId)
-            .AsNoTracking()
-            .ToListAsync(ct);
-        return Ok(subs.Select(s => new
-        {
-            s.Id,
-            s.CompanyId,
-            s.ParentCompanyId,
-            s.OwnershipPercentage,
-            s.VotingPercentage,
-            s.ConsolidationMethod,
-            s.AcquisitionDate,
-            s.AcquisitionPrice,
-            s.Status,
-            s.DisposalDate
-        }));
-    }
+        => Ok(await _mediator.Send(new GetSubsidiariesQuery(groupId), ct));
 
     [HttpPost("{groupId:guid}/subsidiaries")]
+    [RequirePermission(Permissions.Consolidation.Manage)]
     public async Task<IActionResult> AddSubsidiary(Guid groupId, [FromBody] AddSubsidiaryDto dto, CancellationToken ct)
     {
-        var tenantId = _tenantContext.TenantId
-            ?? throw new InvalidOperationException("Tenant not resolved");
-        var sub = new SubsidiaryCompany
-        {
-            Id = Guid.NewGuid(),
-            CompanyId = dto.CompanyId,
-            ParentCompanyId = tenantId,
-            OwnershipPercentage = dto.OwnershipPercentage,
-            VotingPercentage = dto.VotingPercentage,
-            ConsolidationMethod = dto.ConsolidationMethod,
-            AcquisitionDate = dto.AcquisitionDate,
-            AcquisitionPrice = dto.AcquisitionPrice,
-            Status = "Active",
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
-        _ctx.SubsidiaryCompanies.Add(sub);
-        await _ctx.SaveChangesAsync(ct);
-        return Created("", new { id = sub.Id });
+        var result = await _mediator.Send(new AddSubsidiaryCommand(
+            groupId, dto.CompanyId, dto.OwnershipPercentage,
+            dto.VotingPercentage, dto.ConsolidationMethod,
+            dto.AcquisitionDate, dto.AcquisitionPrice), ct);
+        return Created("", result);
     }
 
     [HttpGet("{groupId:guid}/financial-statements")]
+    [RequirePermission(Permissions.Consolidation.Read)]
     public async Task<IActionResult> GetFinancialStatements(Guid groupId, CancellationToken ct)
-    {
-        var statements = await _ctx.ConsolidatedFinancialStatements
-            .Where(s => s.ConsolidationGroupId == groupId)
-            .AsNoTracking()
-            .ToListAsync(ct);
-        return Ok(statements.Select(s => new
-        {
-            s.Id,
-            s.FiscalYear,
-            s.StatementType,
-            s.TotalRevenue,
-            s.TotalExpenses,
-            s.NetIncome,
-            s.TotalAssets,
-            s.TotalLiabilities,
-            s.TotalEquity,
-            s.PreparedDate,
-            s.Status
-        }));
-    }
+        => Ok(await _mediator.Send(new GetConsolidatedStatementsQuery(groupId), ct));
 
     [HttpPost("{groupId:guid}/consolidate")]
+    [RequirePermission(Permissions.Consolidation.Manage)]
     public async Task<IActionResult> ConsolidateGroup(Guid groupId, CancellationToken ct)
     {
-        var group = await _ctx.ConsolidationGroups.FindAsync(new object[] { groupId }, ct)
-            ?? (object?)null;
-        if (group == null) return NotFound();
-        return Ok(new { status = "Consolidated", timestamp = DateTime.UtcNow });
+        try
+        {
+            return Ok(await _mediator.Send(new ConsolidateGroupCommand(groupId), ct));
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
     }
 
     [HttpGet("{groupId:guid}/intercompany-transactions")]
+    [RequirePermission(Permissions.Consolidation.Read)]
     public async Task<IActionResult> GetIntercompanyTransactions(Guid groupId, CancellationToken ct)
-    {
-        var tenantId = _tenantContext.TenantId
-            ?? throw new InvalidOperationException("Tenant not resolved");
-        var transactions = await _ctx.IntercompanyTransactions
-            .Where(t => t.ParentCompanyId == tenantId)
-            .AsNoTracking()
-            .ToListAsync(ct);
-        return Ok(transactions.Select(t => new
-        {
-            t.Id,
-            t.ParentCompanyId,
-            t.SubsidiaryId,
-            t.Type,
-            t.Amount,
-            t.Currency,
-            t.TransactionDate,
-            t.Status,
-            t.IsEliminated,
-            t.RelatedInvoiceId
-        }));
-    }
+        => Ok(await _mediator.Send(new GetIntercompanyTransactionsQuery(groupId), ct));
 
     [HttpPost("{groupId:guid}/eliminate-intercompany")]
-    public async Task<IActionResult> EliminateIntercompanyTransactions(Guid groupId, [FromBody] EliminateDto dto, CancellationToken ct)
-    {
-        var tenantId = _tenantContext.TenantId
-            ?? throw new InvalidOperationException("Tenant not resolved");
-        var count = await _ctx.IntercompanyTransactions
-            .Where(t => t.ParentCompanyId == tenantId && !t.IsEliminated)
-            .ExecuteUpdateAsync(s => s
-                .SetProperty(t => t.IsEliminated, true)
-                .SetProperty(t => t.Status, "Eliminated"), ct);
-        return Ok(new { eliminated = count, message = "Intercompany transactions eliminated" });
-    }
+    [RequirePermission(Permissions.Consolidation.Manage)]
+    public async Task<IActionResult> EliminateIntercompanyTransactions(Guid groupId, CancellationToken ct)
+        => Ok(await _mediator.Send(new EliminateIntercompanyCommand(groupId), ct));
 }
 
 public record CreateGroupDto(string Name, string Code, decimal ConsolidationPercentage, string Method);
+
 public record AddSubsidiaryDto(
     Guid CompanyId, decimal OwnershipPercentage, decimal VotingPercentage,
     string ConsolidationMethod, DateTime AcquisitionDate, decimal AcquisitionPrice);
+
 public record EliminateDto(Guid GroupId);

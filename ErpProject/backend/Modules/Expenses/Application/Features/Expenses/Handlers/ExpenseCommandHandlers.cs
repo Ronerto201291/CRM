@@ -92,18 +92,112 @@ public class ApproveExpenseHandler : IRequestHandler<ApproveExpenseCommand, Appr
     private readonly IExpensesDbContext _ctx;
     private readonly IApplicationDbContext _app;
     private readonly IPublisher _publisher;
+    private readonly IHttpContextCurrentUserAccessor _currentUser;
+    private readonly IApprovalThresholdService _approval;
 
-    public ApproveExpenseHandler(IExpensesDbContext ctx, IApplicationDbContext app, IPublisher publisher)
+    public ApproveExpenseHandler(
+        IExpensesDbContext ctx,
+        IApplicationDbContext app,
+        IPublisher publisher,
+        IHttpContextCurrentUserAccessor currentUser,
+        IApprovalThresholdService approval)
     {
-        _ctx = ctx; _app = app; _publisher = publisher;
+        _ctx = ctx; _app = app; _publisher = publisher; _currentUser = currentUser;
+        _approval = approval;
     }
 
     public async Task<ApproveExpenseResult> Handle(ApproveExpenseCommand request, CancellationToken ct)
     {
         var doc = await _ctx.ExpenseDocuments
             .Include(e => e.Lines)
-            .FirstOrDefaultAsync(e => e.Id == request.Id, ct);
-        if (doc == null) throw new KeyNotFoundException("Documento no encontrado.");
+            .FirstOrDefaultAsync(e => e.Id == request.Id, ct)
+            ?? throw new KeyNotFoundException("Documento no encontrado.");
+
+        var amount = doc.Total ?? 0m;
+        var threshold = await _approval.GetThresholdAsync(doc.CompanyId, ct);
+
+        if (_approval.RequiresManualApproval(amount, threshold)
+            && doc.Status != "PendingApproval")
+        {
+            throw new InvalidOperationException(
+                "Importe superior al umbral: envíe el gasto a aprobación antes de aprobar.");
+        }
+
+        return await ExpenseApprovalWorkflow.FinalizeApprovalAsync(
+            doc, _ctx, _app, _publisher, _currentUser, ct);
+    }
+}
+
+public class SubmitExpenseForApprovalHandler
+    : IRequestHandler<SubmitExpenseForApprovalCommand, SubmitExpenseForApprovalResult>
+{
+    private readonly IExpensesDbContext _ctx;
+    private readonly IApplicationDbContext _app;
+    private readonly IPublisher _publisher;
+    private readonly IHttpContextCurrentUserAccessor _currentUser;
+    private readonly IApprovalThresholdService _approval;
+
+    public SubmitExpenseForApprovalHandler(
+        IExpensesDbContext ctx,
+        IApplicationDbContext app,
+        IPublisher publisher,
+        IHttpContextCurrentUserAccessor currentUser,
+        IApprovalThresholdService approval)
+    {
+        _ctx = ctx; _app = app; _publisher = publisher; _currentUser = currentUser;
+        _approval = approval;
+    }
+
+    public async Task<SubmitExpenseForApprovalResult> Handle(
+        SubmitExpenseForApprovalCommand request, CancellationToken ct)
+    {
+        var doc = await _ctx.ExpenseDocuments
+            .Include(e => e.Lines)
+            .FirstOrDefaultAsync(e => e.Id == request.Id, ct)
+            ?? throw new KeyNotFoundException("Documento no encontrado.");
+        if (doc.IsLocked)
+            throw new InvalidOperationException("Documento ya aprobado y bloqueado.");
+
+        var amount = doc.Total ?? 0m;
+        var threshold = await _approval.GetThresholdAsync(doc.CompanyId, ct);
+
+        if (!_approval.RequiresManualApproval(amount, threshold))
+        {
+            var approval = await ExpenseApprovalWorkflow.FinalizeApprovalAsync(
+                doc, _ctx, _app, _publisher, _currentUser, ct);
+            return new SubmitExpenseForApprovalResult
+            {
+                Status = "Approved",
+                AutoApproved = true,
+                Message = "Gasto por debajo del umbral: aprobado automáticamente.",
+                Approval = approval,
+            };
+        }
+
+        if (doc.Status is not ("Draft" or "Reviewed" or "Rejected"))
+            throw new InvalidOperationException($"No se puede enviar desde estado {doc.Status}.");
+
+        doc.Status = "PendingApproval";
+        await _ctx.SaveChangesAsync(ct);
+        return new SubmitExpenseForApprovalResult
+        {
+            Status = "PendingApproval",
+            AutoApproved = false,
+            Message = "Gasto enviado a aprobación pendiente.",
+        };
+    }
+}
+
+internal static class ExpenseApprovalWorkflow
+{
+    internal static async Task<ApproveExpenseResult> FinalizeApprovalAsync(
+        ExpenseDocument doc,
+        IExpensesDbContext ctx,
+        IApplicationDbContext app,
+        IPublisher publisher,
+        IHttpContextCurrentUserAccessor currentUser,
+        CancellationToken ct)
+    {
         if (doc.IsLocked) throw new InvalidOperationException("Documento ya aprobado y bloqueado.");
 
         doc.Status = "Approved"; doc.IsValidated = true;
@@ -113,23 +207,26 @@ public class ApproveExpenseHandler : IRequestHandler<ApproveExpenseCommand, Appr
             doc.IssueDate?.ToString("yyyy-MM-dd"), doc.SupplierTaxId);
         doc.HashSignature = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(hashInput)));
 
-        var auditEntry = new AuditLog
+        await ctx.SaveChangesAsync(ct);
+
+        if (currentUser.UserId is Guid auditUserId)
         {
-            Id = Guid.NewGuid(), CompanyId = doc.CompanyId,
-            UserId = Guid.Empty, Entity = "ExpenseDocument", EntityId = doc.Id,
-            Action = "Approved", Timestamp = DateTime.UtcNow,
-            OldValues = System.Text.Json.JsonSerializer.Serialize(new { Status = "Draft" }),
-            NewValues = System.Text.Json.JsonSerializer.Serialize(new { doc.Status, doc.HashSignature })
-        };
-        var auditHashInput = string.Join("|", auditEntry.Entity, auditEntry.EntityId,
-            auditEntry.Action, auditEntry.Timestamp.ToString("O"));
-        auditEntry.Hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(auditHashInput)));
-        _app.AuditLogs.Add(auditEntry);
+            var auditEntry = new AuditLog
+            {
+                Id = Guid.NewGuid(), CompanyId = doc.CompanyId,
+                UserId = auditUserId, Entity = "ExpenseDocument", EntityId = doc.Id,
+                Action = "Approved", Timestamp = DateTime.UtcNow,
+                OldValues = System.Text.Json.JsonSerializer.Serialize(new { Status = "Draft" }),
+                NewValues = System.Text.Json.JsonSerializer.Serialize(new { doc.Status, doc.HashSignature })
+            };
+            var auditHashInput = string.Join("|", auditEntry.Entity, auditEntry.EntityId,
+                auditEntry.Action, auditEntry.Timestamp.ToString("O"));
+            auditEntry.Hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(auditHashInput)));
+            app.AuditLogs.Add(auditEntry);
+            await app.SaveChangesAsync(ct);
+        }
 
-        await _ctx.SaveChangesAsync(ct);
-        await _app.SaveChangesAsync(ct);
-
-        await _publisher.Publish(new ExpenseApprovedEvent
+        await publisher.Publish(new ExpenseApprovedEvent
         {
             ExpenseDocumentId = doc.Id, CompanyId = doc.CompanyId,
             SupplierId = doc.SupplierId, SupplierName = doc.SupplierName, TaxBase = doc.TaxBase ?? 0,

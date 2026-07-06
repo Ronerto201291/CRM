@@ -1,0 +1,362 @@
+using System.Globalization;
+using System.Text;
+using System.Xml.Linq;
+using Erp.Application.Common.Interfaces;
+using Erp.Application.Common.Validation;
+using Erp.Modules.Payroll.Application.Interfaces;
+using MediatR;
+using Microsoft.EntityFrameworkCore;
+
+namespace Erp.Modules.Payroll.Application.Features.Exports;
+
+public record PayrollFiscalExportResult(
+    byte[] Content, string ContentType, string FileName, string Disclaimer);
+
+public record ExportTc1Query(int Year, int Month) : IRequest<PayrollFiscalExportResult>;
+public record ExportTc2Query(int Year, int Month) : IRequest<PayrollFiscalExportResult>;
+public record ExportTcRedOrientativoQuery(int Year, int Month) : IRequest<PayrollFiscalExportResult>;
+public record ExportRedQuery(int Year, int Month) : IRequest<PayrollFiscalExportResult>;
+public record ExportModel111Query(int Year, int Quarter) : IRequest<PayrollFiscalExportResult>;
+public record ExportModel190Query(int Year) : IRequest<PayrollFiscalExportResult>;
+
+internal static class PayrollExportLineLoader
+{
+    internal static async Task<List<PayrollExportLine>> LoadFinalLinesAsync(
+        IPayrollDbContext ctx, int year, int month, CancellationToken ct)
+    {
+        return await ctx.PayrollLines
+            .Include(l => l.Settlement)
+            .Include(l => l.Employee)
+            .Where(l => l.Settlement!.Year == year && l.Settlement.Month == month && l.Settlement.Status == "Final")
+            .AsNoTracking()
+            .OrderBy(l => l.Employee!.TaxId)
+            .Select(l => new PayrollExportLine(
+                l.Employee!.TaxId,
+                l.Employee.FullName,
+                l.Employee.SocialSecurityNumber,
+                l.CommonContingenciesBase,
+                l.EmployeeSocialSecurity,
+                l.EmployerSocialSecurity,
+                l.GrossSalary,
+                l.IrpfBase,
+                l.IrpfRate,
+                l.IrpfWithheld,
+                l.NetPay))
+            .ToListAsync(ct);
+    }
+}
+
+public record PayrollExportLine(
+    string TaxId, string FullName, string? SocialSecurityNumber,
+    decimal CommonContingenciesBase, decimal EmployeeSocialSecurity,
+    decimal EmployerSocialSecurity, decimal GrossSalary,
+    decimal IrpfBase, decimal IrpfRate, decimal IrpfWithheld, decimal NetPay);
+
+internal static class PayrollExportCompanyLoader
+{
+    internal static async Task<(string TaxId, string Name, string Ccc)> LoadAsync(
+        IApplicationDbContext app, ITenantContext tenant, CancellationToken ct)
+    {
+        var companyId = tenant.TenantId ?? throw new InvalidOperationException("Tenant not resolved");
+        var company = await app.Companies.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == companyId, ct)
+            ?? throw new InvalidOperationException("Empresa no encontrada.");
+
+        PayrollRedExportValidator.ValidateCompany(company.TaxId, company.Name);
+        var ccc = PayrollRedExportValidator.ResolveEmployerCcc(company.TaxId);
+        return (company.TaxId, company.Name, ccc);
+    }
+}
+
+public class ExportTc1Handler : IRequestHandler<ExportTc1Query, PayrollFiscalExportResult>
+{
+    private readonly IPayrollDbContext _ctx;
+    private readonly IApplicationDbContext _app;
+    private readonly ITenantContext _tenant;
+
+    public ExportTc1Handler(IPayrollDbContext ctx, IApplicationDbContext app, ITenantContext tenant)
+    {
+        _ctx = ctx;
+        _app = app;
+        _tenant = tenant;
+    }
+
+    public async Task<PayrollFiscalExportResult> Handle(ExportTc1Query request, CancellationToken ct)
+    {
+        PayrollRedExportValidator.ValidatePeriod(request.Year, request.Month);
+        var company = await PayrollExportCompanyLoader.LoadAsync(_app, _tenant, ct);
+        var lines = await PayrollExportLineLoader.LoadFinalLinesAsync(_ctx, request.Year, request.Month, ct);
+
+        var sb = new StringBuilder();
+        sb.AppendLine("TC1_RESUMEN_COTIZACION;Documento orientativo para TGSS/asesoría — NO homologado SILTRA");
+        sb.AppendLine($"Periodo;{request.Year}-{request.Month:D2}");
+        sb.AppendLine($"EmpresaNIF;{company.TaxId};CCC_orientativo;{company.Ccc}");
+        sb.AppendLine("NIF;Nombre;NAF;BaseCC;CotizacionObrera;CotizacionEmpresa;Bruto");
+        var es = CultureInfo.InvariantCulture;
+        foreach (var l in lines)
+        {
+            sb.AppendLine(string.Join(";",
+                l.TaxId,
+                l.FullName.Replace(";", " "),
+                l.SocialSecurityNumber ?? "",
+                l.CommonContingenciesBase.ToString("F2", es),
+                l.EmployeeSocialSecurity.ToString("F2", es),
+                l.EmployerSocialSecurity.ToString("F2", es),
+                l.GrossSalary.ToString("F2", es)));
+        }
+
+        var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray();
+        return new PayrollFiscalExportResult(
+            bytes, "text/csv", $"TC1_{request.Year}_{request.Month:D2}.csv",
+            "CSV TC1: no es el fichero RED/SILTRA oficial TGSS; validar con asesoría o plataforma de cotización.");
+    }
+}
+
+public class ExportTc2Handler : IRequestHandler<ExportTc2Query, PayrollFiscalExportResult>
+{
+    private readonly IPayrollDbContext _ctx;
+    private readonly IApplicationDbContext _app;
+    private readonly ITenantContext _tenant;
+
+    public ExportTc2Handler(IPayrollDbContext ctx, IApplicationDbContext app, ITenantContext tenant)
+    {
+        _ctx = ctx;
+        _app = app;
+        _tenant = tenant;
+    }
+
+    public async Task<PayrollFiscalExportResult> Handle(ExportTc2Query request, CancellationToken ct)
+    {
+        PayrollRedExportValidator.ValidatePeriod(request.Year, request.Month);
+        var company = await PayrollExportCompanyLoader.LoadAsync(_app, _tenant, ct);
+        var lines = await PayrollExportLineLoader.LoadFinalLinesAsync(_ctx, request.Year, request.Month, ct);
+
+        var sb = new StringBuilder();
+        sb.AppendLine("TC2_RETENCIONES_Y_LIQUIDACION;Documento orientativo — NO homologado TGSS");
+        sb.AppendLine($"Periodo;{request.Year}-{request.Month:D2}");
+        sb.AppendLine($"EmpresaNIF;{company.TaxId};CCC_orientativo;{company.Ccc}");
+        sb.AppendLine("NIF;Nombre;Bruto;BaseIRPF;TipoRetencion;IRPFRetenido;Liquido");
+        var es = CultureInfo.InvariantCulture;
+        foreach (var l in lines)
+        {
+            sb.AppendLine(string.Join(";",
+                l.TaxId,
+                l.FullName.Replace(";", " "),
+                l.GrossSalary.ToString("F2", es),
+                l.IrpfBase.ToString("F2", es),
+                l.IrpfRate.ToString("F2", es),
+                l.IrpfWithheld.ToString("F2", es),
+                l.NetPay.ToString("F2", es)));
+        }
+
+        var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray();
+        return new PayrollFiscalExportResult(
+            bytes, "text/csv", $"TC2_{request.Year}_{request.Month:D2}.csv",
+            "CSV TC2: no es el XML RED oficial; solo apoyo a remisión o revisión.");
+    }
+}
+
+public class ExportTcRedOrientativoHandler : IRequestHandler<ExportTcRedOrientativoQuery, PayrollFiscalExportResult>
+{
+    private readonly IPayrollDbContext _ctx;
+    public ExportTcRedOrientativoHandler(IPayrollDbContext ctx) => _ctx = ctx;
+
+    public async Task<PayrollFiscalExportResult> Handle(ExportTcRedOrientativoQuery request, CancellationToken ct)
+    {
+        PayrollExportValidators.ValidateMonth(request.Month);
+        var lines = await PayrollExportLineLoader.LoadFinalLinesAsync(_ctx, request.Year, request.Month, ct);
+
+        var doc = new XDocument(
+            new XDeclaration("1.0", "UTF-8", null),
+            new XElement("RemisionCotizacionOrientativa",
+                new XComment("NO es el XML RED oficial de la TGSS. Contrastar con SILTRA/asesoría antes de uso."),
+                new XElement("Periodo", $"{request.Year}-{request.Month:D2}"),
+                new XElement("Lineas",
+                    lines.Select(l => new XElement("Trabajador",
+                        new XElement("NIF", l.TaxId),
+                        new XElement("NAF", l.SocialSecurityNumber ?? ""),
+                        new XElement("Nombre", l.FullName),
+                        new XElement("BaseCC", l.CommonContingenciesBase.ToString("F2", CultureInfo.InvariantCulture)),
+                        new XElement("CotizacionObrera", l.EmployeeSocialSecurity.ToString("F2", CultureInfo.InvariantCulture)),
+                        new XElement("CotizacionEmpresa", l.EmployerSocialSecurity.ToString("F2", CultureInfo.InvariantCulture)))))));
+
+        var bytes = Encoding.UTF8.GetBytes(doc.Declaration + "\n" + doc);
+        return new PayrollFiscalExportResult(
+            bytes, "application/xml", $"TC_RED_orientativo_{request.Year}_{request.Month:D2}.xml",
+            "XML orientativo: no reemplaza el fichero RED oficial TGSS.");
+    }
+}
+
+public class ExportRedHandler : IRequestHandler<ExportRedQuery, PayrollFiscalExportResult>
+{
+    private readonly IPayrollDbContext _ctx;
+    private readonly IApplicationDbContext _app;
+    private readonly ITenantContext _tenant;
+
+    public ExportRedHandler(IPayrollDbContext ctx, IApplicationDbContext app, ITenantContext tenant)
+    {
+        _ctx = ctx;
+        _app = app;
+        _tenant = tenant;
+    }
+
+    public async Task<PayrollFiscalExportResult> Handle(ExportRedQuery request, CancellationToken ct)
+    {
+        PayrollRedExportValidator.ValidatePeriod(request.Year, request.Month);
+        var company = await PayrollExportCompanyLoader.LoadAsync(_app, _tenant, ct);
+        var lines = await PayrollExportLineLoader.LoadFinalLinesAsync(_ctx, request.Year, request.Month, ct);
+        PayrollRedExportValidator.ValidateWorkerLines(lines);
+
+        var bytes = RedSiltraFileBuilder.Build(
+            company.Ccc, company.TaxId, company.Name, request.Year, request.Month, lines);
+
+        var cccNote = SpanishSocialSecurityNumberValidator.IsValidCcc(company.Ccc)
+            ? "CCC con dígito de control válido (módulo 97)."
+            : "CCC derivado orientativamente del CIF — contrastar con el CCC real de la TGSS.";
+
+        return new PayrollFiscalExportResult(
+            bytes,
+            "text/plain; charset=iso-8859-1",
+            $"RED_{request.Year}_{request.Month:D2}.txt",
+            "Fichero RED longitud fija 250 (ISO-8859-1): estructura orientativa inspirada en SILTRA. " +
+            "NO homologado TGSS — no sustituye XML SILTRA ni certificado digital. " +
+            $"{cccNote} Validar con asesoría antes de remisión.");
+    }
+}
+
+internal static class PayrollExportValidators
+{
+    internal static void ValidateMonth(int month)
+    {
+        if (month is < 1 or > 12)
+            throw new ArgumentException("Month debe ser 1–12.");
+    }
+
+    internal static void ValidateQuarter(int quarter)
+    {
+        if (quarter is < 1 or > 4)
+            throw new ArgumentException("Quarter debe ser 1–4.");
+    }
+
+    internal static (int StartMonth, int EndMonth) QuarterMonths(int quarter) => quarter switch
+    {
+        1 => (1, 3),
+        2 => (4, 6),
+        3 => (7, 9),
+        4 => (10, 12),
+        _ => throw new ArgumentException("Quarter debe ser 1–4."),
+    };
+}
+
+public class ExportModel111Handler : IRequestHandler<ExportModel111Query, PayrollFiscalExportResult>
+{
+    private readonly IPayrollDbContext _ctx;
+    private readonly IApplicationDbContext _app;
+    private readonly ITenantContext _tenant;
+
+    public ExportModel111Handler(IPayrollDbContext ctx, IApplicationDbContext app, ITenantContext tenant)
+    {
+        _ctx = ctx;
+        _app = app;
+        _tenant = tenant;
+    }
+
+    public async Task<PayrollFiscalExportResult> Handle(ExportModel111Query request, CancellationToken ct)
+    {
+        PayrollExportValidators.ValidateQuarter(request.Quarter);
+        var (startMonth, endMonth) = PayrollExportValidators.QuarterMonths(request.Quarter);
+        var company = await PayrollExportCompanyLoader.LoadAsync(_app, _tenant, ct);
+
+        var lines = await _ctx.PayrollLines
+            .Include(l => l.Settlement)
+            .Include(l => l.Employee)
+            .Where(l => l.Settlement!.Year == request.Year
+                && l.Settlement.Month >= startMonth
+                && l.Settlement.Month <= endMonth
+                && l.Settlement.Status == "Final")
+            .AsNoTracking()
+            .OrderBy(l => l.Employee!.TaxId)
+            .ThenBy(l => l.Settlement!.Month)
+            .ToListAsync(ct);
+
+        var sb = new StringBuilder();
+        sb.AppendLine("MODELO_111_ORIENTATIVO;Retenciones IRPF trabajadores — NO presentable en AEAT");
+        sb.AppendLine($"Ejercicio;{request.Year};Trimestre;{request.Quarter}");
+        sb.AppendLine($"EmpresaNIF;{company.TaxId};Empresa;{company.Name.Replace(";", " ")}");
+        sb.AppendLine("NIF;Nombre;Mes;BaseRetencion;TipoRetencion;RetencionPracticada");
+        var es = CultureInfo.InvariantCulture;
+        foreach (var l in lines)
+        {
+            sb.AppendLine(string.Join(";",
+                l.Employee!.TaxId,
+                l.Employee.FullName.Replace(";", " "),
+                l.Settlement!.Month.ToString(es),
+                l.IrpfBase.ToString("F2", es),
+                l.IrpfRate.ToString("F2", es),
+                l.IrpfWithheld.ToString("F2", es)));
+        }
+
+        var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray();
+        return new PayrollFiscalExportResult(
+            bytes,
+            "text/csv",
+            $"Modelo111_orientativo_{request.Year}_T{request.Quarter}.csv",
+            "Modelo 111 orientativo desde nóminas: no sustituye presentación oficial AEAT ni validación por asesor fiscal.");
+    }
+}
+
+public class ExportModel190Handler : IRequestHandler<ExportModel190Query, PayrollFiscalExportResult>
+{
+    private readonly IPayrollDbContext _ctx;
+    private readonly IApplicationDbContext _app;
+    private readonly ITenantContext _tenant;
+
+    public ExportModel190Handler(IPayrollDbContext ctx, IApplicationDbContext app, ITenantContext tenant)
+    {
+        _ctx = ctx;
+        _app = app;
+        _tenant = tenant;
+    }
+
+    public async Task<PayrollFiscalExportResult> Handle(ExportModel190Query request, CancellationToken ct)
+    {
+        var company = await PayrollExportCompanyLoader.LoadAsync(_app, _tenant, ct);
+
+        var lines = await _ctx.PayrollLines
+            .Include(l => l.Settlement)
+            .Include(l => l.Employee)
+            .Where(l => l.Settlement!.Year == request.Year && l.Settlement.Status == "Final")
+            .AsNoTracking()
+            .ToListAsync(ct);
+
+        var grouped = lines
+            .GroupBy(l => new { l.EmployeeId, l.Employee!.TaxId, l.Employee.FullName })
+            .OrderBy(g => g.Key.TaxId);
+
+        var sb = new StringBuilder();
+        sb.AppendLine("MODELO_190_ORIENTATIVO;Resumen anual retenciones — NO presentable en AEAT");
+        sb.AppendLine($"Ejercicio;{request.Year}");
+        sb.AppendLine($"EmpresaNIF;{company.TaxId};Empresa;{company.Name.Replace(";", " ")}");
+        sb.AppendLine("NIF;Nombre;TotalBaseRetencion;TotalRetencionPracticada;MesesConRetencion");
+        var es = CultureInfo.InvariantCulture;
+        foreach (var g in grouped)
+        {
+            var totalBase = g.Sum(l => l.IrpfBase);
+            var totalRet = g.Sum(l => l.IrpfWithheld);
+            var months = g.Select(l => l.Settlement!.Month).Distinct().Count();
+            sb.AppendLine(string.Join(";",
+                g.Key.TaxId,
+                g.Key.FullName.Replace(";", " "),
+                totalBase.ToString("F2", es),
+                totalRet.ToString("F2", es),
+                months.ToString(es)));
+        }
+
+        var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray();
+        return new PayrollFiscalExportResult(
+            bytes,
+            "text/csv",
+            $"Modelo190_orientativo_{request.Year}.csv",
+            "Modelo 190 orientativo desde nóminas: no sustituye presentación oficial AEAT ni validación por asesor fiscal.");
+    }
+}

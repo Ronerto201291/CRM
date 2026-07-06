@@ -29,6 +29,7 @@ public class PurchasingDbContext : ModuleDbContextBase, IPurchasingDbContext
         modelBuilder.Entity<SupplierInvoice>().HasQueryFilter(i => i.CompanyId == TenantContext.TenantId);
 
         modelBuilder.Entity<PurchaseOrder>().HasIndex(p => new { p.CompanyId, p.Number }).IsUnique();
+        modelBuilder.Entity<PurchaseOrder>().HasIndex(p => p.SupplierId);
 
         modelBuilder.Entity<PurchaseOrderLine>(e =>
         {
@@ -61,6 +62,7 @@ public class PurchasingDbContext : ModuleDbContextBase, IPurchasingDbContext
         modelBuilder.Entity<SupplierInvoice>(e =>
         {
             e.Property(i => i.TotalAmount).HasPrecision(18, 4);
+            e.HasIndex(i => i.SupplierId);
             e.HasOne<PurchaseOrder>()
                 .WithMany()
                 .HasForeignKey(i => i.PurchaseOrderId)

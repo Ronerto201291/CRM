@@ -1,6 +1,5 @@
+using Erp.Application.Common;
 using Erp.Application.Common.Interfaces;
-using Erp.Modules.Billing.Application.Interfaces;
-using Erp.Modules.Expenses.Application.Interfaces;
 using Erp.Application.Features.Sii.Models;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
@@ -14,14 +13,17 @@ namespace Erp.Infrastructure.Services.Sii;
 public class SiiXmlGenerator
 {
     private readonly IApplicationDbContext _ctx;
-    private readonly IBillingDbContext     _billing;
-    private readonly IExpensesDbContext    _expenses;
+    private readonly ISiiEmitidasInvoiceSource _emitidas;
+    private readonly ISiiRecibidasExpenseSource _recibidas;
 
-    public SiiXmlGenerator(IApplicationDbContext ctx, IBillingDbContext billing, IExpensesDbContext expenses)
+    public SiiXmlGenerator(
+        IApplicationDbContext ctx,
+        ISiiEmitidasInvoiceSource emitidas,
+        ISiiRecibidasExpenseSource recibidas)
     {
-        _ctx      = ctx;
-        _billing  = billing;
-        _expenses = expenses;
+        _ctx = ctx;
+        _emitidas = emitidas;
+        _recibidas = recibidas;
     }
 
     public async Task<string> GenerateFacturasEmitidasAsync(
@@ -35,14 +37,7 @@ public class SiiXmlGenerator
         var startDate = new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Utc);
         var endDate = startDate.AddMonths(1);
 
-        var invoices = await _billing.Invoices
-            .Include(i => i.InvoiceLines)
-            .Where(i => i.CompanyId == companyId
-                && i.IsLocked
-                && i.IssueDate >= startDate
-                && i.IssueDate < endDate)
-            .OrderBy(i => i.IssueDate)
-            .ToListAsync(ct);
+        var invoices = await _emitidas.GetLockedInvoicesAsync(companyId, startDate, endDate, ct);
 
         var suministro = new SuministroLRFacturasEmitidas
         {
@@ -66,9 +61,16 @@ public class SiiXmlGenerator
                 },
                 FacturaExpedida = new FacturaExpedida
                 {
-                    TipoFactura = inv.InvoiceType == "Rectificativa" ? "R1" : "F1",
+                    TipoFactura = VerifactuTipoFactura.Resolve(inv.InvoiceType),
                     ClaveRegimen = "01",
                     DescripcionOperacion = "Factura emitida",
+                    Contraparte = string.IsNullOrWhiteSpace(inv.ClientNif)
+                        ? null
+                        : new PersonaFisicaJuridica
+                        {
+                            NombreRazon = inv.ClientName ?? "Cliente",
+                            NIF = inv.ClientNif!
+                        },
                     ImporteTotal = inv.Total.ToString("F2", CultureInfo.InvariantCulture),
                     TipoDesglose = new TipoDesglose
                     {
@@ -81,7 +83,7 @@ public class SiiXmlGenerator
                                     TipoNoExenta = "S1",
                                     DesgloseIVA = new DesgloseIVA
                                     {
-                                        DetalleIVA = inv.InvoiceLines
+                                        DetalleIVA = inv.Lines
                                             .GroupBy(l => l.TaxRate)
                                             .Select(g => new DetalleIVA
                                             {
@@ -112,14 +114,7 @@ public class SiiXmlGenerator
         var startDate = new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Utc);
         var endDate = startDate.AddMonths(1);
 
-        var expenses = await _expenses.ExpenseDocuments
-            .Where(e => e.CompanyId == companyId
-                && e.Status == "Approved"
-                && e.IssueDate.HasValue
-                && e.IssueDate >= startDate
-                && e.IssueDate < endDate)
-            .OrderBy(e => e.IssueDate)
-            .ToListAsync(ct);
+        var expenses = await _recibidas.GetApprovedExpensesAsync(companyId, startDate, endDate, ct);
 
         var suministro = new SuministroLRFacturasRecibidas
         {
@@ -143,7 +138,7 @@ public class SiiXmlGenerator
                         NIF = exp.SupplierTaxId ?? string.Empty
                     },
                     NumSerieFacturaEmisor = exp.InvoiceNumber ?? exp.Id.ToString(),
-                    FechaExpedicion = exp.IssueDate!.Value.ToString("dd-MM-yyyy", CultureInfo.InvariantCulture)
+                    FechaExpedicion = exp.IssueDate.ToString("dd-MM-yyyy", CultureInfo.InvariantCulture)
                 },
                 FacturaRecibida = new FacturaRecibida
                 {
@@ -168,7 +163,7 @@ public class SiiXmlGenerator
                                 {
                                     TipoImpositivo = (exp.VATRate ?? 21).ToString("F0", CultureInfo.InvariantCulture),
                                     BaseImponible = (exp.TaxBase ?? 0).ToString("F2", CultureInfo.InvariantCulture),
-                                    CuotaRepercutida = (exp.VATAmount ?? 0).ToString("F2", CultureInfo.InvariantCulture)
+                                    CuotaSoportada = (exp.VATAmount ?? 0).ToString("F2", CultureInfo.InvariantCulture)
                                 }
                             }
                         }

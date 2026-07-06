@@ -8,13 +8,16 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Erp.Modules.Inventory.Application.Features.Inventory.Handlers;
 
-public class GetProductsHandler : IRequestHandler<GetProductsQuery, List<ProductListDto>>
+public class GetProductsHandler : IRequestHandler<GetProductsQuery, PaginatedProductsResult>
 {
     private readonly IInventoryDbContext _ctx;
     public GetProductsHandler(IInventoryDbContext ctx) => _ctx = ctx;
 
-    public async Task<List<ProductListDto>> Handle(GetProductsQuery request, CancellationToken ct)
+    public async Task<PaginatedProductsResult> Handle(GetProductsQuery request, CancellationToken ct)
     {
+        var page = Math.Max(1, request.Page);
+        var pageSize = Math.Clamp(request.PageSize, 1, 500);
+
         var query = _ctx.InventoryProducts.AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(request.Search))
@@ -24,8 +27,12 @@ public class GetProductsHandler : IRequestHandler<GetProductsQuery, List<Product
         if (!string.IsNullOrWhiteSpace(request.Type))
             query = query.Where(p => p.Type == request.Type);
 
-        return await query
+        var totalCount = await query.CountAsync(ct);
+
+        var items = await query
             .OrderBy(p => p.Name)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(p => new ProductListDto
             {
                 Id = p.Id, SKU = p.SKU, Name = p.Name, Description = p.Description,
@@ -35,6 +42,8 @@ public class GetProductsHandler : IRequestHandler<GetProductsQuery, List<Product
                 TotalStock = _ctx.Stocks.Where(s => s.ProductId == p.Id).Sum(s => (decimal?)s.Quantity) ?? 0m
             })
             .ToListAsync(ct);
+
+        return new PaginatedProductsResult(items, totalCount, page, pageSize);
     }
 }
 

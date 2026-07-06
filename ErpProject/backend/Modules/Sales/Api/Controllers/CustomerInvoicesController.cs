@@ -1,6 +1,8 @@
+using Erp.Application.Common.Attributes;
 using Erp.Modules.Sales.Application.Features.Invoices.Commands;
 using Erp.Modules.Sales.Application.Features.Invoices.Queries;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Asp.Versioning;
 
@@ -9,6 +11,8 @@ namespace Erp.Modules.Sales.Api.Controllers
     [ApiController]
     [Route("api/v{version:apiVersion}/sales/invoices")]
     [ApiVersion("1.0")]
+    [Authorize]
+    [RequiredModule("Sales")]
     public class CustomerInvoicesController : ControllerBase
     {
         private readonly IMediator _mediator;
@@ -16,6 +20,7 @@ namespace Erp.Modules.Sales.Api.Controllers
         public CustomerInvoicesController(IMediator mediator) => _mediator = mediator;
 
         [HttpGet]
+        [RequirePermission(Permissions.CustomerInvoice.Read)]
         public async Task<IActionResult> GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 50, [FromQuery] string? search = null, CancellationToken ct = default)
         {
             var result = await _mediator.Send(new GetAllCustomerInvoicesQuery(page, pageSize, search), ct);
@@ -23,6 +28,7 @@ namespace Erp.Modules.Sales.Api.Controllers
         }
 
         [HttpGet("{id:guid}")]
+        [RequirePermission(Permissions.CustomerInvoice.Read)]
         public async Task<IActionResult> Get(Guid id, CancellationToken ct)
         {
             var invoice = await _mediator.Send(new GetCustomerInvoiceQuery(id), ct);
@@ -31,10 +37,11 @@ namespace Erp.Modules.Sales.Api.Controllers
         }
 
         [HttpPost]
+        [RequirePermission(Permissions.CustomerInvoice.Create)]
         public async Task<IActionResult> Create([FromBody] CreateCustomerInvoiceCommand cmd, CancellationToken ct)
         {
-            var id = await _mediator.Send(cmd, ct);
-            return CreatedAtAction(nameof(Get), new { id }, new { id });
+            var result = await _mediator.Send(cmd, ct);
+            return CreatedAtAction(nameof(Get), new { id = result.Id }, result);
         }
     }
 }

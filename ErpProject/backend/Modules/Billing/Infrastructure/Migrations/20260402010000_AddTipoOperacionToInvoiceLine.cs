@@ -1,3 +1,5 @@
+using Erp.Modules.Billing.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -5,6 +7,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Erp.Modules.Billing.Infrastructure.Migrations
 {
     /// <inheritdoc />
+    [DbContext(typeof(BillingDbContext))]
+    [Migration("20260402010000_AddTipoOperacionToInvoiceLine")]
     public partial class AddTipoOperacionToInvoiceLine : Migration
     {
         /// <inheritdoc />

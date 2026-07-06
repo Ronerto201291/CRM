@@ -31,6 +31,10 @@ public class InvoiceDto
     public decimal SurchargeAmount { get; set; }
     public decimal Total { get; set; }
 
+    public string CurrencyCode { get; set; } = "EUR";
+    public decimal ExchangeRateToEur { get; set; } = 1m;
+    public decimal TotalEur { get; set; }
+
     public string Status { get; set; } = string.Empty;
     public bool IsLocked { get; set; }
     public DateTime? LockedAt { get; set; }
@@ -39,6 +43,9 @@ public class InvoiceDto
     public string? VerifactuQrUrl { get; set; }
 
     public Guid? JournalEntryId { get; set; }
+
+    /// <summary>Enlace del portal público de visualización (ADR-0018 #39).</summary>
+    public string? PublicViewUrl { get; set; }
 
     public string? RectificationReasonCode { get; set; }
     public string? RectificationReasonText { get; set; }

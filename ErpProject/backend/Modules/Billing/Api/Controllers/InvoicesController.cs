@@ -1,55 +1,64 @@
-using Erp.Application.Common.Interfaces;
+using Erp.Application.Common;
+using Erp.Application.Common.Attributes;
 using Erp.Modules.Billing.Application.Features.Billing.Commands;
 using Erp.Modules.Billing.Application.Features.Billing.Queries;
-using Erp.Modules.Billing.Application.Interfaces;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace Erp.Modules.Billing.Api.Controllers;
 
-[ApiController, Route("api/[controller]"), Authorize]
+[ApiController, Route("api/[controller]"), Authorize, RequiredModule("Billing")]
 public class InvoicesController : ControllerBase
 {
     private readonly IMediator _mediator;
-    private readonly IPlanLimitService _planLimits;
-    private readonly ITenantContext _tenantContext;
-    private readonly IBillingDbContext _billingCtx;
-    private readonly IFacturaEService _facturaE;
 
-    public InvoicesController(
-        IMediator mediator,
-        IPlanLimitService planLimits,
-        ITenantContext tenantContext,
-        IBillingDbContext billingCtx,
-        IFacturaEService facturaE)
-    {
-        _mediator = mediator;
-        _planLimits = planLimits;
-        _tenantContext = tenantContext;
-        _billingCtx = billingCtx;
-        _facturaE = facturaE;
-    }
+    public InvoicesController(IMediator mediator) => _mediator = mediator;
 
     [HttpGet]
-    public async Task<IActionResult> GetAll([FromQuery] string? status)
-        => Ok(await _mediator.Send(new GetInvoicesQuery { Status = status }));
+    [RequirePermission(Permissions.Invoice.Read)]
+    public async Task<IActionResult> GetAll(
+        [FromQuery] string? status,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken ct = default)
+    {
+        var result = await _mediator.Send(new GetInvoicesQuery
+        {
+            Status = status,
+            Page = page,
+            PageSize = pageSize,
+        }, ct);
+        Response.Headers["X-Total-Count"] = result.TotalCount.ToString();
+        return Ok(result);
+    }
+
+    /// <summary>GET /api/invoices/{id} — detalle de factura por id.</summary>
+    [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof(object), 200)]
+    [ProducesResponseType(404)]
+    public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new GetInvoiceByIdQuery { Id = id }, ct);
+        return result is null ? NotFound() : Ok(result);
+    }
 
     [HttpPost]
+    [RequirePermission(Permissions.Invoice.Create)]
     public async Task<IActionResult> Create([FromBody] CreateInvoiceCommand cmd, CancellationToken ct)
     {
-        var tenantId = _tenantContext.TenantId ?? throw new InvalidOperationException("Tenant not resolved");
-        var monthStart = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1, 0, 0, 0, DateTimeKind.Utc);
-        var monthCount = await _billingCtx.Invoices.CountAsync(i => i.IssueDate >= monthStart, ct);
-        var check = await _planLimits.CheckInvoiceLimitAsync(tenantId, monthCount, ct);
-        if (!check.Allowed)
-            return StatusCode(402, new { error = check.Reason, current = check.Current, max = check.Max });
-
-        return Created("", await _mediator.Send(cmd, ct));
+        try
+        {
+            return Created("", await _mediator.Send(cmd, ct));
+        }
+        catch (PlanLimitExceededException ex)
+        {
+            return StatusCode(402, new { error = ex.Check.Reason, current = ex.Check.Current, max = ex.Check.Max });
+        }
     }
 
     [HttpPost("{id}/lock")]
+    [RequirePermission(Permissions.Invoice.Lock)]
     public async Task<IActionResult> Lock(Guid id, CancellationToken ct)
     {
         try
@@ -65,12 +74,54 @@ public class InvoicesController : ControllerBase
         }
     }
 
+    /// <summary>Baja de factura bloqueada y registro VeriFactu de anulación encadenado.</summary>
+    [HttpPost("{id}/cancel")]
+    [RequirePermission(Permissions.Invoice.Manage)]
+    public async Task<IActionResult> Cancel(Guid id, CancellationToken ct)
+    {
+        try
+        {
+            var ok = await _mediator.Send(new CancelInvoiceCommand { Id = id }, ct);
+            return ok
+                ? Ok(new { message = "Factura dada de baja. Anulación VeriFactu registrada si aplica." })
+                : NotFound();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>Encola anulación VERI*FACTU en AEAT (factura previamente enviada).</summary>
+    [HttpPost("{id}/verifactu/anular")]
+    [RequirePermission(Permissions.Invoice.Manage)]
+    public async Task<IActionResult> AnulVerifactu(Guid id, CancellationToken ct)
+    {
+        try
+        {
+            var ok = await _mediator.Send(new AnulVerifactuInvoiceCommand { InvoiceId = id }, ct);
+            return ok
+                ? Ok(new { message = "Anulación VeriFactu encolada." })
+                : NotFound();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpGet("{id}/verifactu/submissions")]
+    [RequirePermission(Permissions.Invoice.Read)]
+    public async Task<IActionResult> GetVerifactuSubmissions(Guid id, CancellationToken ct)
+        => Ok(await _mediator.Send(new GetVerifactuSubmissionsQuery(id), ct));
+
     /// <summary>
     /// Marca la factura como cobrada y genera el asiento de cobro (572 Banco / 430 Clientes).
     /// POST /api/invoices/{id}/pay
     /// Body (opcional): { "paymentMethod": "bank" | "cash" | "card" | "transfer" }
     /// </summary>
     [HttpPost("{id}/pay")]
+    [RequirePermission(Permissions.Invoice.Manage)]
     public async Task<IActionResult> Pay(Guid id, [FromBody] PayInvoiceRequest? body, CancellationToken ct)
     {
         var ok = await _mediator.Send(new MarkPaidCommand
@@ -84,6 +135,7 @@ public class InvoicesController : ControllerBase
     }
 
     [HttpGet("verify-chain")]
+    [RequirePermission(Permissions.Invoice.Read)]
     public async Task<IActionResult> VerifyHashChain(
         [FromQuery] string series, [FromQuery] int fiscalYear, CancellationToken ct)
         => Ok(await _mediator.Send(new VerifyHashChainQuery { Series = series, FiscalYear = fiscalYear }, ct));
@@ -94,6 +146,7 @@ public class InvoicesController : ControllerBase
     /// GET /api/invoices/{id}/pdf
     /// </summary>
     [HttpGet("{id}/pdf")]
+    [RequirePermission(Permissions.Invoice.Export)]
     [Produces("application/pdf")]
     [ProducesResponseType(typeof(FileResult), 200)]
     [ProducesResponseType(typeof(object), 400)]
@@ -115,6 +168,7 @@ public class InvoicesController : ControllerBase
     /// POST /api/invoices/{id}/send
     /// </summary>
     [HttpPost("{id}/send")]
+    [RequirePermission(Permissions.Invoice.Manage)]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(typeof(object), 400)]
     [ProducesResponseType(typeof(object), 404)]
@@ -141,18 +195,17 @@ public class InvoicesController : ControllerBase
     /// GET /api/invoices/{id}/facturae
     /// </summary>
     [HttpGet("{id}/facturae")]
+    [RequirePermission(Permissions.Invoice.Export)]
     [Produces("application/xml")]
     [ProducesResponseType(typeof(FileResult), 200)]
     [ProducesResponseType(typeof(object), 400)]
     [ProducesResponseType(typeof(object), 404)]
     public async Task<IActionResult> DownloadFacturaE(Guid id, CancellationToken ct)
     {
-        var tenantId = _tenantContext.TenantId
-            ?? throw new InvalidOperationException("Tenant not resolved");
         try
         {
-            var (bytes, fileName) = await _facturaE.GenerateAsync(id, tenantId, ct);
-            return File(bytes, "application/xml", fileName);
+            var result = await _mediator.Send(new GenerateFacturaEQuery(id), ct);
+            return File(result.XmlBytes, "application/xml", result.FileName);
         }
         catch (KeyNotFoundException ex) { return NotFound(new { error = ex.Message }); }
         catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }

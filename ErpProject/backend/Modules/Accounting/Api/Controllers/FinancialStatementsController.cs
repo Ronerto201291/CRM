@@ -1,38 +1,49 @@
+using Erp.Application.Common.Attributes;
+using Erp.Modules.Accounting.Application.Features.FinancialStatements;
+using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Erp.Modules.Accounting.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/accounting/financial-statements")]
+[Authorize]
+[RequiredModule("Accounting")]
+[RequirePermission(Permissions.FinancialStatement.Read)]
 public class FinancialStatementsController : ControllerBase
 {
+    private readonly IMediator _mediator;
+
+    public FinancialStatementsController(IMediator mediator) => _mediator = mediator;
+
     [HttpPost("cash-flow")]
-    public IActionResult GenerateCashFlow([FromBody] object request)
+    public async Task<IActionResult> GenerateCashFlow([FromBody] GenerateCashFlowRequest request, CancellationToken ct)
     {
-        return Ok(new
-        {
-            id = Guid.NewGuid(),
-            operatingCashFlow = 150000m,
-            investingCashFlow = -50000m,
-            financingCashFlow = 20000m,
-            netCashFlow = 120000m,
-            period = "01/2025",
-            status = "Generated"
-        });
+        var year = request.FiscalYear > 0 ? request.FiscalYear : DateTime.UtcNow.Year;
+        var result = await _mediator.Send(new GenerateCashFlowCommand(year), ct);
+        return Ok(result);
     }
 
     [HttpPost("equity")]
-    public IActionResult GenerateEquityStatement([FromBody] object request)
+    public async Task<IActionResult> GenerateEquityStatement([FromBody] GenerateCashFlowRequest request, CancellationToken ct)
     {
+        var year = request.FiscalYear > 0 ? request.FiscalYear : DateTime.UtcNow.Year;
+        var result = await _mediator.Send(new GenerateEquityStatementCommand(year), ct);
         return Ok(new
         {
-            id = Guid.NewGuid(),
-            beginningCapital = 100000m,
-            netIncome = 45000m,
-            dividendsPaid = 10000m,
-            otherChanges = 5000m,
-            endingCapital = 140000m,
-            status = "Generated"
+            id = result.Id,
+            beginningCapital = result.BeginningCapital,
+            netIncome = result.NetIncome,
+            dividendsPaid = result.DividendsPaid,
+            otherChanges = result.OtherChanges,
+            endingCapital = result.EndingCapital,
+            status = result.Status
         });
     }
+}
+
+public class GenerateCashFlowRequest
+{
+    public int FiscalYear { get; set; }
 }

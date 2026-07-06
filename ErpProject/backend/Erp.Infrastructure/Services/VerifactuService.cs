@@ -41,31 +41,27 @@ public class VerifactuService : IVerifactuService
     /// Field order and separator defined in RD 1007/2023 Annex II.
     ///
     /// Huella = SHA256_HEX(
-    ///   NIF_Emisor &amp; NumSerie &amp; Fecha &amp; TipoFactura &amp;
-    ///   CuotaTotal &amp; ImporteTotal &amp; HuellaAnterior &amp;
-    ///   NIF_Software &amp; IdSistema &amp; NumRegistro &amp; FechaHora
-    /// )
+    ///   IDEmisorFactura=...&NumSerieFactura=...&FechaExpedicionFactura=...&TipoFactura=...&
+    ///   CuotaTotal=...&ImporteTotal=...&Huella=...&FechaHoraHusoGenRegistro=...
+    /// ) — 8 campos del Anexo II RD 1007/2023.
     /// </summary>
     public string ComputeHuella(VerifactuInvoiceData data)
     {
-        // All decimal amounts formatted with exactly 2 decimal places and no thousands separator
-        var cuotaTotal    = data.CuotaTotal.ToString("F2", CultureInfo.InvariantCulture);
-        var importeTotal  = data.ImporteTotal.ToString("F2", CultureInfo.InvariantCulture);
-        var fechaHora     = data.FechaHoraHuella.ToString("yyyy-MM-ddTHH:mm:sszzz");
+        // RD 1007/2023 Anexo II — 8 campos oficiales, formato clave=valor&...
+        var cuotaTotal = data.CuotaTotal.ToString("F2", CultureInfo.InvariantCulture);
+        var importeTotal = data.ImporteTotal.ToString("F2", CultureInfo.InvariantCulture);
+        var fechaHora = data.FechaHoraHuella.ToString("yyyy-MM-ddTHH:mm:sszzz");
 
         var campos = string.Join("&", new[]
         {
-            data.NifEmisor,
-            data.NumSerieFactura,
-            data.FechaExpedicion.ToString("dd-MM-yyyy"),
-            data.TipoFactura,
-            cuotaTotal,
-            importeTotal,
-            data.HuellaAnterior ?? string.Empty,
-            _nifSoftware,
-            _idSistema,
-            data.NumeroRegistro.ToString(),
-            fechaHora
+            $"IDEmisorFactura={data.NifEmisor}",
+            $"NumSerieFactura={data.NumSerieFactura}",
+            $"FechaExpedicionFactura={data.FechaExpedicion:dd-MM-yyyy}",
+            $"TipoFactura={data.TipoFactura}",
+            $"CuotaTotal={cuotaTotal}",
+            $"ImporteTotal={importeTotal}",
+            $"Huella={data.HuellaAnterior ?? string.Empty}",
+            $"FechaHoraHusoGenRegistro={fechaHora}"
         });
 
         using var sha256 = SHA256.Create();
@@ -126,6 +122,29 @@ public class VerifactuService : IVerifactuService
         var huella = ComputeHuella(data);
         var url    = GetQrUrl(data, huella);
         return (huella, url);
+    }
+
+    /// <inheritdoc />
+    public string ComputeAnulacionHuella(
+        string nifEmisor,
+        string numSerieFacturaAnulada,
+        DateOnly fechaExpedicionAnulada,
+        string? huellaRegistroAnterior,
+        DateTimeOffset fechaHoraRegistro)
+    {
+        var fechaHora = fechaHoraRegistro.ToString("yyyy-MM-ddTHH:mm:sszzz");
+        var campos = string.Join("&", new[]
+        {
+            $"IDEmisorFacturaAnulada={nifEmisor}",
+            $"NumSerieFacturaAnulada={numSerieFacturaAnulada}",
+            $"FechaExpedicionFacturaAnulada={fechaExpedicionAnulada:dd-MM-yyyy}",
+            $"Huella={huellaRegistroAnterior ?? string.Empty}",
+            $"FechaHoraHusoGenRegistro={fechaHora}"
+        });
+
+        using var sha256 = SHA256.Create();
+        var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(campos));
+        return BitConverter.ToString(bytes).Replace("-", "").ToUpperInvariant();
     }
 }
 

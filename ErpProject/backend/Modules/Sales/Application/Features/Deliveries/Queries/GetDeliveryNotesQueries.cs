@@ -77,6 +77,7 @@ public class DeliveryNoteSummaryDto
     public DateTime DeliveryDate { get; set; }
     public DateTime CreatedAt { get; set; }
     public int LineCount { get; set; }
+    public Guid SalesOrderId { get; set; }
 }
 
 public class GetAllDeliveryNotesQueryHandler : IRequestHandler<GetAllDeliveryNotesQuery, PaginatedDeliveryNotesResult>
@@ -109,6 +110,7 @@ public class GetAllDeliveryNotesQueryHandler : IRequestHandler<GetAllDeliveryNot
                 DeliveryDate = d.DeliveryDate,
                 CreatedAt = d.CreatedAt,
                 LineCount = d.Lines.Count,
+                SalesOrderId = d.SalesOrderId,
             })
             .ToListAsync(cancellationToken);
 

@@ -11,45 +11,20 @@ namespace Erp.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<bool>(
-                name: "EmailConfirmed",
-                table: "Users",
-                type: "boolean",
-                nullable: false,
-                defaultValue: false);
-
-            migrationBuilder.CreateTable(
-                name: "TenantInvitations",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    CompanyId = table.Column<Guid>(type: "uuid", nullable: false),
-                    Email = table.Column<string>(type: "text", nullable: false),
-                    Token = table.Column<string>(type: "text", nullable: false),
-                    ExpiresAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    IsUsed = table.Column<bool>(type: "boolean", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_TenantInvitations", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_TenantInvitations_Companies_CompanyId",
-                        column: x => x.CompanyId,
-                        principalTable: "Companies",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_TenantInvitations_CompanyId",
-                table: "TenantInvitations",
-                column: "CompanyId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_TenantInvitations_Token",
-                table: "TenantInvitations",
-                column: "Token",
-                unique: true);
+            migrationBuilder.Sql("""
+                CREATE TABLE IF NOT EXISTS "TenantInvitations" (
+                    "Id" uuid NOT NULL,
+                    "CompanyId" uuid NOT NULL,
+                    "Email" text NOT NULL,
+                    "Token" text NOT NULL,
+                    "ExpiresAt" timestamp with time zone NOT NULL,
+                    "IsUsed" boolean NOT NULL,
+                    CONSTRAINT "PK_TenantInvitations" PRIMARY KEY ("Id"),
+                    CONSTRAINT "FK_TenantInvitations_Companies_CompanyId" FOREIGN KEY ("CompanyId") REFERENCES "Companies" ("Id") ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS "IX_TenantInvitations_CompanyId" ON "TenantInvitations" ("CompanyId");
+                CREATE UNIQUE INDEX IF NOT EXISTS "IX_TenantInvitations_Token" ON "TenantInvitations" ("Token");
+                """);
         }
 
         /// <inheritdoc />
@@ -57,10 +32,6 @@ namespace Erp.Infrastructure.Migrations
         {
             migrationBuilder.DropTable(
                 name: "TenantInvitations");
-
-            migrationBuilder.DropColumn(
-                name: "EmailConfirmed",
-                table: "Users");
         }
     }
 }

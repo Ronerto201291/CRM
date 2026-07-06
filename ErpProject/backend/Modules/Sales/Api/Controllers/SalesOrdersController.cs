@@ -1,88 +1,62 @@
-using Erp.Modules.Sales.Application.Interfaces;
-using Erp.Modules.Sales.Domain.Entities;
+using Erp.Application.Common.Attributes;
+using Erp.Modules.Sales.Application.Features.Orders;
+using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Asp.Versioning;
 
-namespace Erp.Modules.Sales.Api.Controllers
+namespace Erp.Modules.Sales.Api.Controllers;
+
+[ApiController]
+[Route("api/v{version:apiVersion}/sales/orders")]
+[ApiVersion("1.0")]
+[Authorize]
+[RequiredModule("Sales")]
+public class SalesOrdersController : ControllerBase
 {
-    [ApiController]
-    [Route("api/v{version:apiVersion}/sales/orders")]
-    [ApiVersion("1.0")]
-    public class SalesOrdersController : ControllerBase
+    private readonly IMediator _mediator;
+
+    public SalesOrdersController(IMediator mediator) => _mediator = mediator;
+
+    [HttpGet]
+    [RequirePermission(Permissions.SalesOrder.Read)]
+    public async Task<IActionResult> GetAll(CancellationToken ct)
+        => Ok(await _mediator.Send(new GetSalesOrdersQuery(), ct));
+
+    [HttpGet("{id}")]
+    [RequirePermission(Permissions.SalesOrder.Read)]
+    public async Task<IActionResult> Get(Guid id, CancellationToken ct)
     {
-        private readonly ISalesDbContext _context;
-
-        public SalesOrdersController(ISalesDbContext context) => _context = context;
-
-        [HttpGet]
-        public async Task<IActionResult> GetAll(CancellationToken ct)
-        {
-            var list = await _context.SalesOrders.Include(s => s.Lines).AsNoTracking().ToListAsync(ct);
-            return Ok(list);
-        }
-
-        [HttpGet("{id}")]
-        public async Task<IActionResult> Get(Guid id, CancellationToken ct)
-        {
-            var so = await _context.SalesOrders.Include(s => s.Lines).FirstOrDefaultAsync(s => s.Id == id, ct);
-            if (so == null) return NotFound();
-            return Ok(so);
-        }
-
-        public class CreateSoDto
-        {
-            public string Number { get; set; } = string.Empty;
-            public DateTime OrderDate { get; set; }
-            public Guid? ClientId { get; set; }
-            public string ClientName { get; set; } = string.Empty;
-            public List<CreateSoLineDto> Lines { get; set; } = new();
-        }
-
-        public class CreateSoLineDto
-        {
-            public Guid? ProductId { get; set; }
-            public decimal Quantity { get; set; }
-            public decimal UnitPrice { get; set; }
-        }
-
-        [HttpPost]
-        public async Task<IActionResult> Create([FromBody] CreateSoDto dto, CancellationToken ct)
-        {
-            var so = new SalesOrder
-            {
-                Number = dto.Number,
-                OrderDate = dto.OrderDate,
-                ClientId = dto.ClientId,
-                ClientName = dto.ClientName,
-                SubTotal = 0,
-                TaxAmount = 0,
-                Total = 0
-            };
-
-            foreach (var l in dto.Lines)
-            {
-                var lineSubTotal = l.Quantity * l.UnitPrice;
-                var lineTaxAmount = Math.Round(lineSubTotal * 0.21m, 2);
-                var line = new SalesOrderLine
-                {
-                    ProductId = l.ProductId,
-                    Quantity = l.Quantity,
-                    UnitPrice = l.UnitPrice,
-                    TaxRate = 21m,
-                    TaxAmount = lineTaxAmount,
-                };
-                so.Lines.Add(line);
-                _context.SalesOrderLines.Add(line);
-                so.SubTotal += lineSubTotal;
-                so.TaxAmount += lineTaxAmount;
-            }
-
-            so.Total = so.SubTotal + so.TaxAmount;
-
-            _context.SalesOrders.Add(so);
-            await _context.SaveChangesAsync(ct);
-            return CreatedAtAction(nameof(Get), new { id = so.Id }, so);
-        }
+        var result = await _mediator.Send(new GetSalesOrderByIdQuery(id), ct);
+        return result == null ? NotFound() : Ok(result);
     }
+
+    [HttpPost]
+    [RequirePermission(Permissions.SalesOrder.Create)]
+    public async Task<IActionResult> Create([FromBody] CreateSoDto dto, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new CreateSalesOrderCommand(
+            dto.Number,
+            dto.OrderDate,
+            dto.ClientId,
+            dto.ClientName,
+            dto.Lines.Select(l => new SalesOrderLineDto(l.ProductId, l.Quantity, l.UnitPrice)).ToList()), ct);
+        return CreatedAtAction(nameof(Get), new { id = result.Id }, result);
+    }
+}
+
+public class CreateSoDto
+{
+    public string Number { get; set; } = string.Empty;
+    public DateTime OrderDate { get; set; }
+    public Guid? ClientId { get; set; }
+    public string ClientName { get; set; } = string.Empty;
+    public List<CreateSoLineDto> Lines { get; set; } = new();
+}
+
+public class CreateSoLineDto
+{
+    public Guid? ProductId { get; set; }
+    public decimal Quantity { get; set; }
+    public decimal UnitPrice { get; set; }
 }

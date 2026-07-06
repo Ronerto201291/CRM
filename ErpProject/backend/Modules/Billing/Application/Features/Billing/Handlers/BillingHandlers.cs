@@ -1,7 +1,10 @@
+using Erp.Application.Common;
 using Erp.Application.Common.Events;
 using Erp.Application.Common.Interfaces;
+using Erp.Application.Common.Validation;
 using Erp.Application.DTOs;
 using Erp.Domain.Entities.Audit;
+using Erp.Modules.Billing.Application.Features.Billing;
 using Erp.Modules.Billing.Application.Features.Billing.Commands;
 using Erp.Modules.Billing.Application.Features.Billing.Queries;
 using Erp.Modules.Billing.Application.Interfaces;
@@ -35,25 +38,41 @@ public class CreateInvoiceHandler : IRequestHandler<CreateInvoiceCommand, Invoic
     private readonly IApplicationDbContext _appCtx;
     private readonly IClientInfoService _clientInfo;
     private readonly IViesService _vies;
+    private readonly IPlanLimitService _planLimits;
+    private readonly IPortalUrlProvider _portalUrlProvider;
+    private readonly IExchangeRateLookup _exchangeRates;
 
     public CreateInvoiceHandler(
         IBillingDbContext ctx,
         ITenantContext tenant,
         IApplicationDbContext appCtx,
         IClientInfoService clientInfo,
-        IViesService vies)
+        IViesService vies,
+        IPlanLimitService planLimits,
+        IPortalUrlProvider portalUrlProvider,
+        IExchangeRateLookup exchangeRates)
     {
         _ctx        = ctx;
         _tenant     = tenant;
         _appCtx     = appCtx;
         _clientInfo = clientInfo;
         _vies       = vies;
+        _planLimits = planLimits;
+        _portalUrlProvider = portalUrlProvider;
+        _exchangeRates = exchangeRates;
     }
 
     public async Task<InvoiceDto> Handle(CreateInvoiceCommand req, CancellationToken ct)
     {
         var companyId = _tenant.TenantId
             ?? throw new InvalidOperationException("No tenant context resolved.");
+
+        var monthStart = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+        var monthCount = await _ctx.Invoices.CountAsync(i => i.IssueDate >= monthStart, ct);
+        var limitCheck = await _planLimits.CheckInvoiceLimitAsync(companyId, monthCount, ct);
+        if (!limitCheck.Allowed)
+            throw new PlanLimitExceededException(limitCheck);
+
         var fiscalYear = DateTime.UtcNow.Year;
 
         await using var tx = await _ctx.Database.BeginTransactionAsync(ct);
@@ -101,6 +120,9 @@ public class CreateInvoiceHandler : IRequestHandler<CreateInvoiceCommand, Invoic
             clientEmail   = req.ClientEmail;
             clientAddress = req.ClientAddress;
         }
+
+        if (!string.IsNullOrWhiteSpace(clientNif) && !SpanishTaxIdValidator.IsValid(clientNif))
+            throw new InvalidOperationException($"NIF/CIF/NIE del cliente no válido: {clientNif}");
 
         var invType = (req.InvoiceType ?? "Normal").Trim();
         if (string.Equals(invType, "Rectificativa", StringComparison.OrdinalIgnoreCase))
@@ -187,6 +209,11 @@ public class CreateInvoiceHandler : IRequestHandler<CreateInvoiceCommand, Invoic
         invoice.IrpfAmount      = Math.Round(subtotal * (req.IrpfRate / 100m), 2, MidpointRounding.AwayFromZero);
         invoice.Total           = invoice.Subtotal + invoice.TaxAmount + invoice.SurchargeAmount - invoice.IrpfAmount;
 
+        var currencyCode = string.IsNullOrWhiteSpace(req.CurrencyCode) ? "EUR" : req.CurrencyCode.Trim().ToUpperInvariant();
+        invoice.CurrencyCode = currencyCode;
+        invoice.ExchangeRateToEur = await _exchangeRates.GetRateToEurAsync(currencyCode, ct);
+        invoice.TotalEur = await _exchangeRates.ConvertToEurAsync(currencyCode, invoice.Total, ct);
+
         if (string.Equals(invType, "Simplificada", StringComparison.OrdinalIgnoreCase)
             && invoice.Subtotal > SimplificadaMaxBaseImponible)
             throw new InvalidOperationException(
@@ -237,6 +264,9 @@ public class CreateInvoiceHandler : IRequestHandler<CreateInvoiceCommand, Invoic
             Subtotal = invoice.Subtotal, TaxAmount = invoice.TaxAmount,
             IrpfRate = invoice.IrpfRate, IrpfAmount = invoice.IrpfAmount,
             SurchargeAmount = invoice.SurchargeAmount, Total = invoice.Total,
+            CurrencyCode = invoice.CurrencyCode,
+            ExchangeRateToEur = invoice.ExchangeRateToEur,
+            TotalEur = invoice.TotalEur,
             Status = invoice.Status, IsLocked = invoice.IsLocked,
             Lines = lines.Select(x => new InvoiceLineDto
             {
@@ -251,6 +281,7 @@ public class CreateInvoiceHandler : IRequestHandler<CreateInvoiceCommand, Invoic
             ClientViesConsultedAtUtc = invoice.ClientViesConsultedAtUtc,
             ClientViesCountryCode = invoice.ClientViesCountryCode,
             ClientViesName = invoice.ClientViesName,
+            PublicViewUrl = $"{_portalUrlProvider.PortalBaseUrl.TrimEnd('/')}/factura/{invoice.PublicViewToken}",
         };
     }
 
@@ -267,21 +298,33 @@ public class CreateInvoiceHandler : IRequestHandler<CreateInvoiceCommand, Invoic
     }
 }
 
-public class GetInvoicesHandler : IRequestHandler<GetInvoicesQuery, List<InvoiceDto>>
+public class GetInvoicesHandler : IRequestHandler<GetInvoicesQuery, PaginatedInvoicesResult>
 {
     private readonly IBillingDbContext _ctx;
+    private readonly IPortalUrlProvider _portalUrlProvider;
 
-    public GetInvoicesHandler(IBillingDbContext ctx) => _ctx = ctx;
-
-
-    public async Task<List<InvoiceDto>> Handle(GetInvoicesQuery req, CancellationToken ct)
+    public GetInvoicesHandler(IBillingDbContext ctx, IPortalUrlProvider portalUrlProvider)
     {
+        _ctx = ctx;
+        _portalUrlProvider = portalUrlProvider;
+    }
+
+    public async Task<PaginatedInvoicesResult> Handle(GetInvoicesQuery req, CancellationToken ct)
+    {
+        var page = Math.Max(1, req.Page);
+        var pageSize = Math.Clamp(req.PageSize, 1, 500);
+        var portalBaseUrl = _portalUrlProvider.PortalBaseUrl.TrimEnd('/');
+
         var q = _ctx.Invoices.AsQueryable();
         if (!string.IsNullOrWhiteSpace(req.Status))
             q = q.Where(i => i.Status == req.Status);
 
-        return await q
+        var totalCount = await q.CountAsync(ct);
+
+        var items = await q
             .OrderByDescending(i => i.IssueDate)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(i => new InvoiceDto
             {
                 Id = i.Id, Number = i.Number, Series = i.Series,
@@ -293,6 +336,7 @@ public class GetInvoicesHandler : IRequestHandler<GetInvoicesQuery, List<Invoice
                 Subtotal = i.Subtotal, TaxAmount = i.TaxAmount,
                 IrpfRate = i.IrpfRate, IrpfAmount = i.IrpfAmount,
                 SurchargeAmount = i.SurchargeAmount, Total = i.Total,
+                CurrencyCode = i.CurrencyCode, ExchangeRateToEur = i.ExchangeRateToEur, TotalEur = i.TotalEur,
                 Status = i.Status, IsLocked = i.IsLocked, LockedAt = i.LockedAt,
                 Hash = i.Hash, VerifactuHuella = i.VerifactuHuella, VerifactuQrUrl = i.VerifactuQrUrl,
                 JournalEntryId = i.JournalEntryId,
@@ -304,8 +348,109 @@ public class GetInvoicesHandler : IRequestHandler<GetInvoicesQuery, List<Invoice
                 ClientViesConsultedAtUtc = i.ClientViesConsultedAtUtc,
                 ClientViesCountryCode = i.ClientViesCountryCode,
                 ClientViesName = i.ClientViesName,
+                PublicViewUrl = portalBaseUrl + "/factura/" + i.PublicViewToken,
             })
             .ToListAsync(ct);
+
+        return new PaginatedInvoicesResult(items, totalCount, page, pageSize);
+    }
+}
+
+public class GetInvoiceByIdHandler : IRequestHandler<GetInvoiceByIdQuery, InvoiceDto?>
+{
+    private readonly IBillingDbContext _ctx;
+    private readonly IPortalUrlProvider _portalUrlProvider;
+
+    public GetInvoiceByIdHandler(IBillingDbContext ctx, IPortalUrlProvider portalUrlProvider)
+    {
+        _ctx = ctx;
+        _portalUrlProvider = portalUrlProvider;
+    }
+
+    public async Task<InvoiceDto?> Handle(GetInvoiceByIdQuery req, CancellationToken ct)
+    {
+        var portalBaseUrl = _portalUrlProvider.PortalBaseUrl.TrimEnd('/');
+        return await _ctx.Invoices
+            .Where(i => i.Id == req.Id)
+            .Select(i => new InvoiceDto
+            {
+                Id = i.Id, Number = i.Number, Series = i.Series,
+                FiscalYear = i.FiscalYear, InvoiceType = i.InvoiceType,
+                ClientId = i.ClientId, ClientType = i.ClientType,
+                ClientNif = i.ClientNif, ClientName = i.ClientName, ClientEmail = i.ClientEmail, ClientAddress = i.ClientAddress,
+                CompanyNif = i.CompanyNif, CompanyName = i.CompanyName, CompanyAddress = i.CompanyAddress,
+                IssueDate = i.IssueDate, DueDate = i.DueDate, OperationDate = i.OperationDate,
+                Subtotal = i.Subtotal, TaxAmount = i.TaxAmount,
+                IrpfRate = i.IrpfRate, IrpfAmount = i.IrpfAmount,
+                SurchargeAmount = i.SurchargeAmount, Total = i.Total,
+                CurrencyCode = i.CurrencyCode, ExchangeRateToEur = i.ExchangeRateToEur, TotalEur = i.TotalEur,
+                Status = i.Status, IsLocked = i.IsLocked, LockedAt = i.LockedAt,
+                Hash = i.Hash, VerifactuHuella = i.VerifactuHuella, VerifactuQrUrl = i.VerifactuQrUrl,
+                JournalEntryId = i.JournalEntryId,
+                RectificationReasonCode = i.RectificationReasonCode,
+                RectificationReasonText = i.RectificationReasonText,
+                RectificationPeriodFrom = i.RectificationPeriodFrom,
+                RectificationPeriodTo = i.RectificationPeriodTo,
+                ClientViesValid = i.ClientViesValid,
+                ClientViesConsultedAtUtc = i.ClientViesConsultedAtUtc,
+                ClientViesCountryCode = i.ClientViesCountryCode,
+                ClientViesName = i.ClientViesName,
+                PublicViewUrl = portalBaseUrl + "/factura/" + i.PublicViewToken,
+            })
+            .FirstOrDefaultAsync(ct);
+    }
+}
+
+/// <summary>Portal público del cliente por token (ADR-0018 #39) — mismo patrón que GetQuoteByTokenHandler.</summary>
+public class GetInvoiceByTokenHandler : IRequestHandler<GetInvoiceByTokenQuery, InvoicePublicDto?>
+{
+    private readonly IBillingDbContext _ctx;
+    private readonly IApplicationDbContext _appDb;
+
+    public GetInvoiceByTokenHandler(IBillingDbContext ctx, IApplicationDbContext appDb)
+    {
+        _ctx = ctx;
+        _appDb = appDb;
+    }
+
+    public async Task<InvoicePublicDto?> Handle(GetInvoiceByTokenQuery req, CancellationToken ct)
+    {
+        var invoice = await _ctx.Invoices
+            .IgnoreQueryFilters()
+            .Include(i => i.InvoiceLines)
+            .FirstOrDefaultAsync(i => i.PublicViewToken == req.Token, ct);
+
+        if (invoice is null) return null;
+
+        var company = await _appDb.Companies
+            .IgnoreQueryFilters()
+            .Where(c => c.Id == invoice.CompanyId)
+            .Select(c => new { c.Name, c.Address })
+            .FirstOrDefaultAsync(ct);
+
+        return new InvoicePublicDto(
+            Number: invoice.Number,
+            Series: invoice.Series,
+            FiscalYear: invoice.FiscalYear,
+            Status: invoice.Status,
+            IsLocked: invoice.IsLocked,
+            CompanyName: company?.Name ?? invoice.CompanyName ?? "",
+            CompanyAddress: company?.Address ?? invoice.CompanyAddress,
+            IssueDate: invoice.IssueDate,
+            DueDate: invoice.DueDate,
+            Subtotal: invoice.Subtotal,
+            TaxAmount: invoice.TaxAmount,
+            IrpfAmount: invoice.IrpfAmount,
+            SurchargeAmount: invoice.SurchargeAmount,
+            Total: invoice.Total,
+            Lines: invoice.InvoiceLines.Select(l => new PublicInvoiceLineDto
+            {
+                Description = l.Description,
+                Quantity = l.Quantity,
+                UnitPrice = l.UnitPrice,
+                TaxRate = l.TaxRate,
+                LineTotal = l.LineTotal,
+            }).ToList());
     }
 }
 
@@ -317,6 +462,11 @@ public class LockInvoiceHandler : IRequestHandler<LockInvoiceCommand, bool>
     private readonly IVerifactuSubmissionService _verifactuSub;
     private readonly IPublisher _publisher;
     private readonly IVerifactuSubmissionGateway _verifactuGateway;
+    private readonly IVerifactuModeSettings _verifactuMode;
+    private readonly IVerifactuAnulacionRegistrar _anulacionRegistrar;
+    private readonly IVerifactuChainQuery _verifactuChain;
+    private readonly IHttpContextCurrentUserAccessor _currentUser;
+    private readonly IBillingInvoiceSalesLinkQuery _salesLink;
     private readonly Microsoft.Extensions.Logging.ILogger<LockInvoiceHandler> _log;
 
     public LockInvoiceHandler(
@@ -326,6 +476,11 @@ public class LockInvoiceHandler : IRequestHandler<LockInvoiceCommand, bool>
         IVerifactuSubmissionService verifactuSub,
         IPublisher publisher,
         IVerifactuSubmissionGateway verifactuGateway,
+        IVerifactuModeSettings verifactuMode,
+        IVerifactuAnulacionRegistrar anulacionRegistrar,
+        IVerifactuChainQuery verifactuChain,
+        IHttpContextCurrentUserAccessor currentUser,
+        IBillingInvoiceSalesLinkQuery salesLink,
         Microsoft.Extensions.Logging.ILogger<LockInvoiceHandler> log)
     {
         _ctx              = ctx;
@@ -334,6 +489,11 @@ public class LockInvoiceHandler : IRequestHandler<LockInvoiceCommand, bool>
         _verifactuSub     = verifactuSub;
         _publisher        = publisher;
         _verifactuGateway = verifactuGateway;
+        _verifactuMode    = verifactuMode;
+        _anulacionRegistrar = anulacionRegistrar;
+        _verifactuChain     = verifactuChain;
+        _currentUser      = currentUser;
+        _salesLink        = salesLink;
         _log              = log;
     }
 
@@ -341,6 +501,7 @@ public class LockInvoiceHandler : IRequestHandler<LockInvoiceCommand, bool>
     {
         var inv = await _ctx.Invoices
             .Include(i => i.InvoiceLines)
+            .Include(i => i.RectifiedInvoice)
             .FirstOrDefaultAsync(i => i.Id == req.Id, ct);
         if (inv == null) return false;
 
@@ -361,21 +522,13 @@ public class LockInvoiceHandler : IRequestHandler<LockInvoiceCommand, bool>
 
         if (company != null && !string.IsNullOrEmpty(company.TaxId))
         {
-            var previousHuella = await _ctx.Invoices
-                .Where(i => i.Series == inv.Series
-                         && i.FiscalYear == inv.FiscalYear
-                         && i.SequenceNumber < inv.SequenceNumber
-                         && i.VerifactuHuella != null)
-                .OrderByDescending(i => i.SequenceNumber)
-                .Select(i => i.VerifactuHuella)
-                .FirstOrDefaultAsync(ct);
+            var previousHuella = await _verifactuChain.GetLastHuellaBeforeAsync(
+                inv.CompanyId, inv.Series, inv.FiscalYear, lockedAt.UtcDateTime, ct);
 
-            var tipoFactura = inv.InvoiceType switch
-            {
-                "Rectificativa" => "R1",
-                "Simplificada"  => "F2",
-                _               => "F1"
-            };
+            var tipoFactura = VerifactuTipoFactura.Resolve(
+                inv.InvoiceType, inv.RectifiedInvoice?.InvoiceType);
+
+            inv.VerifactuRealtimeSubmission = _verifactuMode.RealtimeSubmissionEnabled;
 
             (inv.VerifactuHuella, inv.VerifactuQrUrl) = _verifactu.Compute(
                 nifEmisor:        company.TaxId,
@@ -387,45 +540,111 @@ public class LockInvoiceHandler : IRequestHandler<LockInvoiceCommand, bool>
                 huellaAnterior:   previousHuella,
                 numeroRegistro:   inv.SequenceNumber,
                 fechaHoraHuella:  lockedAt);
+
+            if (!inv.VerifactuRealtimeSubmission)
+                inv.VerifactuQrUrl = null;
         }
 
         await _ctx.SaveChangesAsync(ct);
 
-        // ── Verifactu per-invoice submission via Hangfire (RD 1007/2023) ──────
-        // La factura queda bloqueada independientemente del resultado del envío.
-        // Errores se registran en el log del job y se reintentan automáticamente.
+        // ── Verifactu per-invoice submission / conservación local (RD 1007/2023) ─
         if (!string.IsNullOrEmpty(inv.VerifactuHuella))
         {
             _verifactuGateway.EnqueueVerifactuSubmission(inv.Id);
-            _log.LogInformation("VerifactuSubmissionJob enqueued for invoice {Number}", inv.Number);
+            _log.LogInformation(
+                "VerifactuSubmissionJob enqueued for invoice {Number} (realtime={Realtime})",
+                inv.Number, inv.VerifactuRealtimeSubmission);
         }
 
-        // AuditLog inmutable con hash
-        var auditEntry = new AuditLog
+        // Rectificativa bloqueada → anulación VeriFactu de la factura original
+        if (string.Equals(inv.InvoiceType, "Rectificativa", StringComparison.OrdinalIgnoreCase)
+            && inv.RectifiedInvoiceId.HasValue)
         {
-            Id = Guid.NewGuid(), CompanyId = inv.CompanyId,
-            UserId = Guid.Empty, Entity = "Invoice", EntityId = inv.Id,
-            Action = "Locked", Timestamp = DateTime.UtcNow,
-            OldValues = System.Text.Json.JsonSerializer.Serialize(new { IsLocked = false }),
-            NewValues = System.Text.Json.JsonSerializer.Serialize(new { IsLocked = true, inv.Hash })
-        };
-        auditEntry.Hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(
-            $"{auditEntry.Entity}|{auditEntry.EntityId}|{auditEntry.Action}|{auditEntry.Timestamp:O}")));
-        _appCtx.AuditLogs.Add(auditEntry);
-        await _appCtx.SaveChangesAsync(ct);
+            try
+            {
+                await _anulacionRegistrar.RegisterAsync(inv.RectifiedInvoiceId.Value, ct);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _log.LogWarning(ex, "No se pudo registrar anulación VeriFactu de factura original");
+            }
+        }
+
+        // AuditLog inmutable con hash (solo si hay usuario autenticado — evita FK inválida)
+        if (_currentUser.UserId is Guid auditUserId)
+        {
+            var auditEntry = new AuditLog
+            {
+                Id = Guid.NewGuid(), CompanyId = inv.CompanyId,
+                UserId = auditUserId, Entity = "Invoice", EntityId = inv.Id,
+                Action = "Locked", Timestamp = DateTime.UtcNow,
+                OldValues = System.Text.Json.JsonSerializer.Serialize(new { IsLocked = false }),
+                NewValues = System.Text.Json.JsonSerializer.Serialize(new { IsLocked = true, inv.Hash })
+            };
+            auditEntry.Hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(
+                $"{auditEntry.Entity}|{auditEntry.EntityId}|{auditEntry.Action}|{auditEntry.Timestamp:O}")));
+            _appCtx.AuditLogs.Add(auditEntry);
+            await _appCtx.SaveChangesAsync(ct);
+        }
+
+        var salesOrderId = await _salesLink.GetSalesOrderIdForBillingInvoiceAsync(inv.Id, ct);
 
         await _publisher.Publish(new InvoiceApprovedEvent
         {
             InvoiceId = inv.Id, CompanyId = inv.CompanyId,
-            InvoiceNumber = inv.Number, Subtotal = inv.Subtotal,
-            TaxAmount = inv.TaxAmount, IrpfAmount = inv.IrpfAmount,
-            SurchargeAmount = inv.SurchargeAmount, Total = inv.Total,
+            InvoiceNumber = inv.Number,
+            Subtotal = ToEur(inv.Subtotal),
+            TaxAmount = ToEur(inv.TaxAmount),
+            IrpfAmount = ToEur(inv.IrpfAmount),
+            SurchargeAmount = ToEur(inv.SurchargeAmount),
+            Total = inv.TotalEur > 0 ? inv.TotalEur : ToEur(inv.Total),
             ClientId = inv.ClientId, IssueDate = inv.IssueDate,
+            SalesOrderId = salesOrderId,
             Lines = inv.InvoiceLines.Select(l => new InvoiceLineEventDto
             {
                 ProductId = l.ProductId, Quantity = l.Quantity, UnitPrice = l.UnitPrice
             }).ToList()
         }, ct);
+
+        return true;
+
+        decimal ToEur(decimal amount)
+        {
+            if (string.Equals(inv.CurrencyCode, "EUR", StringComparison.OrdinalIgnoreCase))
+                return amount;
+            return Math.Round(amount * inv.ExchangeRateToEur, 2, MidpointRounding.AwayFromZero);
+        }
+    }
+}
+
+/// <summary>Baja de factura bloqueada + registro VeriFactu de anulación si aplica.</summary>
+public class CancelInvoiceHandler : IRequestHandler<CancelInvoiceCommand, bool>
+{
+    private readonly IBillingDbContext _ctx;
+    private readonly IVerifactuAnulacionRegistrar _anulacionRegistrar;
+
+    public CancelInvoiceHandler(IBillingDbContext ctx, IVerifactuAnulacionRegistrar anulacionRegistrar)
+    {
+        _ctx = ctx;
+        _anulacionRegistrar = anulacionRegistrar;
+    }
+
+    public async Task<bool> Handle(CancelInvoiceCommand req, CancellationToken ct)
+    {
+        var inv = await _ctx.Invoices.FirstOrDefaultAsync(i => i.Id == req.Id, ct);
+        if (inv is null) return false;
+
+        if (!inv.IsLocked)
+            throw new InvalidOperationException("Solo se pueden dar de baja facturas bloqueadas.");
+
+        if (inv.Status == "Cancelled")
+            throw new InvalidOperationException("La factura ya está anulada.");
+
+        inv.Status = "Cancelled";
+        await _ctx.SaveChangesAsync(ct);
+
+        if (!string.IsNullOrEmpty(inv.VerifactuHuella))
+            await _anulacionRegistrar.RegisterAsync(inv.Id, ct);
 
         return true;
     }
@@ -543,7 +762,17 @@ public class MarkPaidHandler : IRequestHandler<MarkPaidCommand, bool>
 
     public async Task<bool> Handle(MarkPaidCommand req, CancellationToken ct)
     {
-        var inv = await _ctx.Invoices.FirstOrDefaultAsync(i => i.Id == req.Id, ct);
+        // Guard clause inline (no FluentValidation): Billing no registra
+        // AddValidatorsFromAssembly, así que un validador aquí quedaría
+        // registrado pero nunca se ejecutaría (ADR-0018).
+        if (!PaymentMethods.IsValid(req.PaymentMethod))
+            throw new InvalidOperationException($"Método de pago no válido: {req.PaymentMethod}");
+
+        // IgnoreQueryFilters: this handler is also invoked from the Stripe webhook path
+        // (MarkInvoicePaidFromStripeHandler), which has no resolved tenant at all — the
+        // tenant query filter would otherwise make this lookup always return null there.
+        // Safe because the lookup is by unique Guid Id, not by any tenant-derived list.
+        var inv = await _ctx.Invoices.IgnoreQueryFilters().FirstOrDefaultAsync(i => i.Id == req.Id, ct);
         if (inv == null) return false;
 
         // Idempotency: already paid → skip silently
@@ -559,7 +788,7 @@ public class MarkPaidHandler : IRequestHandler<MarkPaidCommand, bool>
             CompanyId     = inv.CompanyId,
             ClientId      = inv.ClientId,
             InvoiceNumber = inv.Number,
-            Amount        = inv.Total,
+            Amount        = inv.TotalEur > 0 ? inv.TotalEur : inv.Total,
             PaymentDate   = DateTime.UtcNow,
             PaymentMethod = req.PaymentMethod
         }, ct);

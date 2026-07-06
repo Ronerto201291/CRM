@@ -2,6 +2,7 @@ using Erp.Domain.Common;
 
 namespace Erp.Modules.Billing.Domain.Entities
 {
+    [Obsolete("Scaffolding sin DbSet — ADR-0005")]
     public class FacturaEDocument : AuditableEntity
     {
         public Guid CompanyId { get; set; }
@@ -16,6 +17,7 @@ namespace Erp.Modules.Billing.Domain.Entities
         public string SignatureCertificate { get; set; } = string.Empty; // Huella digital cert.
     }
 
+    [Obsolete("Scaffolding sin DbSet — ADR-0005")]
     public class VerifactuDeclaration : AuditableEntity
     {
         public Guid CompanyId { get; set; }
@@ -32,6 +34,7 @@ namespace Erp.Modules.Billing.Domain.Entities
         public string SubmissionReference { get; set; } = string.Empty; // Referencia AEAT
     }
 
+    [Obsolete("Scaffolding sin DbSet — ADR-0005")]
     public class FacturaEGraphic : AuditableEntity
     {
         public Guid FacturaEDocumentId { get; set; }

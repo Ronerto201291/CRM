@@ -77,7 +77,7 @@ export interface ExpenseDocument {
     isValidated: boolean;
     isLocked: boolean;
     hashSignature?: string;
-    ocrData?: Record<string, any>;
+    ocrData?: Record<string, unknown>;
     createdAt: string;
 }
 
@@ -355,7 +355,7 @@ export interface PurchaseOrder {
     number: string;
     orderDate: string;
     supplierName: string;
-    status: 'Open' | 'PartiallyReceived' | 'Completed' | 'Cancelled';
+    status: 'Draft' | 'PendingApproval' | 'Approved' | 'Rejected';
     subtotal: number;
     taxAmount: number;
     total: number;

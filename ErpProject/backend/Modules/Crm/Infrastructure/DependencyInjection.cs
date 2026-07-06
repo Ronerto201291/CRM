@@ -1,7 +1,9 @@
 using Erp.Application.Common.Interfaces;
+using Erp.Modules.Crm.Application.Features.Crm.Validators;
 using Erp.Modules.Crm.Application.Interfaces;
 using Erp.Modules.Crm.Infrastructure.Data;
 using Erp.Modules.Crm.Infrastructure.Services;
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,12 +19,16 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("DefaultConnection missing.");
 
-        services.AddDbContext<CrmDbContext>(options =>
+        services.AddDbContext<CrmDbContext>((sp, options) =>
             options.UseNpgsql(connectionString)
+               .AddInterceptors(sp.GetRequiredService<Erp.Infrastructure.Interceptors.AuditSaveChangesInterceptor>())
                .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
 
         services.AddScoped<ICrmDbContext>(p => p.GetRequiredService<CrmDbContext>());
         services.AddScoped<IClientInfoService, ClientInfoService>();
+        services.AddScoped<ISupplierInfoService, SupplierInfoService>();
+        services.AddScoped<IAutomationRecurringQuery, AutomationRecurringQuery>();
+        services.AddValidatorsFromAssembly(typeof(CreateClientValidator).Assembly);
 
         return services;
     }

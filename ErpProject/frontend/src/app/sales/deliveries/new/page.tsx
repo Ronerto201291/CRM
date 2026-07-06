@@ -1,7 +1,10 @@
 "use client";
 
-import React, { useState, useCallback, useEffect } from "react";
-import PageContainer from "@/components/PageContainer";
+import React, { useState, useEffect } from "react";
+import PageListLayout from "@/components/PageListLayout";
+import FormErrorBanner from "@/components/FormErrorBanner";
+import { updateLineAt } from "@/lib/lineForm";
+import { deliveryNoteCreateSchema } from "@/lib/schemas/purchasingSalesCreateSchemas";
 
 interface SalesOrder {
     id: string;
@@ -22,7 +25,6 @@ const emptyLine = (): DeliveryLine => ({
 
 export default function NewDeliveryNotePage() {
     const [orders, setOrders] = useState<SalesOrder[]>([]);
-    const [selectedOrder, setSelectedOrder] = useState<SalesOrder | null>(null);
     const [form, setForm] = useState({
         salesOrderId: '',
         number: '',
@@ -30,6 +32,7 @@ export default function NewDeliveryNotePage() {
         lines: [emptyLine()] as DeliveryLine[],
     });
     const [saving, setSaving] = useState(false);
+    const [formError, setFormError] = useState<string | null>(null);
 
     useEffect(() => {
         fetch('/api/proxy/v1/sales/orders')
@@ -39,21 +42,21 @@ export default function NewDeliveryNotePage() {
     }, []);
 
     const selectOrder = (orderId: string) => {
-        const order = orders.find(o => o.id === orderId);
-        setSelectedOrder(order || null);
         setForm(f => ({ ...f, salesOrderId: orderId }));
     };
 
-    const updateLine = (i: number, key: keyof DeliveryLine, val: any) => {
-        const lines = [...form.lines];
-        (lines[i] as any)[key] = val;
-        setForm({ ...form, lines });
-    };
+    const updateLine = <K extends keyof DeliveryLine>(i: number, key: K, val: DeliveryLine[K]) =>
+        setForm({ ...form, lines: updateLineAt(form.lines, i, key, val) });
     const addLine = () => setForm({ ...form, lines: [...form.lines, emptyLine()] });
     const removeLine = (i: number) => setForm({ ...form, lines: form.lines.filter((_, idx) => idx !== i) });
 
     const submit = async () => {
-        if (!form.number) { alert('Introduce el número de albarán'); return; }
+        setFormError(null);
+        const parsed = deliveryNoteCreateSchema.safeParse(form);
+        if (!parsed.success) {
+            setFormError(parsed.error.issues[0]?.message ?? 'Revisa el formulario');
+            return;
+        }
         setSaving(true);
         try {
             const res = await fetch('/api/proxy/v1/sales/deliveries', {
@@ -62,11 +65,10 @@ export default function NewDeliveryNotePage() {
                 body: JSON.stringify(form),
             });
             if (res.ok) {
-                alert('Albarán creado correctamente');
                 window.location.href = '/sales/deliveries';
             } else {
                 const e = await res.json();
-                alert(e.error || e.message || 'Error al crear el albarán');
+                setFormError(e.error || e.message || 'Error al crear el albarán');
             }
         } finally {
             setSaving(false);
@@ -74,14 +76,13 @@ export default function NewDeliveryNotePage() {
     };
 
     return (
-        <PageContainer>
-            <div className="page-header">
-                <div>
-                    <h1 className="page-title">Nuevo Albarán de Entrega</h1>
-                    <p className="page-subtitle">Registrar entrega de mercancía</p>
-                </div>
-                <a href="/sales/deliveries" className="btn btn-secondary">← Volver</a>
-            </div>
+        <PageListLayout
+            title="Nuevo Albarán de Entrega"
+            subtitle="Registrar entrega de mercancía"
+            actions={<a href="/sales/deliveries" className="btn btn-secondary">← Volver</a>}
+        >
+
+            <FormErrorBanner message={formError} />
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '20px' }}>
                 <div className="form-group">
@@ -151,6 +152,6 @@ export default function NewDeliveryNotePage() {
                     {saving ? 'Creando...' : '✓ Crear Albarán'}
                 </button>
             </div>
-        </PageContainer>
+        </PageListLayout>
     );
 }

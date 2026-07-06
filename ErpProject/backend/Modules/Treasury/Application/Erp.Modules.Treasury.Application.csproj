@@ -14,7 +14,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\Erp.Application\Erp.Application.csproj" />
-    <ProjectReference Include="..\..\Accounting\Application\Erp.Modules.Accounting.Application.csproj" />
     <ProjectReference Include="..\Domain\Erp.Modules.Treasury.Domain.csproj" />
   </ItemGroup>
 

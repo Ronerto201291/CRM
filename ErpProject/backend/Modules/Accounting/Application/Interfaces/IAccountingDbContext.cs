@@ -1,4 +1,4 @@
-using Erp.Domain.Entities.Accounting;
+using Erp.Modules.Accounting.Domain.Entities;
 using Erp.Modules.Accounting.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,7 +11,7 @@ public interface IAccountingDbContext
     DbSet<JournalEntry> JournalEntries { get; }
     DbSet<JournalEntryLine> JournalEntryLines { get; }
     DbSet<FiscalPeriod> FiscalPeriods { get; }
-    DbSet<Erp.Domain.Entities.Accounting.FixedAsset> FixedAssets { get; }
+    DbSet<FixedAsset> FixedAssets { get; }
     DbSet<DeferredEntry> DeferredEntries { get; }
 
     // Phase 0 - Compliance & Legal
@@ -38,10 +38,12 @@ public interface IAccountingDbContext
 
     // Phase 3 - VAT & Fiscality
     DbSet<VatTransaction> VatTransactions { get; }
+    DbSet<VatRegime> VatRegimes { get; }
     DbSet<ProrrataCalculation> ProrrataCalculations { get; }
     DbSet<InversionDeSujetoActivo> InversionDeSujetoActivos { get; }
     DbSet<RecargoDEquivalencia> RecargoDEquivalencias { get; }
     DbSet<ViesDeclaration> ViesDeclarations { get; }
+    DbSet<VatLiquidation> VatLiquidations { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

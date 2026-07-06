@@ -64,5 +64,47 @@ public class PayrollDbContext : ModuleDbContextBase, IPayrollDbContext
             e.Property(x => x.IrpfWithheld).HasPrecision(18, 4);
             e.Property(x => x.NetPay).HasPrecision(18, 4);
         });
+
+        modelBuilder.Entity<PayrollTemplate>(e =>
+        {
+            e.HasIndex(x => new { x.CompanyId, x.Name });
+            e.Property(x => x.DefaultWeeklyHours).HasPrecision(6, 2);
+            e.Property(x => x.EmployeeSsRatePercent).HasPrecision(8, 4);
+            e.Property(x => x.EmployerSsRatePercent).HasPrecision(8, 4);
+            e.Property(x => x.DefaultIrpfRatePercent).HasPrecision(8, 4);
+        });
+
+        modelBuilder.Entity<PayrollDeduction>(e =>
+        {
+            e.HasOne(d => d.PayrollLine)
+                .WithMany(l => l.Deductions)
+                .HasForeignKey(d => d.PayrollLineId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.Property(x => x.Amount).HasPrecision(18, 4);
+        });
+
+        modelBuilder.Entity<SocialSecurityContribution>(e =>
+        {
+            e.HasOne(c => c.PayrollLine)
+                .WithMany(l => l.SocialSecurityContributions)
+                .HasForeignKey(c => c.PayrollLineId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.Property(x => x.BaseAmount).HasPrecision(18, 4);
+            e.Property(x => x.EmployeeRatePercent).HasPrecision(8, 4);
+            e.Property(x => x.EmployerRatePercent).HasPrecision(8, 4);
+            e.Property(x => x.EmployeeAmount).HasPrecision(18, 4);
+            e.Property(x => x.EmployerAmount).HasPrecision(18, 4);
+        });
+
+        modelBuilder.Entity<TaxableBase>(e =>
+        {
+            e.HasOne(b => b.PayrollLine)
+                .WithMany(l => l.TaxableBases)
+                .HasForeignKey(b => b.PayrollLineId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.Property(x => x.Amount).HasPrecision(18, 4);
+            e.Property(x => x.IrpfRatePercent).HasPrecision(8, 4);
+            e.Property(x => x.IrpfWithheld).HasPrecision(18, 4);
+        });
     }
 }

@@ -1,10 +1,14 @@
 using System;
+using Erp.Modules.Sales.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace Erp.Modules.Sales.Infrastructure.Migrations
 {
+    [DbContext(typeof(SalesDbContext))]
+    [Migration("20260415000000_InitialCreateSales")]
     public partial class InitialCreateSales : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)

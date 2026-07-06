@@ -52,7 +52,12 @@ public class UpdateCompanyHandler : IRequestHandler<UpdateCompanyCommand, bool>
         if (company == null) return false;
 
         company.Name           = request.Name    ?? company.Name;
-        company.TaxId          = request.TaxId   ?? company.TaxId;
+        if (request.TaxId is not null)
+        {
+            if (!Erp.Application.Common.Validation.SpanishTaxIdValidator.IsValid(request.TaxId))
+                throw new InvalidOperationException("NIF/CIF/NIE de empresa no válido.");
+            company.TaxId = request.TaxId;
+        }
         company.Address        = request.Address  ?? company.Address;
         company.QrUploadEnabled = request.QrUploadEnabled;
 

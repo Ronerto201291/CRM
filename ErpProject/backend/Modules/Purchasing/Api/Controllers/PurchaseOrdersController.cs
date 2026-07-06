@@ -1,7 +1,8 @@
-using Erp.Modules.Purchasing.Application.Interfaces;
-using Erp.Modules.Purchasing.Domain.Entities;
+using Erp.Application.Common.Attributes;
+using Erp.Modules.Purchasing.Application.Features.Orders;
+using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Asp.Versioning;
 
 namespace Erp.Modules.Purchasing.Api.Controllers;
@@ -9,110 +10,110 @@ namespace Erp.Modules.Purchasing.Api.Controllers;
 [ApiController]
 [Route("api/v{version:apiVersion}/purchasing/orders")]
 [ApiVersion("1.0")]
+[Authorize]
+[RequiredModule("Purchasing")]
 public class PurchaseOrdersController : ControllerBase
 {
-    private readonly IPurchasingDbContext _context;
+    private readonly IMediator _mediator;
 
-    public PurchaseOrdersController(IPurchasingDbContext context) => _context = context;
+    public PurchaseOrdersController(IMediator mediator) => _mediator = mediator;
 
     [HttpGet]
+    [RequirePermission(Permissions.PurchaseOrder.Read)]
     public async Task<IActionResult> GetAll(CancellationToken ct)
-    {
-        var list = await _context.PurchaseOrders
-            .Include(p => p.Lines)
-            .AsNoTracking()
-            .ToListAsync(ct);
-        return Ok(list);
-    }
+        => Ok(await _mediator.Send(new GetPurchaseOrdersQuery(), ct));
 
     [HttpGet("{id}")]
+    [RequirePermission(Permissions.PurchaseOrder.Read)]
     public async Task<IActionResult> Get(Guid id, CancellationToken ct)
     {
-        var po = await _context.PurchaseOrders
-            .Include(p => p.Lines)
-            .FirstOrDefaultAsync(p => p.Id == id, ct);
-        if (po == null) return NotFound();
-        return Ok(po);
-    }
-
-    public class CreatePoDto
-    {
-        public string Number { get; set; } = string.Empty;
-        public DateTime OrderDate { get; set; }
-        public List<CreatePoLineDto> Lines { get; set; } = new();
-    }
-
-    public class CreatePoLineDto
-    {
-        public Guid? ProductId { get; set; }
-        public decimal Quantity { get; set; }
-        public decimal UnitPrice { get; set; }
+        var result = await _mediator.Send(new GetPurchaseOrderByIdQuery(id), ct);
+        return result == null ? NotFound() : Ok(result);
     }
 
     [HttpPost]
+    [RequirePermission(Permissions.PurchaseOrder.Create)]
     public async Task<IActionResult> Create([FromBody] CreatePoDto dto, CancellationToken ct)
     {
-        var po = new PurchaseOrder
-        {
-            Number = dto.Number,
-            OrderDate = dto.OrderDate
-        };
-
-        foreach (var l in dto.Lines)
-        {
-            var line = new PurchaseOrderLine
-            {
-                ProductId = l.ProductId,
-                Quantity = l.Quantity,
-                UnitPrice = l.UnitPrice
-            };
-            po.Lines.Add(line);
-            _context.PurchaseOrderLines.Add(line);
-        }
-
-        _context.PurchaseOrders.Add(po);
-        await _context.SaveChangesAsync(ct);
-        return CreatedAtAction(nameof(Get), new { id = po.Id }, po);
+        var result = await _mediator.Send(new CreatePurchaseOrderCommand(
+            dto.SupplierId,
+            dto.Number,
+            dto.OrderDate,
+            dto.Lines.Select(l => new PurchaseOrderLineDto(Guid.Empty, l.ProductId, l.Quantity, l.UnitPrice)).ToList()), ct);
+        return CreatedAtAction(nameof(Get), new { id = result.Id }, result);
     }
 
     [HttpPut("{id}")]
+    [RequirePermission(Permissions.PurchaseOrder.Update)]
     public async Task<IActionResult> Update(Guid id, [FromBody] CreatePoDto dto, CancellationToken ct)
     {
-        var po = await _context.PurchaseOrders.Include(p => p.Lines).FirstOrDefaultAsync(p => p.Id == id, ct);
-        if (po == null) return NotFound();
-
-        po.Number = dto.Number;
-        po.OrderDate = dto.OrderDate;
-
-        // Simple replace lines: delete existing and add new
-        var existing = po.Lines.ToList();
-        foreach (var e in existing)
-            _context.PurchaseOrderLines.Remove(e);
-
-        po.Lines.Clear();
-        foreach (var l in dto.Lines)
-        {
-            var line = new PurchaseOrderLine
-            {
-                ProductId = l.ProductId,
-                Quantity = l.Quantity,
-                UnitPrice = l.UnitPrice
-            };
-            po.Lines.Add(line);
-            _context.PurchaseOrderLines.Add(line);
-        }
-
-        await _context.SaveChangesAsync(ct);
-        return Ok(po);
+        var result = await _mediator.Send(new UpdatePurchaseOrderCommand(
+            id,
+            dto.SupplierId,
+            dto.Number,
+            dto.OrderDate,
+            dto.Lines.Select(l => new PurchaseOrderLineDto(Guid.Empty, l.ProductId, l.Quantity, l.UnitPrice)).ToList()), ct);
+        return result == null ? NotFound() : Ok(result);
     }
 
     [HttpDelete("{id}")]
+    [RequirePermission(Permissions.PurchaseOrder.Delete)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+        => await _mediator.Send(new DeletePurchaseOrderCommand(id), ct) ? NoContent() : NotFound();
+
+    [HttpPost("{id}/submit-for-approval")]
+    [RequirePermission(Permissions.PurchaseOrder.Update)]
+    public async Task<IActionResult> SubmitForApproval(Guid id, CancellationToken ct)
     {
-        var po = await _context.PurchaseOrders.FindAsync(new object[] { id }, ct);
-        if (po == null) return NotFound();
-        _context.PurchaseOrders.Remove(po);
-        await _context.SaveChangesAsync(ct);
-        return NoContent();
+        try
+        {
+            return Ok(await _mediator.Send(new SubmitPurchaseOrderForApprovalCommand(id), ct));
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
     }
+
+    [HttpPost("{id}/approve")]
+    [RequirePermission(Permissions.PurchaseOrder.Approve)]
+    public async Task<IActionResult> Approve(Guid id, CancellationToken ct)
+    {
+        try
+        {
+            return Ok(await _mediator.Send(new ApprovePurchaseOrderCommand(id), ct));
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
+    [HttpPost("{id}/reject")]
+    [RequirePermission(Permissions.PurchaseOrder.Approve)]
+    public async Task<IActionResult> Reject(Guid id, [FromBody] RejectPoDto? dto, CancellationToken ct)
+    {
+        try
+        {
+            return Ok(await _mediator.Send(new RejectPurchaseOrderCommand(id, dto?.Reason), ct));
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
+    }
+}
+
+public class CreatePoDto
+{
+    public Guid SupplierId { get; set; }
+    public string Number { get; set; } = string.Empty;
+    public DateTime OrderDate { get; set; }
+    public List<CreatePoLineDto> Lines { get; set; } = new();
+}
+
+public class CreatePoLineDto
+{
+    public Guid? ProductId { get; set; }
+    public decimal Quantity { get; set; }
+    public decimal UnitPrice { get; set; }
+}
+
+public class RejectPoDto
+{
+    public string? Reason { get; set; }
 }

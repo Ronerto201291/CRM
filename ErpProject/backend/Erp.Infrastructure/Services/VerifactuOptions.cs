@@ -2,6 +2,15 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Erp.Infrastructure.Services;
 
+/// <summary>Modo de cumplimiento VERI*FACTU (RD 1007/2023).</summary>
+public enum VerifactuSubmissionMode
+{
+    /// <summary>Remisión de registros a AEAT en tiempo real (VERI*FACTU).</summary>
+    Verifactu = 0,
+    /// <summary>Registro local sin remisión en expedición (no VERI*FACTU).</summary>
+    LocalOnly = 1
+}
+
 /// <summary>
 /// Strongly-typed options for VERI*FACTU configuration (RD 1007/2023).
 /// Validated at startup — the application will REFUSE to start if NifSoftware
@@ -43,6 +52,11 @@ public sealed class VerifactuOptions
     /// Si es false (por defecto), envía a prewww1.aeat.es (PRE/homologación).
     /// </summary>
     public bool UseProduction { get; set; } = false;
+
+    /// <summary>
+    /// Verifactu = remisión TIKE en tiempo real; LocalOnly = registro local sin envío AEAT.
+    /// </summary>
+    public VerifactuSubmissionMode SubmissionMode { get; set; } = VerifactuSubmissionMode.Verifactu;
 
     // ── Known dummy / placeholder values that must never reach production ──
     private static readonly HashSet<string> FictitiousNifs =

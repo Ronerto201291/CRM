@@ -1,46 +1,24 @@
+using Erp.Application.Common.Attributes;
 using Erp.Application.Common.Interfaces;
-using Erp.Modules.Expenses.Domain.Entities;
-using Erp.Modules.Crm.Application.Interfaces;
-using Erp.Modules.Crm.Domain.Entities;
 using Erp.Modules.Expenses.Application.Features.Expenses.Commands;
 using Erp.Modules.Expenses.Application.Features.Expenses.Queries;
-using Erp.Modules.Expenses.Application.Interfaces;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 
 namespace Erp.Modules.Expenses.Api.Controllers;
 
+// [RequiredModule] is applied per-action (not at class level) because Upload is
+// AllowAnonymous (public token-based upload link) and has no resolved tenant/user
+// to check a module license against.
 [ApiController, Route("api/expenses")]
 public class ExpensesController : ControllerBase
 {
     private readonly IMediator _mediator;
-    private readonly IExpensesDbContext _expenses;
-    private readonly IApplicationDbContext _app;
-    private readonly ICrmDbContext _crmCtx;
-    private readonly IFileStorageService _storage;
-    private readonly string _bucket;
 
-    public ExpensesController(
-        IMediator mediator,
-        IExpensesDbContext expenses,
-        IApplicationDbContext app,
-        ICrmDbContext crmCtx,
-        IFileStorageService storage,
-        IConfiguration config)
-    {
-        _mediator = mediator;
-        _expenses = expenses;
-        _app = app;
-        _crmCtx = crmCtx;
-        _storage = storage;
-        _bucket = config["Storage:BucketName"] ?? "erp-expenses";
-    }
+    public ExpensesController(IMediator mediator) => _mediator = mediator;
 
-    // Upload — almacena en MinIO (RL-4: cifrado en reposo, sin disco local)
     [HttpPost("upload/{token}"), AllowAnonymous, RequestSizeLimit(10_000_000)]
     public async Task<IActionResult> Upload(string token, IFormFile file, [FromForm] string? comment, CancellationToken ct)
     {
@@ -51,39 +29,32 @@ public class ExpensesController : ControllerBase
         if (!IsValidFileSignature(file))
             return BadRequest(new { error = "El archivo no tiene un formato valido o esta corrupto." });
 
-        var company = await _app.Companies.IgnoreQueryFilters()
-            .FirstOrDefaultAsync(c => c.PublicUploadToken == token && c.QrUploadEnabled, ct);
-        if (company == null) return NotFound(new { error = "Token invalido o desactivado." });
+        await using var ms = new MemoryStream();
+        await file.CopyToAsync(ms, ct);
 
-        // Clave de objeto: {companyId}/{guid}{extension}
-        var objectKey = $"{company.Id}/{Guid.NewGuid()}{Path.GetExtension(file.FileName)}";
-        await using var stream = file.OpenReadStream();
-        await _storage.UploadAsync(_bucket, objectKey, stream, file.ContentType, ct);
-
-        var upload = new ExpenseUpload
+        try
         {
-            Id = Guid.NewGuid(), CompanyId = company.Id,
-            PublicTokenUsed = token, FileName = file.FileName,
-            FilePath = objectKey, // ahora es object key de MinIO, no ruta local
-            ContentType = file.ContentType,
-            Comment = comment, Status = "Pending"
-        };
-        _expenses.ExpenseUploads.Add(upload);
-        _crmCtx.ActivityLogs.Add(new ActivityLog
+            var result = await _mediator.Send(new UploadExpenseByTokenCommand
+            {
+                Token = token,
+                FileName = file.FileName,
+                ContentType = file.ContentType,
+                FileContent = ms.ToArray(),
+                Comment = comment
+            }, ct);
+            return Ok(new { message = result.Message, uploadId = result.UploadId });
+        }
+        catch (KeyNotFoundException ex)
         {
-            Id = Guid.NewGuid(), CompanyId = company.Id,
-            EntityType = "ExpenseUpload", EntityId = upload.Id,
-            Action = "Uploaded", Description = $"Documento subido via QR: {file.FileName}"
-        });
-        await _expenses.SaveChangesAsync(ct);
-        return Ok(new { message = "Documento recibido. Sera procesado automaticamente.", uploadId = upload.Id });
+            return NotFound(new { error = ex.Message });
+        }
     }
 
-    [HttpGet("uploads"), Authorize]
+    [HttpGet("uploads"), Authorize, RequiredModule("Expenses"), RequirePermission(Permissions.Expense.Read)]
     public async Task<IActionResult> GetUploads(CancellationToken ct)
         => Ok(await _mediator.Send(new GetExpenseUploadsQuery(), ct));
 
-    [HttpPost, Authorize]
+    [HttpPost, Authorize, RequiredModule("Expenses"), RequirePermission(Permissions.Expense.Create)]
     public async Task<IActionResult> CreateManual([FromBody] CreateExpenseDocumentCommand cmd, CancellationToken ct)
     {
         try
@@ -94,18 +65,22 @@ public class ExpensesController : ControllerBase
         catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
     }
 
-    [HttpGet, Authorize]
+    [HttpGet, Authorize, RequiredModule("Expenses"), RequirePermission(Permissions.Expense.Read)]
     public async Task<IActionResult> GetDocuments(CancellationToken ct)
         => Ok(await _mediator.Send(new GetExpenseDocumentsQuery(), ct));
 
-    [HttpGet("{id}"), Authorize]
+    [HttpGet("by-supplier/{supplierId:guid}"), Authorize, RequiredModule("Expenses"), RequirePermission(Permissions.Expense.Read)]
+    public async Task<IActionResult> GetBySupplier(Guid supplierId, CancellationToken ct)
+        => Ok(await _mediator.Send(new GetSupplierExpensesQuery { SupplierId = supplierId }, ct));
+
+    [HttpGet("{id}"), Authorize, RequiredModule("Expenses"), RequirePermission(Permissions.Expense.Read)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetExpenseByIdQuery { Id = id }, ct);
         return result == null ? NotFound() : Ok(result);
     }
 
-    [HttpPut("{id}"), Authorize]
+    [HttpPut("{id}"), Authorize, RequiredModule("Expenses"), RequirePermission(Permissions.Expense.Update)]
     public async Task<IActionResult> UpdateDraft(Guid id, [FromBody] UpdateExpenseDraftCommand cmd, CancellationToken ct)
     {
         cmd.Id = id;
@@ -117,7 +92,7 @@ public class ExpensesController : ControllerBase
         catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
     }
 
-    [HttpPost("{id}/lines"), Authorize]
+    [HttpPost("{id}/lines"), Authorize, RequiredModule("Expenses"), RequirePermission(Permissions.Expense.Manage)]
     public async Task<IActionResult> AddLine(Guid id, [FromBody] AddExpenseLineCommand cmd, CancellationToken ct)
     {
         cmd.ExpenseDocumentId = id;
@@ -129,7 +104,7 @@ public class ExpensesController : ControllerBase
         catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
     }
 
-    [HttpPut("{id}/lines/{lineId}"), Authorize]
+    [HttpPut("{id}/lines/{lineId}"), Authorize, RequiredModule("Expenses"), RequirePermission(Permissions.Expense.Manage)]
     public async Task<IActionResult> UpdateLine(Guid id, Guid lineId, [FromBody] UpdateExpenseLineCommand cmd, CancellationToken ct)
     {
         cmd.ExpenseDocumentId = id; cmd.LineId = lineId;
@@ -141,7 +116,7 @@ public class ExpensesController : ControllerBase
         catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
     }
 
-    [HttpDelete("{id}/lines/{lineId}"), Authorize]
+    [HttpDelete("{id}/lines/{lineId}"), Authorize, RequiredModule("Expenses"), RequirePermission(Permissions.Expense.Manage)]
     public async Task<IActionResult> DeleteLine(Guid id, Guid lineId, CancellationToken ct)
     {
         try
@@ -152,7 +127,19 @@ public class ExpensesController : ControllerBase
         catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
     }
 
-    [HttpPost("{id}/approve"), Authorize]
+    [HttpPost("{id}/submit-for-approval"), Authorize, RequiredModule("Expenses"), RequirePermission(Permissions.Expense.Update)]
+    public async Task<IActionResult> SubmitForApproval(Guid id, CancellationToken ct)
+    {
+        try
+        {
+            var result = await _mediator.Send(new SubmitExpenseForApprovalCommand { Id = id }, ct);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
+        catch (KeyNotFoundException) { return NotFound(); }
+    }
+
+    [HttpPost("{id}/approve"), Authorize, RequiredModule("Expenses"), RequirePermission(Permissions.Expense.Approve)]
     public async Task<IActionResult> Approve(Guid id, CancellationToken ct)
     {
         try
@@ -164,9 +151,22 @@ public class ExpensesController : ControllerBase
         catch (KeyNotFoundException) { return NotFound(); }
     }
 
-    [HttpGet("stats"), Authorize]
+    [HttpGet("stats"), Authorize, RequiredModule("Expenses"), RequirePermission(Permissions.Expense.Read)]
     public async Task<IActionResult> GetStats(CancellationToken ct)
         => Ok(await _mediator.Send(new GetExpenseStatsQuery(), ct));
+
+    [HttpGet("anomalies"), Authorize, RequiredModule("Expenses"), RequirePermission(Permissions.Expense.Read)]
+    public async Task<IActionResult> GetAnomalies(CancellationToken ct)
+        => Ok(await _mediator.Send(new GetExpenseAnomaliesQuery(), ct));
+
+    [HttpGet("suggest-category"), Authorize, RequiredModule("Expenses"), RequirePermission(Permissions.Expense.Read)]
+    public async Task<IActionResult> SuggestCategory(
+        [FromQuery] Guid? supplierId, [FromQuery] string? supplierTaxId, [FromQuery] string? description,
+        CancellationToken ct)
+        => Ok(await _mediator.Send(new SuggestExpenseCategoryQuery
+        {
+            SupplierId = supplierId, SupplierTaxId = supplierTaxId, Description = description
+        }, ct));
 
     private static bool IsValidFileSignature(IFormFile file)
     {

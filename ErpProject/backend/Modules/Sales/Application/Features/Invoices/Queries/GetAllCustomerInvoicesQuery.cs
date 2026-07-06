@@ -18,6 +18,8 @@ public record PaginatedCustomerInvoicesResult(
 public class CustomerInvoiceSummaryDto
 {
     public Guid Id { get; set; }
+    public Guid? BillingInvoiceId { get; set; }
+    public string? BillingInvoiceNumber { get; set; }
     public string Number { get; set; } = string.Empty;
     public DateTime InvoiceDate { get; set; }
     public decimal SubTotal { get; set; }
@@ -53,6 +55,8 @@ public class GetAllCustomerInvoicesQueryHandler : IRequestHandler<GetAllCustomer
             .Select(i => new CustomerInvoiceSummaryDto
             {
                 Id = i.Id,
+                BillingInvoiceId = i.BillingInvoiceId,
+                BillingInvoiceNumber = i.BillingInvoiceNumber,
                 Number = i.Number,
                 InvoiceDate = i.InvoiceDate,
                 SubTotal = i.SubTotal,

@@ -15,6 +15,7 @@ public interface ILicensingDbContext
     DbSet<Subscription> Subscriptions { get; }
     DbSet<Plan> Plans { get; }
     DbSet<PlanModule> PlanModules { get; }
+    DbSet<StripeWebhookEvent> StripeWebhookEvents { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

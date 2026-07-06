@@ -19,6 +19,11 @@
     </PackageReference>
     <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.3" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.16.0" />
+    <PackageReference Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.16.0-beta.1" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.16.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.16.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" Version="1.15.1" />
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.4" />
   </ItemGroup>
@@ -26,7 +31,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Erp.Application\Erp.Application.csproj" />
     <ProjectReference Include="..\Erp.Infrastructure\Erp.Infrastructure.csproj" />
-    <ProjectReference Include="..\Modules\Inventory\API\Erp.Modules.Inventory.Api.csproj" />
+    <ProjectReference Include="..\Modules\Inventory\Api\Erp.Modules.Inventory.Api.csproj" />
     <ProjectReference Include="..\Modules\Billing\Application\Erp.Modules.Billing.Application.csproj" />
     <ProjectReference Include="..\Modules\Crm\Application\Erp.Modules.Crm.Application.csproj" />
     <ProjectReference Include="..\Modules\Billing\Api\Erp.Modules.Billing.Api.csproj" />
@@ -39,8 +44,10 @@
     <ProjectReference Include="..\Modules\Inventory\Infrastructure\Erp.Modules.Inventory.Infrastructure.csproj" />
     <ProjectReference Include="..\Modules\Accounting\Infrastructure\Erp.Modules.Accounting.Infrastructure.csproj" />
     <ProjectReference Include="..\Modules\Expenses\Infrastructure\Erp.Modules.Expenses.Infrastructure.csproj" />
-    <ProjectReference Include="..\Modules\Purchasing\Erp.Modules.Purchasing.Infrastructure.csproj" />
-    <ProjectReference Include="..\Modules\Sales\Erp.Modules.Sales.Infrastructure.csproj" />
+    <ProjectReference Include="..\Modules\Purchasing\Api\Erp.Modules.Purchasing.Api.csproj" />
+    <ProjectReference Include="..\Modules\Purchasing\Infrastructure\Erp.Modules.Purchasing.Infrastructure.csproj" />
+    <ProjectReference Include="..\Modules\Sales\Api\Erp.Modules.Sales.Api.csproj" />
+    <ProjectReference Include="..\Modules\Sales\Infrastructure\Erp.Modules.Sales.Infrastructure.csproj" />
     <!-- Treasury module -->
     <ProjectReference Include="..\Modules\Treasury\Application\Erp.Modules.Treasury.Application.csproj" />
     <ProjectReference Include="..\Modules\Treasury\Api\Erp.Modules.Treasury.Api.csproj" />

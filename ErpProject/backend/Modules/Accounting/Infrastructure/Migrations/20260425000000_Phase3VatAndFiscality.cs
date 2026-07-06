@@ -1,10 +1,14 @@
 using System;
+using Erp.Modules.Accounting.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace Erp.Modules.Accounting.Infrastructure.Migrations
 {
+    [DbContext(typeof(AccountingDbContext))]
+    [Migration("20260425000000_Phase3VatAndFiscality")]
     public partial class Phase3VatAndFiscality : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)

@@ -82,7 +82,18 @@ public class MayorResult
 
 // ─── Queries ─────────────────────────────────────────────────────────────────
 
-public class GetJournalQuery : IRequest<List<JournalEntryListDto>> { public int? Year { get; set; } }
+public record PaginatedJournalResult(
+    IReadOnlyList<JournalEntryListDto> Items,
+    int TotalCount,
+    int Page,
+    int PageSize);
+
+public class GetJournalQuery : IRequest<PaginatedJournalResult>
+{
+    public int? Year { get; set; }
+    public int Page { get; set; } = 1;
+    public int PageSize { get; set; } = 50;
+}
 public class GetTrialBalanceQuery : IRequest<List<TrialBalanceLineDto>> { public int? Year { get; set; } }
 public class GetIVASoportadoQuery : IRequest<IVASoportadoResult> { public int? Year { get; set; } }
 public class GetIVARepercutidoQuery : IRequest<IVARepercutidoResult> { public int? Year { get; set; } }
@@ -92,17 +103,24 @@ public class GetMayorControllerQuery : IRequest<MayorResult> { public string Acc
 
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
-public class GetJournalHandler : IRequestHandler<GetJournalQuery, List<JournalEntryListDto>>
+public class GetJournalHandler : IRequestHandler<GetJournalQuery, PaginatedJournalResult>
 {
     private readonly IAccountingDbContext _ctx;
     public GetJournalHandler(IAccountingDbContext ctx) => _ctx = ctx;
 
-    public async Task<List<JournalEntryListDto>> Handle(GetJournalQuery request, CancellationToken ct)
+    public async Task<PaginatedJournalResult> Handle(GetJournalQuery request, CancellationToken ct)
     {
+        var page = Math.Max(1, request.Page);
+        var pageSize = Math.Clamp(request.PageSize, 1, 500);
+
         var q = _ctx.JournalEntries.Include(j => j.JournalEntryLines).AsQueryable();
         if (request.Year.HasValue) q = q.Where(j => j.Date.Year == request.Year.Value);
 
-        return await q.OrderByDescending(j => j.Date)
+        var totalCount = await q.CountAsync(ct);
+
+        var items = await q.OrderByDescending(j => j.Date)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(j => new JournalEntryListDto
             {
                 Id = j.Id, Date = j.Date, Reference = j.Reference, Description = j.Description,
@@ -115,6 +133,8 @@ public class GetJournalHandler : IRequestHandler<GetJournalQuery, List<JournalEn
                 TotalCredit = j.JournalEntryLines.Sum(l => l.Credit)
             })
             .ToListAsync(ct);
+
+        return new PaginatedJournalResult(items, totalCount, page, pageSize);
     }
 }
 
@@ -191,7 +211,7 @@ public class GetLiquidacionIVAHandler : IRequestHandler<GetLiquidacionIVAQuery, 
         var y = request.Year ?? DateTime.UtcNow.Year;
         var q = request.Quarter ?? ((DateTime.UtcNow.Month - 1) / 3 + 1);
         var startMonth = (q - 1) * 3 + 1;
-        var start = new DateTime(y, startMonth, 1);
+        var start = new DateTime(y, startMonth, 1, 0, 0, 0, DateTimeKind.Utc);
         var end   = start.AddMonths(3);
 
         var repercutido = await _ctx.JournalEntryLines

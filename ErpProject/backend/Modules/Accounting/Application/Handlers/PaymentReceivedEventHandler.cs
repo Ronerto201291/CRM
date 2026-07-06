@@ -1,5 +1,5 @@
 using Erp.Application.Common.Events;
-using Erp.Domain.Entities.Accounting;
+using Erp.Modules.Accounting.Domain.Entities;
 using Erp.Modules.Accounting.Application.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -11,8 +11,12 @@ namespace Erp.Modules.Accounting.Application.Handlers;
 /// Handles PaymentReceivedEvent to close the client receivable in the GL.
 ///
 /// Accounting Rules (Spanish PGC):
-/// - Debit:  572 (Bancos c/c) or 570 (Caja) = Amount
-/// - Credit: 430 (Clientes)                  = Amount
+/// - Debit: 570 (Caja) | 572 (Bancos) | 5721 (TPV pendiente de liquidar) |
+///   5722 (Bizum pendiente de liquidar), según PaymentMethod (ADR-0018 #42b) —
+///   TPV/Bizum van a una cuenta de pendiente de liquidar distinta de un banco
+///   normal porque el importe real llega neto de comisión y con desfase de
+///   días; así BankReconciliationService (Treasury) los concilia por separado.
+/// - Credit: 430 (Clientes) = Amount
 ///
 /// Idempotency key: JournalEntry.SourceType="Payment", SourceId=InvoiceId
 /// (PaymentId == InvoiceId by design in MarkPaidHandler)
@@ -47,8 +51,7 @@ public class PaymentReceivedEventHandler : INotificationHandler<PaymentReceivedE
                 "Processing PaymentReceivedEvent for invoice {InvoiceNumber} (Company: {CompanyId})",
                 notification.InvoiceNumber, notification.CompanyId);
 
-            // 572 Bancos c/c (default) or 570 Caja for cash payments
-            var bankAccountCode = notification.PaymentMethod == "cash" ? "570" : "572";
+            var bankAccountCode = TreasuryAccountCodeFor(notification.PaymentMethod);
             var bankAccount = await GetAccount(notification.CompanyId, bankAccountCode, cancellationToken)
                 ?? throw new InvalidOperationException($"Account {bankAccountCode} not found");
 
@@ -111,4 +114,18 @@ public class PaymentReceivedEventHandler : INotificationHandler<PaymentReceivedE
         => await _context.Accounts
             .AsNoTracking()
             .FirstOrDefaultAsync(a => a.CompanyId == companyId && a.Code == code, ct);
+
+    /// <summary>
+    /// Mapeo local a PaymentMethod (string libre validado en Billing, ver
+    /// Billing.Application.Features.Billing.PaymentMethods) — Accounting no
+    /// referencia el ensamblado de Billing, solo interpreta el mismo string ya
+    /// compartido vía PaymentReceivedEvent (Erp.Application.Common.Events).
+    /// </summary>
+    private static string TreasuryAccountCodeFor(string paymentMethod) => paymentMethod.ToLowerInvariant() switch
+    {
+        "cash" => "570",
+        "card" => "5721",
+        "bizum" => "5722",
+        _ => "572", // bank | transfer (default)
+    };
 }

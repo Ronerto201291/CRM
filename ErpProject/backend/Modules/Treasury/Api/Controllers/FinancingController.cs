@@ -1,218 +1,87 @@
-using Erp.Application.Common.Interfaces;
-using Erp.Modules.Treasury.Application.Interfaces;
-using Erp.Modules.Treasury.Domain.Entities;
+using Erp.Application.Common.Attributes;
+using Erp.Modules.Treasury.Application.Features.Financing;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace Erp.Modules.Treasury.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/treasury/financing")]
 [Authorize]
+[RequiredModule("Treasury")]
 public class FinancingController : ControllerBase
 {
-    private readonly ITreasuryDbContext _ctx;
-    private readonly ITenantContext _tenantContext;
+    private readonly IMediator _mediator;
 
-    public FinancingController(ITreasuryDbContext ctx, ITenantContext tenantContext)
-    {
-        _ctx = ctx;
-        _tenantContext = tenantContext;
-    }
-
-    // ─── Confirming ──────────────────────────────────────────────────────────────
+    public FinancingController(IMediator mediator) => _mediator = mediator;
 
     [HttpGet("confirming")]
+    [RequirePermission(Permissions.Financing.Read)]
     public async Task<IActionResult> GetConfirming([FromQuery] string? status, CancellationToken ct)
-    {
-        var tenantId = _tenantContext.TenantId
-            ?? throw new InvalidOperationException("Tenant not resolved");
-        var query = _ctx.ConfirmingOperations.Where(c => c.CompanyId == tenantId);
-        if (!string.IsNullOrEmpty(status))
-            query = query.Where(c => c.Status == status);
-        var ops = await query.AsNoTracking().ToListAsync(ct);
-        return Ok(ops.Select(o => new
-        {
-            o.Id,
-            o.SupplierId,
-            o.InvoiceId,
-            o.InvoiceAmount,
-            o.AdvancePercentage,
-            o.AdvanceAmount,
-            o.Fee,
-            o.CreationDate,
-            o.DueDate,
-            o.PaymentDate,
-            o.Status,
-            o.FinancingProvider
-        }));
-    }
+        => Ok(await _mediator.Send(new GetConfirmingQuery(status), ct));
 
     [HttpPost("confirming")]
+    [RequirePermission(Permissions.Financing.Create)]
     public async Task<IActionResult> CreateConfirming([FromBody] CreateConfirmingDto dto, CancellationToken ct)
     {
-        var tenantId = _tenantContext.TenantId
-            ?? throw new InvalidOperationException("Tenant not resolved");
-        var op = new ConfirmingOperation
-        {
-            Id = Guid.NewGuid(),
-            CompanyId = tenantId,
-            SupplierId = dto.SupplierId,
-            InvoiceId = dto.InvoiceId,
-            InvoiceAmount = dto.InvoiceAmount,
-            AdvancePercentage = dto.AdvancePercentage,
-            AdvanceAmount = dto.InvoiceAmount * dto.AdvancePercentage / 100m,
-            Fee = dto.Fee,
-            CreationDate = DateTime.UtcNow,
-            DueDate = dto.DueDate,
-            Status = "Active",
-            FinancingProvider = dto.FinancingProvider,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
-        _ctx.ConfirmingOperations.Add(op);
-        await _ctx.SaveChangesAsync(ct);
-        return Created("", new { id = op.Id, status = op.Status });
+        var result = await _mediator.Send(new CreateConfirmingCommand(
+            dto.SupplierId, dto.InvoiceId, dto.InvoiceAmount,
+            dto.AdvancePercentage, dto.Fee, dto.DueDate, dto.FinancingProvider), ct);
+        return Created("", result);
     }
 
     [HttpPatch("confirming/{id:guid}/pay")]
+    [RequirePermission(Permissions.Financing.Manage)]
     public async Task<IActionResult> PayConfirming(Guid id, CancellationToken ct)
     {
-        var tenantId = _tenantContext.TenantId
-            ?? throw new InvalidOperationException("Tenant not resolved");
-        var op = await _ctx.ConfirmingOperations
-            .FirstOrDefaultAsync(o => o.Id == id && o.CompanyId == tenantId, ct);
-        if (op == null) return NotFound();
-        op.Status = "Paid";
-        op.PaymentDate = DateTime.UtcNow;
-        op.UpdatedAt = DateTime.UtcNow;
-        await _ctx.SaveChangesAsync(ct);
-        return Ok(new { id = op.Id, status = op.Status, paymentDate = op.PaymentDate });
+        try
+        {
+            return Ok(await _mediator.Send(new PayConfirmingCommand(id), ct));
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
     }
-
-    // ─── Factoring ───────────────────────────────────────────────────────────────
 
     [HttpGet("factoring")]
+    [RequirePermission(Permissions.Financing.Read)]
     public async Task<IActionResult> GetFactoring([FromQuery] string? status, CancellationToken ct)
-    {
-        var tenantId = _tenantContext.TenantId
-            ?? throw new InvalidOperationException("Tenant not resolved");
-        var query = _ctx.FactoringOperations.Where(f => f.CompanyId == tenantId);
-        if (!string.IsNullOrEmpty(status))
-            query = query.Where(f => f.Status == status);
-        var ops = await query.AsNoTracking().ToListAsync(ct);
-        return Ok(ops.Select(o => new
-        {
-            o.Id,
-            o.ClientId,
-            o.InvoiceId,
-            o.InvoiceAmount,
-            o.AdvancePercentage,
-            o.AdvanceAmount,
-            o.DiscountFee,
-            o.CommissionAmount,
-            o.CreationDate,
-            o.DueDate,
-            o.PaymentDate,
-            o.Status,
-            o.FactoringProvider,
-            o.IsWithRecourse
-        }));
-    }
+        => Ok(await _mediator.Send(new GetFactoringQuery(status), ct));
 
     [HttpPost("factoring")]
+    [RequirePermission(Permissions.Financing.Create)]
     public async Task<IActionResult> CreateFactoring([FromBody] CreateFactoringDto dto, CancellationToken ct)
     {
-        var tenantId = _tenantContext.TenantId
-            ?? throw new InvalidOperationException("Tenant not resolved");
-        var op = new FactoringOperation
-        {
-            Id = Guid.NewGuid(),
-            CompanyId = tenantId,
-            ClientId = dto.ClientId,
-            InvoiceId = dto.InvoiceId,
-            InvoiceAmount = dto.InvoiceAmount,
-            AdvancePercentage = dto.AdvancePercentage,
-            AdvanceAmount = dto.InvoiceAmount * dto.AdvancePercentage / 100m,
-            DiscountFee = dto.DiscountFee,
-            CommissionAmount = dto.CommissionAmount,
-            CreationDate = DateTime.UtcNow,
-            DueDate = dto.DueDate,
-            Status = "Active",
-            FactoringProvider = dto.FactoringProvider,
-            IsWithRecourse = dto.IsWithRecourse,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
-        _ctx.FactoringOperations.Add(op);
-        await _ctx.SaveChangesAsync(ct);
-        return Created("", new { id = op.Id, status = op.Status });
+        var result = await _mediator.Send(new CreateFactoringCommand(
+            dto.ClientId, dto.InvoiceId, dto.InvoiceAmount,
+            dto.AdvancePercentage, dto.DiscountFee, dto.CommissionAmount,
+            dto.DueDate, dto.FactoringProvider, dto.IsWithRecourse), ct);
+        return Created("", result);
     }
 
     [HttpPatch("factoring/{id:guid}/pay")]
+    [RequirePermission(Permissions.Financing.Manage)]
     public async Task<IActionResult> PayFactoring(Guid id, CancellationToken ct)
     {
-        var tenantId = _tenantContext.TenantId
-            ?? throw new InvalidOperationException("Tenant not resolved");
-        var op = await _ctx.FactoringOperations
-            .FirstOrDefaultAsync(f => f.Id == id && f.CompanyId == tenantId, ct);
-        if (op == null) return NotFound();
-        op.Status = "Paid";
-        op.PaymentDate = DateTime.UtcNow;
-        op.UpdatedAt = DateTime.UtcNow;
-        await _ctx.SaveChangesAsync(ct);
-        return Ok(new { id = op.Id, status = op.Status });
+        try
+        {
+            return Ok(await _mediator.Send(new PayFactoringCommand(id), ct));
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
     }
-
-    // ─── Credit Lines ───────────────────────────────────────────────────────────
 
     [HttpGet("credit-lines")]
+    [RequirePermission(Permissions.Financing.Read)]
     public async Task<IActionResult> GetCreditLines(CancellationToken ct)
-    {
-        var tenantId = _tenantContext.TenantId
-            ?? throw new InvalidOperationException("Tenant not resolved");
-        var lines = await _ctx.FinancingAccounts
-            .Where(f => f.CompanyId == tenantId)
-            .AsNoTracking()
-            .ToListAsync(ct);
-        return Ok(lines.Select(l => new
-        {
-            l.Id,
-            l.Type,
-            l.Limit,
-            l.UtilizedAmount,
-            l.InterestRate,
-            l.Status,
-            l.StartDate,
-            l.ExpiryDate,
-            l.Provider
-        }));
-    }
+        => Ok(await _mediator.Send(new GetCreditLinesQuery(), ct));
 
     [HttpPost("credit-lines")]
+    [RequirePermission(Permissions.Financing.Create)]
     public async Task<IActionResult> CreateCreditLine([FromBody] CreateCreditLineDto dto, CancellationToken ct)
     {
-        var tenantId = _tenantContext.TenantId
-            ?? throw new InvalidOperationException("Tenant not resolved");
-        var line = new FinancingAccount
-        {
-            Id = Guid.NewGuid(),
-            CompanyId = tenantId,
-            Type = dto.Type,
-            Limit = dto.Limit,
-            UtilizedAmount = 0,
-            InterestRate = dto.InterestRate,
-            Status = "Active",
-            StartDate = dto.StartDate,
-            ExpiryDate = dto.ExpiryDate,
-            Provider = dto.Provider,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
-        _ctx.FinancingAccounts.Add(line);
-        await _ctx.SaveChangesAsync(ct);
-        return Created("", new { id = line.Id });
+        var result = await _mediator.Send(new CreateCreditLineCommand(
+            dto.Type, dto.Limit, dto.InterestRate,
+            dto.StartDate, dto.ExpiryDate, dto.Provider), ct);
+        return Created("", result);
     }
 }
 

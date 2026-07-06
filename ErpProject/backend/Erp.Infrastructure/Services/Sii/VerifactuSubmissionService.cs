@@ -77,7 +77,7 @@ public class VerifactuSubmissionService : IVerifactuSubmissionService
 
         // Parsear respuesta AEAT — el elemento EstadoEnvio indica el resultado
         var estado = ParseEstadoEnvio(body);
-        var ok     = estado == "Correcto";
+        var ok     = estado is "Correcto" or "AceptadoConErrores";
 
         if (!ok)
             _logger.LogWarning("TIKE returned EstadoEnvio={Estado}: {Body}", estado, body);

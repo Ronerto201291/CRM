@@ -20,15 +20,13 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     const [tenantName, setTenantName] = useState<string | null>(null);
     const [isHydrated, setIsHydrated] = useState(false);
 
-    // Cargar desde localStorage al montar
     useEffect(() => {
-        if (typeof window !== 'undefined') {
-            const stored = localStorage.getItem('tenantId');
-            const storedName = localStorage.getItem('tenantName');
-            setTenantId(stored);
-            setTenantName(storedName);
+        if (typeof window === 'undefined') return;
+        queueMicrotask(() => {
+            setTenantId(localStorage.getItem('tenantId'));
+            setTenantName(localStorage.getItem('tenantName'));
             setIsHydrated(true);
-        }
+        });
     }, []);
 
     const value: ITenantContext = {

@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import PageContainer from '@/components/PageContainer';
+import LegalDisclaimer, { FISCAL_EXPORT_DISCLAIMER_TEXT } from '@/components/LegalDisclaimer';
 
 interface ViesResult {
     isValid: boolean;
@@ -20,6 +21,15 @@ export default function AeatPage() {
     const [selYear, setSelYear]   = useState(year);
     const [selQ, setSelQ]         = useState(currentQ);
     const [downloading, setDownloading] = useState<string | null>(null);
+    const [declaring, setDeclaring] = useState(false);
+    const [declaration, setDeclaration] = useState<{
+        id: string;
+        totalDevengado: number;
+        ivaDeducible: number;
+        resultado: number;
+        resultadoTipo: string;
+        message: string;
+    } | null>(null);
 
     // VIES
     const [viesCountry, setViesCountry] = useState('');
@@ -71,6 +81,35 @@ export default function AeatPage() {
         finally { setViesLoading(false); }
     };
 
+    const declareModelo303 = async () => {
+        setDeclaring(true);
+        setDeclaration(null);
+        try {
+            const r = await fetch('/api/proxy/v1/accounting/vat/declare/modelo330', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ year: selYear, quarter: selQ }),
+            });
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok) {
+                alert(data.error || 'Error al registrar la declaración IVA.');
+                return;
+            }
+            setDeclaration({
+                id: data.id,
+                totalDevengado: data.totalDevengado,
+                ivaDeducible: data.ivaDeducible,
+                resultado: data.resultado,
+                resultadoTipo: data.resultadoTipo,
+                message: data.message,
+            });
+        } catch {
+            alert('Error de conexión al registrar la declaración.');
+        } finally {
+            setDeclaring(false);
+        }
+    };
+
     const periodo = `${selYear} T${selQ}`;
 
     return (
@@ -81,6 +120,10 @@ export default function AeatPage() {
                     <p className="page-subtitle">Exportación XML oficial · FacturaE · VIES · Mod. 303, 349</p>
                 </div>
             </div>
+
+            <LegalDisclaimer title="Aviso legal — modelos AEAT y exportes fiscales">
+                {FISCAL_EXPORT_DISCLAIMER_TEXT} Los modelos 303, 349, 347, 111, 190 y libros IVA son orientativos hasta validación con asesoría y programa AEAT oficial.
+            </LegalDisclaimer>
 
             {/* Selector período */}
             <div className="erp-card" style={{ padding: '16px 20px', marginBottom: '20px', display: 'flex', gap: '16px', alignItems: 'flex-end' }}>
@@ -117,6 +160,11 @@ export default function AeatPage() {
                     </div>
                     <div style={{ display: 'flex', gap: '8px' }}>
                         <button className="btn btn-secondary btn-sm"
+                            disabled={declaring}
+                            onClick={declareModelo303}>
+                            {declaring ? '⏳' : '📝'} Registrar declaración
+                        </button>
+                        <button className="btn btn-secondary btn-sm"
                             disabled={downloading === 'm303csv'}
                             onClick={() => downloadFile(
                                 `/api/proxy/accounting/export/modelo303?year=${selYear}&q=${selQ}`,
@@ -135,6 +183,29 @@ export default function AeatPage() {
                 <div style={{ padding: '12px 20px', fontSize: '12px', color: 'var(--text-muted)' }}>
                     Casillas 001–067 · IVA devengado, deducible y liquidación · Recargo de equivalencia
                 </div>
+                {declaration && (
+                    <div style={{
+                        margin: '0 20px 16px',
+                        padding: '12px 16px',
+                        borderRadius: '8px',
+                        background: 'var(--success-bg)',
+                        border: '1px solid #a7f3d0',
+                        fontSize: '13px',
+                    }}>
+                        <div style={{ fontWeight: 700, color: '#065f46', marginBottom: '6px' }}>
+                            Declaración registrada — {periodo}
+                        </div>
+                        <div>Devengado: <strong>{declaration.totalDevengado.toFixed(2)} €</strong></div>
+                        <div>Deducible: <strong>{declaration.ivaDeducible.toFixed(2)} €</strong></div>
+                        <div>
+                            Resultado ({declaration.resultadoTipo}):{' '}
+                            <strong>{declaration.resultado.toFixed(2)} €</strong>
+                        </div>
+                        <div style={{ marginTop: '6px', fontStyle: 'italic', color: '#065f46' }}>
+                            {declaration.message}
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Modelo 349 */}

@@ -1,14 +1,23 @@
 "use client";
 import React, { useState } from "react";
+
+interface ViesValidation {
+  countryCode: string;
+  vatNumber: string;
+  isValid: boolean;
+  validationStatus: string;
+}
+
 export default function ViesPage() {
   const [countryCode, setCountryCode] = useState("DE");
   const [vatNumber, setVatNumber] = useState("");
-  const [validation, setValidation] = useState<any>(null);
-  const validate = async () => {
-    const res = await fetch(`/api/v1/accounting/vies/validate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ countryCode, vatNumber })
+  const [validation, setValidation] = useState<ViesValidation | null>(null);
+    const validate = async () => {
+    const fullVat = `${countryCode}${vatNumber}`.toUpperCase();
+    const res = await fetch(`/api/proxy/v1/accounting/vies/validate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ countryCode, vatNumberOnly: vatNumber, vatNumber: fullVat }),
     });
     const data = await res.json();
     setValidation(data);

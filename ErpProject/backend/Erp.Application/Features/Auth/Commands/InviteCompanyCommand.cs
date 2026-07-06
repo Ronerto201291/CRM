@@ -48,7 +48,6 @@ public class InviteCompanyHandler : IRequestHandler<InviteCompanyCommand, Invite
             Id = Guid.NewGuid(),
             PlanName = "Pro", // Assuming invited clients start on a premium plan or trial
             ExpirationDate = DateTime.UtcNow.AddMonths(1), // Trial
-            ActiveModules = """["Billing","Crm","Accounting","Inventory","Expenses"]""",
             IsActive = true,
             StripeStatus = "trialing"
         };

@@ -8,6 +8,7 @@ public interface ITreasuryDbContext
     DbSet<BankAccount> BankAccounts { get; }
     DbSet<BankMovement> BankMovements { get; }
     DbSet<CashEffect> CashEffects { get; }
+    DbSet<CashSession> CashSessions { get; }
     DbSet<ReconciliationBatch> ReconciliationBatches { get; }
     DbSet<CashFlowForecast> CashFlowForecasts { get; }
     DbSet<PaymentOrder> PaymentOrders { get; }
@@ -25,5 +26,7 @@ public interface ITreasuryDbContext
     DbSet<ConsolidationAdjustment> ConsolidationAdjustments { get; }
     DbSet<ConsolidatedFinancialStatement> ConsolidatedFinancialStatements { get; }
     DbSet<IntercompanyTransaction> IntercompanyTransactions { get; }
+    DbSet<PosTerminal> PosTerminals { get; }
+    DbSet<PosPayment> PosPayments { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

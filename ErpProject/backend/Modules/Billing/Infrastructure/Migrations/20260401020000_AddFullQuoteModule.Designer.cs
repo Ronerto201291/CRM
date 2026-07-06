@@ -202,18 +202,11 @@ namespace Erp.Modules.Billing.Infrastructure.Migrations
                 b.Navigation("Invoice");
             });
 
-            modelBuilder.Entity("Erp.Modules.Billing.Domain.Entities.Invoice", b =>
-            {
-                b.Navigation("InvoiceLines");
-            });
-
             modelBuilder.Entity("Erp.Modules.Billing.Domain.Entities.Quote", b =>
             {
                 b.HasOne("Erp.Modules.Billing.Domain.Entities.Quote", "ParentQuote")
                     .WithMany().HasForeignKey("ParentQuoteId").OnDelete(DeleteBehavior.Restrict);
                 b.Navigation("ParentQuote");
-                b.Navigation("Lines");
-                b.Navigation("StatusHistory");
             });
 
             modelBuilder.Entity("Erp.Modules.Billing.Domain.Entities.QuoteLine", b =>
@@ -230,6 +223,17 @@ namespace Erp.Modules.Billing.Infrastructure.Migrations
                     .WithMany("StatusHistory").HasForeignKey("QuoteId")
                     .OnDelete(DeleteBehavior.Cascade).IsRequired();
                 b.Navigation("Quote");
+            });
+
+            modelBuilder.Entity("Erp.Modules.Billing.Domain.Entities.Invoice", b =>
+            {
+                b.Navigation("InvoiceLines");
+            });
+
+            modelBuilder.Entity("Erp.Modules.Billing.Domain.Entities.Quote", b =>
+            {
+                b.Navigation("Lines");
+                b.Navigation("StatusHistory");
             });
 #pragma warning restore 612, 618
         }

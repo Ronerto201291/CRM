@@ -47,6 +47,19 @@ public class ApproveExpenseCommand : IRequest<ApproveExpenseResult>
     public Guid Id { get; set; }
 }
 
+public class SubmitExpenseForApprovalCommand : IRequest<SubmitExpenseForApprovalResult>
+{
+    public Guid Id { get; set; }
+}
+
+public class SubmitExpenseForApprovalResult
+{
+    public string Status { get; set; } = string.Empty;
+    public string Message { get; set; } = string.Empty;
+    public bool AutoApproved { get; set; }
+    public ApproveExpenseResult? Approval { get; set; }
+}
+
 public class ApproveExpenseResult
 {
     public string Message { get; set; } = string.Empty;

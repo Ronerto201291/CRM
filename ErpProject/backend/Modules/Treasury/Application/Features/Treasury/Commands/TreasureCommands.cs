@@ -60,6 +60,27 @@ public record UpdateCashEffectStatusCommand(
     string NewStatus
 ) : IRequest<CashEffectDto>;
 
+public record GenerateCashEffectSepaCommand(
+    Guid EffectId,
+    string ClientIban,
+    string? ClientBic
+) : IRequest<CashEffectSepaResult>;
+
+public record GenerateCashEffectSddCommand(
+    Guid EffectId,
+    string ClientIban,
+    string? ClientBic,
+    string CreditorId,
+    string MandateId,
+    DateTime MandateSignatureDate
+) : IRequest<CashEffectSepaResult>;
+
+public record CashEffectSepaResult(
+    Guid EffectId,
+    byte[] XmlBytes,
+    string FileName,
+    bool Stored);
+
 // ─── Payment Orders ───────────────────────────────────────────────────────────
 
 public record CreatePaymentOrderCommand(
@@ -86,7 +107,8 @@ public record GenerateCashFlowForecastCommand(int Year, int Month)
 
 public record BankAccountDto(
     Guid Id, string Name, string Iban, string? BIC, string BankName,
-    decimal CurrentBalance, string CurrencyCode, bool IsActive, string? Notes);
+    decimal CurrentBalance, string CurrencyCode, bool IsActive, string? Notes,
+    string? AccountingAccountCode);
 
 public record BankMovementDto(
     Guid Id, Guid BankAccountId, DateTime Date, string Reference,

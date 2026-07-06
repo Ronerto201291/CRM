@@ -1,19 +1,16 @@
 using Erp.Application.Common.Interfaces;
 using Erp.Modules.Billing.Application.Interfaces;
-using Erp.Infrastructure.Services;
+using Erp.Modules.Billing.Domain.Entities;
 using Hangfire;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Erp.Infrastructure.Services;
 
 namespace Erp.Modules.Billing.Infrastructure.Services;
 
 /// <summary>
-/// Hangfire job que envía el XML VERI*FACTU de una factura bloqueada al registro TIKE de AEAT.
-/// Reemplaza el Task.Run fire-and-forget en LockInvoiceHandler.
-///
-/// El envío es asíncrono: si falla se reintenta hasta 3 veces con backoff exponencial.
-/// La factura queda bloqueada independientemente del resultado del envío — el log es la fuente de verdad.
+/// Hangfire job: envío VERI*FACTU (alta y anulación) con auditoría en BD.
 /// </summary>
 public class VerifactuSubmissionJob
 {
@@ -30,30 +27,34 @@ public class VerifactuSubmissionJob
         ILogger<VerifactuSubmissionJob> log,
         IOptions<VerifactuOptions> verifactuOpts)
     {
-        _billing           = billing;
-        _xmlGenerator     = xmlGenerator;
+        _billing = billing;
+        _xmlGenerator = xmlGenerator;
         _submissionService = submissionService;
-        _log               = log;
-        _useProduction     = verifactuOpts.Value.UseProduction;
+        _log = log;
+        _useProduction = verifactuOpts.Value.UseProduction;
     }
 
-    /// <summary>
-    /// Encola el envío de VERI*FACTU para una factura. Llamado desde LockInvoiceHandler
-    /// en lugar del antiguo Task.Run fire-and-forget.
-    /// </summary>
-    public static void Enqueue(Guid invoiceId)
-    {
-        BackgroundJob.Enqueue<VerifactuSubmissionJob>(
-            j => j.SubmitAsync(invoiceId, CancellationToken.None));
-    }
+    public static void Enqueue(Guid invoiceId) =>
+        BackgroundJob.Enqueue<VerifactuSubmissionJob>(j => j.SubmitAltaAsync(invoiceId, CancellationToken.None));
+
+    public static void EnqueueAnulacion(Guid invoiceId) =>
+        BackgroundJob.Enqueue<VerifactuSubmissionJob>(j => j.SubmitAnulacionAsync(invoiceId, CancellationToken.None));
 
     [AutomaticRetry(Attempts = 3, DelaysInSeconds = new[] { 10, 30, 120 })]
-    public async Task SubmitAsync(Guid invoiceId, CancellationToken ct = default)
-    {
-        var inv = await _billing.Invoices
-            .Include(i => i.InvoiceLines)
-            .FirstOrDefaultAsync(i => i.Id == invoiceId, ct);
+    public Task SubmitAltaAsync(Guid invoiceId, CancellationToken ct) =>
+        SubmitCoreAsync(invoiceId, "Alta", _xmlGenerator.GenerateSingleInvoiceRegistroAsync, ct);
 
+    [AutomaticRetry(Attempts = 3, DelaysInSeconds = new[] { 10, 30, 120 })]
+    public Task SubmitAnulacionAsync(Guid invoiceId, CancellationToken ct) =>
+        SubmitCoreAsync(invoiceId, "Anulacion", _xmlGenerator.GenerateAnulacionRegistroAsync, ct);
+
+    private async Task SubmitCoreAsync(
+        Guid invoiceId,
+        string submissionType,
+        Func<Guid, CancellationToken, Task<string>> xmlFactory,
+        CancellationToken ct)
+    {
+        var inv = await _billing.Invoices.FirstOrDefaultAsync(i => i.Id == invoiceId, ct);
         if (inv == null)
         {
             _log.LogWarning("VerifactuSubmissionJob: invoice {InvoiceId} not found", invoiceId);
@@ -62,46 +63,97 @@ public class VerifactuSubmissionJob
 
         if (string.IsNullOrEmpty(inv.VerifactuHuella))
         {
-            _log.LogInformation("VerifactuSubmissionJob: invoice {Number} has no VerifactuHuella, skipping", inv.Number);
+            _log.LogInformation("VerifactuSubmissionJob: invoice {Number} sin huella, omitiendo", inv.Number);
+            return;
+        }
+
+        var isLocalOnly = !inv.VerifactuRealtimeSubmission;
+        if (submissionType == "Anulacion" && string.IsNullOrEmpty(inv.VerifactuAnulacionHuella))
+        {
+            _log.LogWarning("VerifactuSubmissionJob: factura {Number} sin huella de anulación", inv.Number);
             return;
         }
 
         _log.LogInformation(
-            "VerifactuSubmissionJob: submitting invoice {Number} (Id={InvoiceId}) to AEAT TIKE",
-            inv.Number, invoiceId);
+            "VerifactuSubmissionJob: {Type} factura {Number} (localOnly={Local})",
+            submissionType, inv.Number, isLocalOnly);
 
         try
         {
-            var xml = await _xmlGenerator.GenerateRegistroAsync(
-                inv.CompanyId,
-                inv.IssueDate.Year,
-                inv.IssueDate.Month,
-                ct);
+            var xml = await xmlFactory(invoiceId, ct);
+
+            if (isLocalOnly)
+            {
+                _billing.VerifactuSubmissionLogs.Add(new VerifactuSubmissionLog
+                {
+                    Id = Guid.NewGuid(),
+                    CompanyId = inv.CompanyId,
+                    InvoiceId = inv.Id,
+                    InvoiceNumber = inv.Number,
+                    SubmissionType = submissionType,
+                    EstadoEnvio = "ConservacionLocal",
+                    Success = true,
+                    IsProduction = false,
+                    RawResponse = xml.Length > 4000 ? xml[..4000] : xml,
+                    SubmittedAt = DateTime.UtcNow
+                });
+                await _billing.SaveChangesAsync(ct);
+                _log.LogInformation(
+                    "VerifactuSubmissionJob: {Type} {Number} archivado localmente (RRSIF)",
+                    submissionType, inv.Number);
+                return;
+            }
 
             var result = await _submissionService.SubmitSingleAsync(xml, _useProduction, ct);
+            var success = result.Success || result.EstadoEnvio == "AceptadoConErrores";
 
-            if (result.Success)
+            _billing.VerifactuSubmissionLogs.Add(new VerifactuSubmissionLog
             {
-                _log.LogInformation(
-                    "VerifactuSubmissionJob: invoice {Number} accepted by AEAT (EstadoEnvio={Estado})",
-                    inv.Number, result.EstadoEnvio);
+                Id = Guid.NewGuid(),
+                CompanyId = inv.CompanyId,
+                InvoiceId = inv.Id,
+                InvoiceNumber = inv.Number,
+                SubmissionType = submissionType,
+                EstadoEnvio = result.EstadoEnvio,
+                Success = success,
+                IsProduction = _useProduction,
+                RawResponse = result.RawResponse?.Length > 4000
+                    ? result.RawResponse[..4000]
+                    : result.RawResponse,
+                SubmittedAt = DateTime.UtcNow
+            });
 
-                // Marcar la factura como enviada exitosamente para evitar reenvíos
+            if (success && submissionType == "Alta")
                 inv.VerifactuSubmittedAt = DateTime.UtcNow;
-                await _billing.SaveChangesAsync(ct);
-            }
+            if (success && submissionType == "Anulacion")
+                inv.VerifactuAnulacionSubmittedAt = DateTime.UtcNow;
+
+            await _billing.SaveChangesAsync(ct);
+
+            if (success)
+                _log.LogInformation("VerifactuSubmissionJob: {Type} {Number} aceptado ({Estado})",
+                    submissionType, inv.Number, result.EstadoEnvio);
             else
-            {
-                _log.LogWarning(
-                    "VerifactuSubmissionJob: invoice {Number} AEAT returned {Estado}: {Raw}",
-                    inv.Number, result.EstadoEnvio, result.RawResponse);
-            }
+                _log.LogWarning("VerifactuSubmissionJob: {Type} {Number} rechazado ({Estado})",
+                    submissionType, inv.Number, result.EstadoEnvio);
         }
         catch (Exception ex)
         {
-            _log.LogError(ex,
-                "VerifactuSubmissionJob: failed to submit invoice {Number} to AEAT TIKE",
-                inv.Number);
+            _billing.VerifactuSubmissionLogs.Add(new VerifactuSubmissionLog
+            {
+                Id = Guid.NewGuid(),
+                CompanyId = inv.CompanyId,
+                InvoiceId = inv.Id,
+                InvoiceNumber = inv.Number,
+                SubmissionType = submissionType,
+                EstadoEnvio = "Exception",
+                Success = false,
+                IsProduction = _useProduction,
+                RawResponse = ex.Message,
+                SubmittedAt = DateTime.UtcNow
+            });
+            await _billing.SaveChangesAsync(ct);
+            _log.LogError(ex, "VerifactuSubmissionJob: fallo {Type} factura {Number}", submissionType, inv.Number);
             throw;
         }
     }

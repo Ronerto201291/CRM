@@ -10,6 +10,8 @@ public class SupplierDto
     public string Address { get; set; } = string.Empty;
     public bool IsActive { get; set; }
     public DateTime CreatedAt { get; set; }
+    public bool PublicUploadEnabled { get; set; }
+    public string? PublicUploadUrl { get; set; }
 }
 
 public class SupplierDetailDto : SupplierDto

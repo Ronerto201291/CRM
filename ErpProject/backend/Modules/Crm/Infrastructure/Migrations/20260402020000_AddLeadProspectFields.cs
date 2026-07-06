@@ -1,3 +1,5 @@
+using Erp.Modules.Crm.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -5,6 +7,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Erp.Modules.Crm.Infrastructure.Migrations
 {
     /// <inheritdoc />
+    [DbContext(typeof(CrmDbContext))]
+    [Migration("20260402020000_AddLeadProspectFields")]
     public partial class AddLeadProspectFields : Migration
     {
         /// <inheritdoc />

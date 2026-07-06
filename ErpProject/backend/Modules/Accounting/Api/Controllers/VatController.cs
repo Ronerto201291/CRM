@@ -1,56 +1,52 @@
+﻿using Erp.Application.Common.Attributes;
+using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Erp.Modules.Accounting.Application.Features.Vat;
 
 namespace Erp.Modules.Accounting.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/accounting/vat")]
+[Authorize]
+[RequiredModule("Accounting")]
 public class VatController : ControllerBase
 {
-    [HttpPost("calculate")]
-    public IActionResult CalculateVat([FromBody] CalculateVatRequest request)
-    {
-        var vatAmount = request.Amount * request.VatRate;
-        var total = request.Amount + vatAmount;
+    private readonly IMediator _mediator;
 
-        return Ok(new
-        {
-            id = Guid.NewGuid(),
-            amount = request.Amount,
-            vatRate = request.VatRate,
-            vatAmount = vatAmount,
-            total = total,
-            status = "Calculated"
-        });
+    public VatController(IMediator mediator) => _mediator = mediator;
+
+    [HttpPost("calculate")]
+    [RequirePermission(Permissions.Vat.Manage)]
+    public async Task<IActionResult> CalculateVat([FromBody] CalculateVatCommand command, CancellationToken ct)
+    {
+        var result = await _mediator.Send(command, ct);
+        return Ok(result);
     }
 
     [HttpGet("rates")]
-    public IActionResult GetVatRates()
-    {
-        return Ok(new[]
-        {
-            new { type = "Standard", rate = 0.21m, applies = "General supplies" },
-            new { type = "Reduced", rate = 0.10m, applies = "Food, books" },
-            new { type = "SuperReduced", rate = 0.04m, applies = "Essential goods" },
-            new { type = "Zero", rate = 0m, applies = "Exports" }
-        });
-    }
+    [RequirePermission(Permissions.Vat.Read)]
+    public IActionResult GetVatRates() => Ok(SpanishVatRates.All);
 
+    /// <summary>Nombre legacy «modelo330» — el modelo vigente es el 303 (el 330 quedó obsoleto en 2014).</summary>
     [HttpPost("declare/modelo330")]
-    public IActionResult DeclareModelo330([FromBody] object dto)
+    [RequirePermission(Permissions.Vat.Manage)]
+    public async Task<IActionResult> DeclareModelo330([FromBody] DeclareModelo330Request request, CancellationToken ct)
     {
-        return Created("", new
+        try
         {
-            id = Guid.NewGuid(),
-            modelo = "330",
-            status = "Declared",
-            message = "Modelo 330 declarado exitosamente"
-        });
+            var result = await _mediator.Send(new DeclareModelo330Command(request.Year, request.Quarter), ct);
+            return Created("", result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 }
 
-public class CalculateVatRequest
+public class DeclareModelo330Request
 {
-    public decimal Amount { get; set; }
-    public decimal VatRate { get; set; } = 0.21m;
+    public int Year { get; set; }
+    public int Quarter { get; set; } = 1;
 }
-

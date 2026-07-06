@@ -11,8 +11,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Asp.Versioning.Mvc" Version="8.1.0" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Application\Erp.Modules.Crm.Application.csproj" />
-    <ProjectReference Include="..\..\..\Modules\Expenses\Application\Erp.Modules.Expenses.Application.csproj" />
+    <ProjectReference Include="..\Infrastructure\Erp.Modules.Crm.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

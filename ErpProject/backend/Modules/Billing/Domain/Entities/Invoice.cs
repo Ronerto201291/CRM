@@ -57,6 +57,15 @@ public class Invoice : AuditableEntity
     public string? CompanyName   { get; set; }
     public string? CompanyAddress { get; set; }
 
+    /// <summary>ISO 4217 (EUR por defecto). Importes de la factura en esta divisa.</summary>
+    public string CurrencyCode { get; set; } = "EUR";
+
+    /// <summary>Tipo de cambio a EUR en fecha de emisión (1 unidad de divisa → EUR).</summary>
+    public decimal ExchangeRateToEur { get; set; } = 1m;
+
+    /// <summary>Total convertido a EUR para contabilidad y reporting.</summary>
+    public decimal TotalEur { get; set; }
+
     // Importes
     public decimal Subtotal { get; set; }
     public decimal TaxAmount { get; set; }       // IVA total
@@ -78,9 +87,18 @@ public class Invoice : AuditableEntity
     public string? VerifactuHuella { get; set; }  // SHA256 per Annex II (computed at lock time)
     public string? VerifactuQrUrl { get; set; }   // AEAT validation URL (embedded as QR on PDF)
     public DateTime? VerifactuSubmittedAt { get; set; } // Timestamp de envío exitoso a AEAT (null = pendiente)
+    /// <summary>Huella del registro de anulación encadenado (RD 1007/2023).</summary>
+    public string? VerifactuAnulacionHuella { get; set; }
+    public DateTime? VerifactuAnulacionAt { get; set; }
+    public DateTime? VerifactuAnulacionSubmittedAt { get; set; }
+    /// <summary>Si true, modo VERI*FACTU (remisión TIKE); si false, registro local sin remisión.</summary>
+    public bool VerifactuRealtimeSubmission { get; set; } = true;
 
     // Accounting link
     public Guid? JournalEntryId { get; set; }
-    
+
+    /// <summary>Token único para el portal de visualización del cliente (ADR-0018 #39). Se genera al crear.</summary>
+    public string PublicViewToken { get; set; } = Guid.NewGuid().ToString("N");
+
     public ICollection<InvoiceLine> InvoiceLines { get; set; } = new List<InvoiceLine>();
 }

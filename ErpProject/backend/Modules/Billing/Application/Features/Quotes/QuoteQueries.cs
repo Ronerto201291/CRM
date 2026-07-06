@@ -106,12 +106,20 @@ public record QuotePublicDto(
 // QUERIES
 // ─────────────────────────────────────────────────────────────────────────────
 
-public class GetQuotesQuery : IRequest<List<QuoteSummaryDto>>
+public record PaginatedQuotesResult(
+    IReadOnlyList<QuoteSummaryDto> Items,
+    int TotalCount,
+    int Page,
+    int PageSize);
+
+public class GetQuotesQuery : IRequest<PaginatedQuotesResult>
 {
     public string? Status { get; set; }
     public string? ClientName { get; set; }
     public DateTime? DateFrom { get; set; }
     public DateTime? DateTo { get; set; }
+    public int Page { get; set; } = 1;
+    public int PageSize { get; set; } = 50;
 }
 
 public class GetQuoteQuery : IRequest<QuoteDetailDto?>

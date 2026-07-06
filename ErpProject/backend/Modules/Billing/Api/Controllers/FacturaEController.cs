@@ -1,5 +1,6 @@
-using Erp.Application.Common.Interfaces;
-using Erp.Modules.Billing.Application.Interfaces;
+using Erp.Application.Common.Attributes;
+using Erp.Modules.Billing.Application.Features.Billing.Queries;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -7,47 +8,72 @@ namespace Erp.Modules.Billing.Api.Controllers;
 
 /// <summary>
 /// Endpoints para generación de FacturaE 3.2.2 (Ley 18/2022 Crea y Crece).
-/// Todos los endpoints requieren autenticación JWT y que la factura esté bloqueada (IsLocked=true).
 /// </summary>
 [ApiController]
 [Route("api/v1/billing/facturae")]
 [Authorize]
+[RequiredModule("Billing")]
 public class FacturaEController : ControllerBase
 {
-    private readonly IFacturaEService _facturaE;
-    private readonly ITenantContext   _tenant;
+    private readonly IMediator _mediator;
 
-    public FacturaEController(IFacturaEService facturaE, ITenantContext tenant)
-    {
-        _facturaE = facturaE;
-        _tenant   = tenant;
-    }
+    public FacturaEController(IMediator mediator) => _mediator = mediator;
 
-    /// <summary>
-    /// GET /api/v1/billing/facturae/{invoiceId}
-    /// Genera y descarga el XML FacturaE 3.2.2 de la factura indicada.
-    /// La factura debe estar bloqueada (IsLocked=true) — Ley 11/2021 Antifraude.
-    /// El XML generado cumple el esquema oficial Facturae32.xsd.
-    /// </summary>
     [HttpGet("{invoiceId:guid}")]
+    [RequirePermission(Permissions.FacturaE.Export)]
     public async Task<IActionResult> GenerateFacturaE(Guid invoiceId, CancellationToken ct)
     {
-        var tenantId = _tenant.TenantId
-            ?? throw new InvalidOperationException("Tenant no resuelto.");
-
         try
         {
-            var (xmlBytes, fileName) = await _facturaE.GenerateAsync(invoiceId, tenantId, ct);
-            return File(xmlBytes, "application/xml", fileName);
+            var result = await _mediator.Send(new GenerateFacturaEQuery(invoiceId), ct);
+            return File(result.XmlBytes, "application/xml", result.FileName);
         }
-        catch (KeyNotFoundException ex)
+        catch (KeyNotFoundException ex) { return NotFound(new { error = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
+    [HttpGet("{invoiceId:guid}/signed")]
+    [RequirePermission(Permissions.FacturaE.Export)]
+    public async Task<IActionResult> GenerateSignedFacturaE(Guid invoiceId, CancellationToken ct)
+    {
+        try
         {
-            return NotFound(new { error = ex.Message });
+            var result = await _mediator.Send(new GenerateSignedFacturaEQuery(invoiceId), ct);
+            return File(result.XmlBytes, "application/xml", result.FileName);
         }
-        catch (InvalidOperationException ex)
+        catch (KeyNotFoundException ex) { return NotFound(new { error = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
+    [HttpGet("{invoiceId:guid}/validate")]
+    [RequirePermission(Permissions.FacturaE.Read)]
+    public async Task<IActionResult> ValidateFacturaE(Guid invoiceId, CancellationToken ct)
+    {
+        try
         {
-            // Factura no bloqueada u otro error de negocio
-            return BadRequest(new { error = ex.Message });
+            var result = await _mediator.Send(new ValidateFacturaEQuery(invoiceId), ct);
+            return Ok(new
+            {
+                valid = result.Valid,
+                fileName = result.FileName,
+                errors = result.Errors,
+                warnings = result.Warnings
+            });
         }
+        catch (KeyNotFoundException ex) { return NotFound(new { error = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
+    [HttpPost("{invoiceId:guid}/submit-face")]
+    [RequirePermission(Permissions.FacturaE.Manage)]
+    public async Task<IActionResult> SubmitToFace(Guid invoiceId, CancellationToken ct)
+    {
+        try
+        {
+            var result = await _mediator.Send(new SubmitFacturaEFaceCommand(invoiceId), ct);
+            return result.Success ? Ok(result) : StatusCode(501, result);
+        }
+        catch (KeyNotFoundException ex) { return NotFound(new { error = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
     }
 }

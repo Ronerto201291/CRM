@@ -9,6 +9,47 @@ namespace Erp.Application.Common.Events;
 public interface IDomainEvent : INotification { }
 
 /// <summary>
+/// Fired when a TPV terminal registers a card payment against an invoice (ADR-0018 #41).
+/// → Billing: MarkPaidCommand (PaymentMethod = card).
+/// </summary>
+public class InvoiceCardPaymentRequestedEvent : IDomainEvent
+{
+    public Guid InvoiceId { get; set; }
+    public Guid CompanyId { get; set; }
+    public Guid PosTerminalId { get; set; }
+    public decimal Amount { get; set; }
+    public string? ExternalReference { get; set; }
+}
+
+/// <summary>
+/// Fired when a new Company is created (registro inicial o alta adicional
+/// multi-empresa, ver ADR-0002).
+/// → Accounting: siembra el plan contable PGC (ver SeedChartOfAccountsHandler) —
+/// sin este evento una empresa nueva no tiene ninguna cuenta y cualquier cobro
+/// de factura falla (hallazgo real corregido, ver ADR-0018).
+/// </summary>
+public class CompanyCreatedEvent : IDomainEvent
+{
+    public Guid CompanyId { get; set; }
+}
+
+/// <summary>
+/// Fired by Treasury (CloseCashSessionHandler) when a cash session closes
+/// with a non-zero difference between the expected and counted balance
+/// (ADR-0018 #42b — arqueo de caja).
+/// → Accounting: registra el ajuste contable (668/778) — Treasury nunca crea
+/// asientos contables directamente.
+/// </summary>
+public class CashSessionClosedEvent : IDomainEvent
+{
+    public Guid CashSessionId { get; set; }
+    public Guid CompanyId { get; set; }
+    /// <summary>CountedClosingBalance - ExpectedClosingBalance. Positivo = sobra, negativo = falta.</summary>
+    public decimal Difference { get; set; }
+    public DateTime ClosedAt { get; set; }
+}
+
+/// <summary>
 /// Fired when an invoice is approved/locked.
 /// → AccountingService generates journal entry (430/700/477/4751)
 /// </summary>
@@ -25,6 +66,12 @@ public class InvoiceApprovedEvent : IDomainEvent
     public Guid? ClientId { get; set; }
     public DateTime IssueDate { get; set; }
 
+    /// <summary>
+    /// Set when the billing invoice was created from a Sales customer invoice.
+    /// Stock is already decremented on delivery in that flow (ADR-0018 #66).
+    /// </summary>
+    public Guid? SalesOrderId { get; set; }
+
     // Inventory integration
     public List<InvoiceLineEventDto> Lines { get; set; } = new();
 }
@@ -34,6 +81,18 @@ public class InvoiceLineEventDto
     public Guid? ProductId { get; set; }
     public decimal Quantity { get; set; }
     public decimal UnitPrice { get; set; }
+}
+
+/// <summary>
+/// Fired when an expense document is uploaded via public QR/token.
+/// → CRM: ActivityLog on ExpenseUpload
+/// </summary>
+public class ExpenseUploadCreatedEvent : IDomainEvent
+{
+    public Guid UploadId { get; set; }
+    public Guid CompanyId { get; set; }
+    public string FileName { get; set; } = string.Empty;
+    public string? Comment { get; set; }
 }
 
 /// <summary>
@@ -81,6 +140,18 @@ public class PaymentReceivedEvent : IDomainEvent
     public DateTime PaymentDate { get; set; }
     /// <summary>"bank" | "cash" | "card" | "transfer"</summary>
     public string PaymentMethod { get; set; } = "bank";
+}
+
+/// <summary>
+/// Fired by StripeService (core, no reference to Billing) when a Stripe Checkout
+/// Session for a one-off invoice payment completes (ADR-0018 #39). Published instead of
+/// calling Billing's MarkPaidCommand directly, to avoid Erp.Infrastructure depending on
+/// Erp.Modules.Billing.Application (same pattern as CompanyCreatedEvent/SeedChartOfAccountsHandler).
+/// → Billing: MarkInvoicePaidFromStripeHandler sends MarkPaidCommand (PaymentMethod = "card").
+/// </summary>
+public class StripeInvoiceCheckoutCompletedEvent : IDomainEvent
+{
+    public Guid InvoiceId { get; set; }
 }
 
 // ── CRM Domain Events ─────────────────────────────────────────────────────────
@@ -201,4 +272,83 @@ public class QuoteConvertedToInvoiceEvent : IDomainEvent
     public Guid? ClientId       { get; set; }
     public decimal TotalAmount  { get; set; }
     public DateTime OccurredOn  { get; } = DateTime.UtcNow;
+}
+
+// ── Purchasing / Sales → Inventory ────────────────────────────────────────────
+
+/// <summary>
+/// Fired when a supplier invoice passes three-way match (Purchasing).
+/// → Accounting: registra asiento de compra (600/472/410), mismo patrón que ExpenseApprovedEvent.
+/// </summary>
+public class SupplierInvoiceCreatedEvent : IDomainEvent
+{
+    public Guid SupplierInvoiceId { get; set; }
+    public Guid CompanyId { get; set; }
+    public Guid PurchaseOrderId { get; set; }
+    public string InvoiceNumber { get; set; } = string.Empty;
+    public decimal TaxBase { get; set; }
+    public decimal VATAmount { get; set; }
+    public decimal Total { get; set; }
+    public DateTime InvoiceDate { get; set; }
+}
+
+/// <summary>
+/// Fired when goods are received against a purchase order.
+/// → Inventory: increment stock for received products.
+/// </summary>
+public class GoodsReceiptCreatedEvent : IDomainEvent
+{
+    public Guid GoodsReceiptId { get; set; }
+    public Guid CompanyId { get; set; }
+    public string ReceiptNumber { get; set; } = string.Empty;
+    public List<StockLineEventDto> Lines { get; set; } = new();
+}
+
+/// <summary>
+/// Fired when a delivery note is created for a sales order.
+/// → Inventory: decrement stock for shipped products.
+/// </summary>
+public class DeliveryNoteCreatedEvent : IDomainEvent
+{
+    public Guid DeliveryNoteId { get; set; }
+    public Guid CompanyId { get; set; }
+    public string DeliveryNumber { get; set; } = string.Empty;
+    public List<StockLineEventDto> Lines { get; set; } = new();
+}
+
+public class StockLineEventDto
+{
+    public Guid? ProductId { get; set; }
+    public decimal Quantity { get; set; }
+    public decimal UnitCost { get; set; }
+}
+
+// ── Crm ↔ Billing: Servicios contratados por cliente (ADR-0018 #42f) ──────────
+
+/// <summary>
+/// Fired by ContractedServiceBillingJob (Crm) when a ClientContractedService's
+/// NextBillingDate is due.
+/// → Billing: genera la factura recurrente (GenerateRecurringServiceInvoiceHandler).
+/// </summary>
+public class ClientServiceDueForBillingEvent : IDomainEvent
+{
+    public Guid ClientContractedServiceId { get; set; }
+    public Guid ClientId { get; set; }
+    public Guid CompanyId { get; set; }
+    public string ServiceName { get; set; } = string.Empty;
+    public decimal Price { get; set; }
+    public decimal TaxRate { get; set; }
+    public DateTime PeriodStart { get; set; }
+}
+
+/// <summary>
+/// Fired by Billing after successfully creating the recurring invoice for a
+/// ClientServiceDueForBillingEvent.
+/// → Crm: avanza NextBillingDate/LastInvoiceId del contrato (AdvanceContractedServiceBillingHandler).
+/// </summary>
+public class RecurringServiceInvoiceGeneratedEvent : IDomainEvent
+{
+    public Guid ClientContractedServiceId { get; set; }
+    public Guid InvoiceId { get; set; }
+    public Guid CompanyId { get; set; }
 }

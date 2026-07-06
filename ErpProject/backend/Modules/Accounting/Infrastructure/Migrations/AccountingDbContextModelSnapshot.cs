@@ -23,7 +23,7 @@ namespace Erp.Modules.Accounting.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("Erp.Domain.Entities.Accounting.Account", b =>
+            modelBuilder.Entity("Erp.Modules.Accounting.Domain.Entities.Account", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -49,7 +49,7 @@ namespace Erp.Modules.Accounting.Infrastructure.Migrations
                     b.ToTable("Accounts", "accounting");
                 });
 
-            modelBuilder.Entity("Erp.Domain.Entities.Accounting.DeferredEntry", b =>
+            modelBuilder.Entity("Erp.Modules.Accounting.Domain.Entities.DeferredEntry", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -113,7 +113,7 @@ namespace Erp.Modules.Accounting.Infrastructure.Migrations
                     b.ToTable("DeferredEntries", "accounting");
                 });
 
-            modelBuilder.Entity("Erp.Domain.Entities.Accounting.FiscalPeriod", b =>
+            modelBuilder.Entity("Erp.Modules.Accounting.Domain.Entities.FiscalPeriod", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -138,6 +138,9 @@ namespace Erp.Modules.Accounting.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<Guid>("OpeningJournalEntryId")
+                        .HasColumnType("uuid");
+
                     b.Property<decimal>("ResultadoNeto")
                         .HasColumnType("numeric");
 
@@ -149,7 +152,7 @@ namespace Erp.Modules.Accounting.Infrastructure.Migrations
                     b.ToTable("FiscalPeriods", "accounting");
                 });
 
-            modelBuilder.Entity("Erp.Domain.Entities.Accounting.FixedAsset", b =>
+            modelBuilder.Entity("Erp.Modules.Accounting.Domain.Entities.FixedAsset", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -235,7 +238,7 @@ namespace Erp.Modules.Accounting.Infrastructure.Migrations
                     b.ToTable("FixedAssets", "accounting");
                 });
 
-            modelBuilder.Entity("Erp.Domain.Entities.Accounting.JournalEntry", b =>
+            modelBuilder.Entity("Erp.Modules.Accounting.Domain.Entities.JournalEntry", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -272,7 +275,7 @@ namespace Erp.Modules.Accounting.Infrastructure.Migrations
                     b.ToTable("JournalEntries", "accounting");
                 });
 
-            modelBuilder.Entity("Erp.Domain.Entities.Accounting.JournalEntryLine", b =>
+            modelBuilder.Entity("Erp.Modules.Accounting.Domain.Entities.JournalEntryLine", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -307,15 +310,15 @@ namespace Erp.Modules.Accounting.Infrastructure.Migrations
                     b.ToTable("JournalEntryLines", "accounting");
                 });
 
-            modelBuilder.Entity("Erp.Domain.Entities.Accounting.JournalEntryLine", b =>
+            modelBuilder.Entity("Erp.Modules.Accounting.Domain.Entities.JournalEntryLine", b =>
                 {
-                    b.HasOne("Erp.Domain.Entities.Accounting.Account", "Account")
+                    b.HasOne("Erp.Modules.Accounting.Domain.Entities.Account", "Account")
                         .WithMany()
                         .HasForeignKey("AccountId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("Erp.Domain.Entities.Accounting.JournalEntry", "JournalEntry")
+                    b.HasOne("Erp.Modules.Accounting.Domain.Entities.JournalEntry", "JournalEntry")
                         .WithMany("JournalEntryLines")
                         .HasForeignKey("JournalEntryId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -326,7 +329,7 @@ namespace Erp.Modules.Accounting.Infrastructure.Migrations
                     b.Navigation("JournalEntry");
                 });
 
-            modelBuilder.Entity("Erp.Domain.Entities.Accounting.JournalEntry", b =>
+            modelBuilder.Entity("Erp.Modules.Accounting.Domain.Entities.JournalEntry", b =>
                 {
                     b.Navigation("JournalEntryLines");
                 });

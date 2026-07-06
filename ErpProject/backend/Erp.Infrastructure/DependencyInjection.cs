@@ -1,9 +1,13 @@
+using Erp.Application.Common.Certificates;
 using Erp.Application.Common.Interfaces;
 using Erp.Application.Features.Auth.Commands;
+using Erp.Application.Options;
+using Erp.Infrastructure.Automation;
 using Erp.Infrastructure.Data;
 using Erp.Infrastructure.Messaging;
 using Erp.Infrastructure.Security;
 using Erp.Infrastructure.Services;
+using Erp.Infrastructure.Services.Ai;
 using Erp.Infrastructure.Services.Sii;
 using Erp.Infrastructure.Services.Storage;
 using Microsoft.Extensions.Configuration;
@@ -25,6 +29,7 @@ public static class DependencyInjection
             .BindConfiguration(StripeOptions.SectionName)
             .ValidateDataAnnotations()
             .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<StripeOptions>, StripeOptionsValidator>();
 
         // Email: SMTP transactional email.
         // Production env vars: Email__Host, Email__Port, Email__Username, Email__Password,
@@ -39,6 +44,34 @@ public static class DependencyInjection
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<Erp.Application.Common.Interfaces.IPortalUrlProvider, PortalUrlProvider>();
 
+        // AI (#40): LLM OpenAI-compatible, deshabilitado por defecto.
+        services.AddOptions<AiOptions>().BindConfiguration(AiOptions.SectionName);
+        services.AddHttpClient<OpenAiCompatibleExpenseAiAssistant>();
+        services.AddScoped<DisabledExpenseAiAssistant>();
+        services.AddScoped<IExpenseAiAssistant>(sp =>
+        {
+            var opts = sp.GetRequiredService<IOptions<AiOptions>>().Value;
+            return opts.Enabled && !string.IsNullOrWhiteSpace(opts.ApiKey)
+                ? sp.GetRequiredService<OpenAiCompatibleExpenseAiAssistant>()
+                : sp.GetRequiredService<DisabledExpenseAiAssistant>();
+        });
+
+        // Web Push (#42): VAPID, deshabilitado por defecto; email como fallback.
+        services.AddOptions<WebPushOptions>().BindConfiguration(WebPushOptions.SectionName);
+        services.AddScoped<DisabledWebPushService>();
+        services.AddScoped<WebPushService>();
+        services.AddScoped<IWebPushService>(sp =>
+        {
+            var opts = sp.GetRequiredService<IOptions<WebPushOptions>>().Value;
+            return opts.Enabled
+                && !string.IsNullOrWhiteSpace(opts.VapidPublicKey)
+                && !string.IsNullOrWhiteSpace(opts.VapidPrivateKey)
+                ? sp.GetRequiredService<WebPushService>()
+                : sp.GetRequiredService<DisabledWebPushService>();
+        });
+
+        services.AddOptions<PlatformOptions>().BindConfiguration(PlatformOptions.SectionName);
+
         services.AddScoped<IJwtProvider, JwtProvider>();
         services.AddScoped<IApplicationDbContext>(provider => provider.GetRequiredService<ErpDbContext>());
         services.AddScoped<Erp.Application.Common.Interfaces.ILicensingDbContext>(
@@ -47,26 +80,39 @@ public static class DependencyInjection
         // IAccountingDbContext, IExpensesDbContext) are now registered by each module's
         // own Infrastructure DI (AddBillingInfrastructure, AddCrmInfrastructure, etc.).
         services.AddScoped<IPlanLimitService, PlanLimitService>();
+        services.AddScoped<ICompanyMembershipLimitService, CompanyMembershipLimitService>();
+        services.AddScoped<IGestoriaBillingBreakdownService, GestoriaBillingBreakdownService>();
         services.AddScoped<OutboxProcessorJob>();
         services.AddScoped<ITotpService, TotpService>();
         services.AddScoped<StripeService>();
+        services.AddScoped<ISubscriptionBillingService>(sp => sp.GetRequiredService<StripeService>());
+        services.AddScoped<IInvoicePaymentGateway>(sp => sp.GetRequiredService<StripeService>());
 
         // ABAC: Permission service (Redis-cached, role+user resolution)
         services.AddScoped<IPermissionService, PermissionService>();
+        services.AddScoped<IApprovalThresholdService, ApprovalThresholdService>();
 
         // ABAC: Current user accessor (reads UserId from JWT via IHttpContextAccessor)
         services.AddScoped<IHttpContextCurrentUserAccessor, HttpContextCurrentUserAccessor>();
+        services.AddScoped<Interceptors.AuditSaveChangesInterceptor>();
 
         // ABAC: MVC filter (scoped so it can inject IPermissionService)
         services.AddScoped<AbacAuthorizationFilter>();
 
+        // Module licensing: MVC filter (scoped so it can inject IAuthorizationService).
+        // Registered as concrete type (not just IAsyncAuthorizationFilter) so
+        // options.Filters.AddService<ModuleAuthorizationFilter>() can resolve it —
+        // see ADR-0018 #42c: this registration was previously missing, making
+        // [RequiredModule] a dead attribute despite being applied to some controllers.
+        services.AddScoped<ModuleAuthorizationFilter>();
+
         // SII: XML generation, XAdES-BES signing, AEAT SOAP submission
         services.AddScoped<SiiXmlGenerator>();
+        services.AddScoped<ISiiSigningService, SiiSigningService>();
         services.AddScoped<SiiSigningService>();
         services.AddScoped<SiiSubmissionService>();
 
-        // VERI*FACTU (RD 1007/2023): XML registro TIKE + envío (distinto de SII)
-        services.AddScoped<VerifactuXmlGenerator>();
+        // VERI*FACTU (RD 1007/2023): envío (generador en Billing.Infrastructure)
         services.AddScoped<VerifactuSubmissionService>();
 
         // SII: named HTTP client with mTLS + retry (x3 exponential) + circuit breaker
@@ -83,8 +129,7 @@ public static class DependencyInjection
                 var certPass = cfg["Sii:CertPass"];
                 if (!string.IsNullOrEmpty(certPath) && File.Exists(certPath))
                 {
-                    var cert = new X509Certificate2(certPath, certPass,
-                        X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.EphemeralKeySet);
+                    var cert = Pkcs12CertificateLoader.Load(certPath, certPass);
                     handler.ClientCertificates.Add(cert);
                     handler.ClientCertificateOptions = ClientCertificateOption.Manual;
                 }
@@ -111,6 +156,7 @@ public static class DependencyInjection
             .ValidateOnStart();
         services.AddScoped<IVerifactuService, VerifactuService>();
         services.AddScoped<IVerifactuSubmissionService, VerifactuSubmissionService>();
+        services.AddSingleton<IVerifactuModeSettings, VerifactuModeSettings>();
 
         // RL-4: Almacenamiento de archivos sobre MinIO/S3 (cifrado en reposo)
         // Config: Storage:Endpoint, Storage:AccessKey, Storage:SecretKey, Storage:UseSSL
@@ -128,6 +174,10 @@ public static class DependencyInjection
         // Calendario fiscal: generación de eventos y recordatorios
         services.AddScoped<IFiscalCalendarService, FiscalCalendarService>();
         services.AddScoped<FiscalReminderJob>();
+        services.AddScoped<RuleEvaluatorJob>();
+        services.AddScoped<Erp.Infrastructure.Jobs.ProactiveNotificationsJob>();
+        services.AddScoped<IGestoriaDashboardDataQuery, GestoriaDashboardDataQuery>();
+        services.AddScoped<RealtimeRuleEvaluator>();
 
         return services;
     }

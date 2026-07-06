@@ -1,3 +1,4 @@
+using Erp.Application.Common.Interfaces;
 using Erp.Modules.Purchasing.Application.Interfaces;
 using Erp.Modules.Purchasing.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -15,11 +16,13 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("DefaultConnection missing.");
 
-        services.AddDbContext<PurchasingDbContext>(options =>
+        services.AddDbContext<PurchasingDbContext>((sp, options) =>
             options.UseNpgsql(connectionString)
+               .AddInterceptors(sp.GetRequiredService<Erp.Infrastructure.Interceptors.AuditSaveChangesInterceptor>())
                .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
 
         services.AddScoped<IPurchasingDbContext>(p => p.GetRequiredService<PurchasingDbContext>());
+        services.AddScoped<IAutomationPurchasingQuery, Services.AutomationPurchasingQuery>();
 
         return services;
     }

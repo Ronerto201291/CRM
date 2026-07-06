@@ -1,5 +1,7 @@
+using Erp.Application.Common.Interfaces;
 using Erp.Modules.Payroll.Application.Interfaces;
 using Erp.Modules.Payroll.Infrastructure.Data;
+using Erp.Modules.Payroll.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,11 +17,14 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("DefaultConnection missing.");
 
-        services.AddDbContext<PayrollDbContext>(options =>
+        services.AddDbContext<PayrollDbContext>((sp, options) =>
             options.UseNpgsql(connectionString)
-                .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
+               .AddInterceptors(sp.GetRequiredService<Erp.Infrastructure.Interceptors.AuditSaveChangesInterceptor>())
+               .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
 
         services.AddScoped<IPayrollDbContext>(p => p.GetRequiredService<PayrollDbContext>());
+        services.AddScoped<IAutomationPayrollQuery, AutomationPayrollQuery>();
+        services.AddSingleton<IPayrollPayslipPdfService, PayrollPayslipPdfService>();
         return services;
     }
 }

@@ -1,4 +1,4 @@
-using Erp.Domain.Entities.Accounting;
+using Erp.Modules.Accounting.Domain.Entities;
 
 namespace Erp.Infrastructure.Validators;
 

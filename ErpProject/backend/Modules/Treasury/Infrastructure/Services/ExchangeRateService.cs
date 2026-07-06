@@ -6,12 +6,6 @@ using Microsoft.Extensions.Logging;
 
 namespace Erp.Modules.Treasury.Infrastructure.Services;
 
-public interface IExchangeRateService
-{
-    Task<decimal> GetRateAsync(string from, string to, CancellationToken ct = default);
-    Task RefreshRatesAsync(CancellationToken ct = default);
-}
-
 public class ExchangeRateService : IExchangeRateService
 {
     private readonly ITreasuryDbContext _ctx;
@@ -54,44 +48,82 @@ public class ExchangeRateService : IExchangeRateService
     public async Task RefreshRatesAsync(CancellationToken ct = default)
     {
         var tenantId = _tenantContext.TenantId;
-        if (tenantId == null) return;
+        if (tenantId == null)
+        {
+            _logger.LogWarning("RefreshRatesAsync skipped: no tenant context (use RefreshAllTenantsRatesAsync from background jobs).");
+            return;
+        }
 
+        await RefreshRatesForCompanyAsync(tenantId.Value, ct);
+    }
+
+    public async Task RefreshAllTenantsRatesAsync(CancellationToken ct = default)
+    {
         try
         {
-            var result = await _provider.GetRatesAsync(ct);
-            var currencies = await _ctx.Currencies
-                .Where(c => c.CompanyId == tenantId && c.IsActive)
+            var companyIds = await _ctx.Currencies
+                .IgnoreQueryFilters()
+                .Where(c => c.IsActive)
+                .Select(c => c.CompanyId)
+                .Distinct()
                 .ToListAsync(ct);
 
-            foreach (var currency in currencies)
+            if (companyIds.Count == 0)
             {
-                if (result.Rates.TryGetValue(currency.Code.ToUpperInvariant(), out var rate))
-                {
-                    currency.ExchangeRate = rate;
-                    currency.RateDate = result.Date;
-                    currency.Source = _provider.ProviderName;
-                    currency.UpdatedAt = DateTime.UtcNow;
-
-                    _ctx.ExchangeRateHistories.Add(new ExchangeRateHistory
-                    {
-                        Id = Guid.NewGuid(),
-                        CompanyId = tenantId.Value,
-                        CurrencyCode = currency.Code,
-                        Rate = rate,
-                        RateDate = result.Date,
-                        Source = _provider.ProviderName,
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow,
-                    });
-                }
+                _logger.LogInformation("ExchangeRateRefreshJob: no companies with active currencies.");
+                return;
             }
 
-            await _ctx.SaveChangesAsync(ct);
-            _logger.LogInformation("Exchange rates refreshed from {Provider} on {Date}", _provider.ProviderName, result.Date);
+            var result = await _provider.GetRatesAsync(ct);
+
+            foreach (var companyId in companyIds)
+                await ApplyRatesToCompanyAsync(companyId, result, ct);
+
+            _logger.LogInformation("Exchange rates refreshed for {Count} companies from {Provider}",
+                companyIds.Count, _provider.ProviderName);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to refresh exchange rates from {Provider}", _provider.ProviderName);
+            _logger.LogError(ex, "Failed to refresh exchange rates for all tenants");
         }
+    }
+
+    private async Task RefreshRatesForCompanyAsync(Guid companyId, CancellationToken ct)
+    {
+        var result = await _provider.GetRatesAsync(ct);
+        await ApplyRatesToCompanyAsync(companyId, result, ct);
+    }
+
+    private async Task ApplyRatesToCompanyAsync(Guid companyId, ExchangeRateResult result, CancellationToken ct)
+    {
+        var currencies = await _ctx.Currencies
+            .IgnoreQueryFilters()
+            .Where(c => c.CompanyId == companyId && c.IsActive)
+            .ToListAsync(ct);
+
+        foreach (var currency in currencies)
+        {
+            if (!result.Rates.TryGetValue(currency.Code.ToUpperInvariant(), out var rate))
+                continue;
+
+            currency.ExchangeRate = rate;
+            currency.RateDate = result.Date;
+            currency.Source = _provider.ProviderName;
+            currency.UpdatedAt = DateTime.UtcNow;
+
+            _ctx.ExchangeRateHistories.Add(new ExchangeRateHistory
+            {
+                Id = Guid.NewGuid(),
+                CompanyId = companyId,
+                CurrencyCode = currency.Code,
+                Rate = rate,
+                RateDate = result.Date,
+                Source = _provider.ProviderName,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            });
+        }
+
+        await _ctx.SaveChangesAsync(ct);
     }
 }

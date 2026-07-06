@@ -14,27 +14,77 @@
 | **OCR** | Tesseract (local) |
 | **Deploy** | Docker Compose · Nginx · Let's Encrypt |
 
-## 📦 Módulos
+## 📦 Módulos de negocio (9)
 
-- **🔐 Autenticación** — JWT + Refresh Tokens · Multi-tenant por CompanyId · Roles (Admin/Manager/Contable)
-- **👥 CRM** — Clientes · Proveedores · Contactos · Timeline de actividad
-- **🧾 Facturación** — Conforme RD 1619/2012 · Ley 11/2021 Antifraude · SHA256 hash chain · IVA 21/10/4/Exento · IRPF · Recargo equivalencia · Facturas rectificativas
-- **📊 Contabilidad** — Asientos automáticos · Libro diario · Balance · IVA soportado/repercutido
-- **📸 Smart Expense Capture** — QR único por empresa · Upload público · OCR local (Tesseract) · Auto-crear proveedor
-- **📦 Inventario** — Productos · Stock · Movimientos entrada/salida
+| Módulo | Capacidades principales |
+|--------|-------------------------|
+| **CRM** | Clientes, proveedores, contactos, leads |
+| **Billing** | Facturas, presupuestos, FacturaE, hash antifraude |
+| **Accounting** | Asientos, diario, balance, IVA, periodificaciones |
+| **Expenses** | Gastos, OCR, captura QR |
+| **Inventory** | Productos, almacenes, stock, lotes, series |
+| **Sales** | Pedidos de venta, albaranes, facturas cliente |
+| **Purchasing** | Pedidos de compra, aprobaciones |
+| **Treasury** | Bancos, conciliación, Open Banking, TPV, caja |
+| **Payroll** | Empleados, nóminas, retenciones IRPF |
 
-## 🚀 Inicio Rápido
+Además: **Fiscal** (SII, VeriFactu, modelos AEAT) y **Auth** multi-tenant con ABAC.
+
+## 🚀 Inicio Rápido (local con Docker)
 
 ```bash
-# 1. Clonar y levantar
+# 1. Clonar y preparar entorno
 git clone <repo> && cd ErpProject
-docker compose up -d
+cp .env.example .env   # rellena POSTGRES_PASSWORD y JWT_SECRET (openssl rand -base64)
 
-# 2. Acceder
-# Frontend: http://localhost:3000
-# Backend API: http://localhost:5000/swagger
-# Login: admin@devcorp.com / Roberto21$$
+# 2. Levantar stack de desarrollo (docker-compose.override.yml se carga solo)
+docker compose up -d --build
+
+# 3. Acceder
+# Frontend (nginx):  http://localhost
+# Frontend (directo): http://localhost:3000
+# Backend/Swagger:    http://localhost:8081/swagger
+# Login demo:         admin@devcorp.com / DevChangeMe2026!!
 ```
+
+> **Producción** (VPS/servidor, sin overrides de desarrollo):
+> `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build`
+
+Las migraciones EF Core (core + módulos) se aplican **automáticamente** al arrancar el backend; no hace falta ejecutarlas a mano.
+
+## 🧪 Tests y cobertura
+
+```bash
+cd ErpProject/backend && dotnet test              # ~654+ tests backend
+cd ErpProject/frontend && npm test                # ~136 Vitest
+cd ErpProject/frontend && npm run test:coverage   # Vitest + gate umbral líneas 39%
+```
+
+### Coverage gates (bloquean deploy en CI)
+
+Si la cobertura baja por debajo del umbral, **el pipeline falla** y no se construyen imágenes Docker en `main`.
+
+| Área | Umbral mínimo | Medido (jul 2026) |
+|------|---------------|-------------------|
+| Backend merged (unit+integration XPlat) | **49%** línea | ~51% |
+| Backend unit XPlat | **27%** línea | ~28.2% |
+| Backend integration XPlat | **49%** línea | ~51.2% |
+| Billing.Application | **55%** | ~59.7% |
+| Accounting.Application | **18%** | ~20.1% |
+| Erp.Infrastructure (auth) | **50%** | ~55.1% |
+| Frontend Vitest (clientes testeados) | **39%** líneas | ~53% |
+
+Umbrales en `scripts/coverage-thresholds.json`. Gate backend: `scripts/check-coverage.py`. Local:
+
+```bash
+# Backend (requiere Python 3)
+bash ErpProject/scripts/run-backend-coverage-gate.sh
+
+# Frontend
+bash ErpProject/scripts/run-frontend-coverage-gate.sh
+```
+
+Upload Codecov opcional: secret `CODECOV_TOKEN` en GitHub.
 
 ## 🏢 Multi-Tenant
 
@@ -87,6 +137,8 @@ ErpProject/
 │   └── src/app/          # Next.js App Router pages
 ├── deploy/               # Nginx, scripts de deploy/backup
 ├── docker-compose.yml
+├── docker-compose.override.yml   # local (carga automática)
+├── docker-compose.prod.yml       # producción (explícito con -f)
 └── README.md
 ```
 
@@ -95,7 +147,7 @@ ErpProject/
 | Campo | Valor |
 |-------|-------|
 | Email | `admin@devcorp.com` |
-| Password | `Roberto21$$` |
+| Password | `DevChangeMe2026!!` |
 | Empresa | DevCorp S.A. |
 
 ---

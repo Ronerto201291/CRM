@@ -72,11 +72,20 @@ namespace Erp.Modules.Billing.Infrastructure.Migrations
                     b.Property<string>("CompanyNif")
                         .HasColumnType("text");
 
+                    b.Property<string>("CurrencyCode")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character(3)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("DueDate")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("ExchangeRateToEur")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
 
                     b.Property<int>("FiscalYear")
                         .HasColumnType("integer");
@@ -114,6 +123,10 @@ namespace Erp.Modules.Billing.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("PreviousHash")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PublicViewToken")
+                        .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<DateTime?>("RectificationPeriodFrom")
@@ -154,6 +167,9 @@ namespace Erp.Modules.Billing.Infrastructure.Migrations
                     b.Property<decimal>("Total")
                         .HasColumnType("numeric");
 
+                    b.Property<decimal>("TotalEur")
+                        .HasColumnType("numeric");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -163,9 +179,27 @@ namespace Erp.Modules.Billing.Infrastructure.Migrations
                     b.Property<string>("VerifactuQrUrl")
                         .HasColumnType("text");
 
+                    b.Property<bool>("VerifactuRealtimeSubmission")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("VerifactuSubmittedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("VerifactuAnulacionHuella")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("VerifactuAnulacionAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("VerifactuAnulacionSubmittedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CompanyId");
+
+                    b.HasIndex("PublicViewToken")
+                        .IsUnique();
 
                     b.HasIndex("RectifiedInvoiceId");
 
@@ -485,6 +519,55 @@ namespace Erp.Modules.Billing.Infrastructure.Migrations
                     b.HasIndex("QuoteId");
 
                     b.ToTable("QuoteStatusHistory", "billing");
+                });
+
+            modelBuilder.Entity("Erp.Modules.Billing.Domain.Entities.VerifactuSubmissionLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EstadoEnvio")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("InvoiceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("InvoiceNumber")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsProduction")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("RawResponse")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SubmissionType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("SubmittedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Success")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId", "InvoiceId");
+
+                    b.ToTable("VerifactuSubmissionLogs", "billing");
                 });
 
             modelBuilder.Entity("Erp.Modules.Billing.Domain.Entities.Invoice", b =>

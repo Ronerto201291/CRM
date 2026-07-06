@@ -12,6 +12,8 @@ public class CustomerInvoiceDetailDto
     public Guid Id { get; set; }
     public Guid CompanyId { get; set; }
     public Guid SalesOrderId { get; set; }
+    public Guid? BillingInvoiceId { get; set; }
+    public string? BillingInvoiceNumber { get; set; }
     public string Number { get; set; } = string.Empty;
     public DateTime InvoiceDate { get; set; }
     public decimal SubTotal { get; set; }
@@ -28,11 +30,6 @@ public class CustomerInvoiceLineDto
     public Guid? ProductId { get; set; }
     public decimal BilledQuantity { get; set; }
     public decimal UnitPrice { get; set; }
-    public decimal TaxRate { get; set; }
-    public decimal TaxAmount { get; set; }
-    public string TipoOperacion { get; set; } = "Nacional";
-    public decimal SurchargeRate { get; set; }
-    public decimal SurchargeAmount { get; set; }
     public decimal LineTotal { get; set; }
 }
 
@@ -55,6 +52,8 @@ public class GetCustomerInvoiceQueryHandler : IRequestHandler<GetCustomerInvoice
             Id = invoice.Id,
             CompanyId = invoice.CompanyId,
             SalesOrderId = invoice.SalesOrderId,
+            BillingInvoiceId = invoice.BillingInvoiceId,
+            BillingInvoiceNumber = invoice.BillingInvoiceNumber,
             Number = invoice.Number,
             InvoiceDate = invoice.InvoiceDate,
             SubTotal = invoice.SubTotal,
@@ -68,11 +67,6 @@ public class GetCustomerInvoiceQueryHandler : IRequestHandler<GetCustomerInvoice
                 ProductId = l.ProductId,
                 BilledQuantity = l.BilledQuantity,
                 UnitPrice = l.UnitPrice,
-                TaxRate = l.TaxRate,
-                TaxAmount = l.TaxAmount,
-                TipoOperacion = l.TipoOperacion,
-                SurchargeRate = l.SurchargeRate,
-                SurchargeAmount = l.SurchargeAmount,
                 LineTotal = l.LineTotal,
             }).ToList()
         };

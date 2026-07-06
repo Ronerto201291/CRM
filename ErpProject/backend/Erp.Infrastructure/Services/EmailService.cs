@@ -30,9 +30,27 @@ public class EmailService : IEmailService
     // ─── Public API ──────────────────────────────────────────────────────────────
 
     /// <summary>Envía un email genérico HTML (usado para recordatorios fiscales).</summary>
-    public async Task SendAsync(string to, string subject, string htmlBody, CancellationToken ct = default)
+    public Task SendAsync(string to, string subject, string htmlBody, CancellationToken ct = default)
+        => SendAsync(to, to, subject, htmlBody, ct);
+
+    public Task SendWithAttachmentsAsync(
+        string to,
+        string subject,
+        string htmlBody,
+        IReadOnlyList<EmailAttachment> attachments,
+        CancellationToken ct = default)
     {
-        await SendAsync(to, to, subject, htmlBody, ct);
+        var parts = attachments.Select(a => new MimePart(
+                a.ContentType.Split('/').ElementAtOrDefault(0) ?? "application",
+                a.ContentType.Split('/').ElementAtOrDefault(1) ?? "octet-stream")
+            {
+                Content = new MimeContent(new MemoryStream(a.Content)),
+                ContentDisposition = new ContentDisposition(ContentDisposition.Attachment),
+                ContentTransferEncoding = ContentEncoding.Base64,
+                FileName = a.FileName,
+            }).Cast<MimePart>().ToList();
+
+        return SendAsync(to, to, subject, htmlBody, ct, parts);
     }
 
     public Task SendInvoiceAsync(
@@ -108,8 +126,16 @@ public class EmailService : IEmailService
         string subject, string htmlBody,
         CancellationToken ct,
         MimePart? attachment = null)
+        => await SendAsync(toEmail, toName, subject, htmlBody, ct,
+            attachment is null ? null : [attachment]);
+
+    private async Task SendAsync(
+        string toEmail, string toName,
+        string subject, string htmlBody,
+        CancellationToken ct,
+        IReadOnlyList<MimePart>? attachments)
     {
-        var message = BuildMessage(toEmail, toName, subject, htmlBody, attachment);
+        var message = BuildMessage(toEmail, toName, subject, htmlBody, attachments);
 
         try
         {
@@ -136,7 +162,7 @@ public class EmailService : IEmailService
     private MimeMessage BuildMessage(
         string toEmail, string toName,
         string subject, string htmlBody,
-        MimePart? attachment)
+        IReadOnlyList<MimePart>? attachments)
     {
         var message = new MimeMessage();
         message.From.Add(new MailboxAddress(_opt.FromName, _opt.FromAddress));
@@ -145,7 +171,7 @@ public class EmailService : IEmailService
 
         var bodyPart = new TextPart("html") { Text = htmlBody };
 
-        if (attachment is null)
+        if (attachments is null || attachments.Count == 0)
         {
             message.Body = bodyPart;
         }
@@ -153,7 +179,8 @@ public class EmailService : IEmailService
         {
             var multipart = new Multipart("mixed");
             multipart.Add(bodyPart);
-            multipart.Add(attachment);
+            foreach (var attachment in attachments)
+                multipart.Add(attachment);
             message.Body = multipart;
         }
 

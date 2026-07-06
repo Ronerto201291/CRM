@@ -1,100 +1,126 @@
 "use client";
-import React, { useState } from "react";
+
+import { useCallback, useEffect, useState } from "react";
+import PageContainer from "@/components/PageContainer";
+
+interface InvoiceRow {
+  id: string;
+  number: string;
+  issueDate: string;
+  status: string;
+  isLocked: boolean;
+  total: number;
+  verifactuSubmittedAt?: string | null;
+}
 
 export default function FacturaEPage() {
-  const [documents] = useState([
-    { id: 1, number: "FE-2025-001", status: "Signed", date: "2025-01-14", siiCompliant: true },
-    { id: 2, number: "FE-2025-002", status: "Submitted", date: "2025-01-13", siiCompliant: true },
-  ]);
+  const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/proxy/invoices");
+      if (!res.ok) throw new Error("Error al cargar facturas");
+      const data = await res.json();
+      const rows = (Array.isArray(data) ? data : data.items ?? [])
+        .filter((i: InvoiceRow) => i.isLocked)
+        .map((i: InvoiceRow) => ({
+          id: i.id,
+          number: i.number,
+          issueDate: i.issueDate,
+          status: i.status,
+          isLocked: i.isLocked,
+          total: i.total,
+          verifactuSubmittedAt: (i as { verifactuSubmittedAt?: string }).verifactuSubmittedAt,
+        }));
+      setInvoices(rows);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error de conexion");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const download = async (url: string, filename: string, key: string) => {
+    setBusy(key);
+    setError(null);
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Error al descargar el archivo");
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(a.href);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error de descarga");
+    } finally {
+      setBusy(null);
+    }
+  };
 
   return (
-    <div className="p-6">
-      <h1 className="text-3xl font-bold mb-6">0.4 FacturaE / VERI*FACTU</h1>
+    <PageContainer>
+      <h1 className="page-title mb-4">FacturaE / VERI*FACTU</h1>
+      {error && <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div>}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div className="border rounded-lg p-4 bg-blue-50">
-          <p className="text-gray-600 text-sm">FacturaE 3.2.2</p>
-          <p className="text-sm">Formato electrónico normalizado</p>
-        </div>
-        <div className="border rounded-lg p-4 bg-green-50">
-          <p className="text-gray-600 text-sm">RD 1007/2023</p>
-          <p className="text-sm">VERI*FACTU Compliance</p>
-        </div>
-        <div className="border rounded-lg p-4 bg-purple-50">
-          <p className="text-gray-600 text-sm">Firma Digital</p>
-          <p className="text-sm">XAdES-BES incluida</p>
-        </div>
-      </div>
-
-      <div className="border rounded-lg p-4 mb-6">
-        <h2 className="text-xl font-semibold mb-4">Documentos FacturaE Generados</h2>
+      {loading ? (
+        <p className="text-sm text-gray-500">Cargando facturas bloqueadas...</p>
+      ) : invoices.length === 0 ? (
+        <p className="text-sm text-gray-500">No hay facturas bloqueadas para generar FacturaE.</p>
+      ) : (
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-gray-200">
-              <th className="border p-2 text-left">Documento</th>
+            <tr className="bg-gray-100">
+              <th className="border p-2 text-left">Factura</th>
               <th className="border p-2 text-left">Fecha</th>
-              <th className="border p-2">Estado</th>
+              <th className="border p-2 text-right">Total</th>
               <th className="border p-2">VERI*FACTU</th>
               <th className="border p-2">Acciones</th>
             </tr>
           </thead>
           <tbody>
-            {documents.map((d) => (
-              <tr key={d.id}>
-                <td className="border p-2 font-mono">{d.number}</td>
-                <td className="border p-2">{d.date}</td>
-                <td className="border p-2">
-                  <span className={`px-2 py-1 rounded text-white text-xs ${
-                    d.status === "Submitted" ? "bg-green-600" : "bg-blue-600"
-                  }`}>
-                    {d.status}
-                  </span>
+            {invoices.map((inv) => (
+              <tr key={inv.id}>
+                <td className="border p-2 font-mono">{inv.number}</td>
+                <td className="border p-2">{new Date(inv.issueDate).toLocaleDateString("es-ES")}</td>
+                <td className="border p-2 text-right">
+                  {inv.total.toLocaleString("es-ES", { style: "currency", currency: "EUR" })}
                 </td>
                 <td className="border p-2">
-                  {d.siiCompliant && <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-xs">? Compliant</span>}
+                  {inv.verifactuSubmittedAt ? "Enviado" : "Pendiente"}
                 </td>
-                <td className="border p-2 text-xs space-x-1">
-                  <button className="text-blue-600 hover:underline">Descargar XML</button>
-                  <button className="text-green-600 hover:underline">Ver PDF</button>
+                <td className="border p-2 space-x-2 text-xs">
+                  <button
+                    className="text-blue-600 hover:underline"
+                    disabled={!!busy}
+                    onClick={() => download(`/api/proxy/v1/billing/facturae/${inv.id}`, `${inv.number}.xml`, `xml-${inv.id}`)}
+                  >
+                    XML FacturaE
+                  </button>
+                  <button
+                    className="text-green-600 hover:underline"
+                    disabled={!!busy}
+                    onClick={() => download(`/api/proxy/invoices/${inv.id}/pdf`, `${inv.number}.pdf`, `pdf-${inv.id}`)}
+                  >
+                    PDF
+                  </button>
+                  <a className="text-purple-600 hover:underline" href="/verifactu">VERI*FACTU</a>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="border rounded-lg p-4">
-          <h3 className="font-bold mb-3">Representación Gráfica</h3>
-          <ul className="text-sm space-y-2">
-            <li>? PDF con QR de factura</li>
-            <li>? HTML interactivo</li>
-            <li>? Firma digital visible</li>
-            <li>? Código de barras VERI*FACTU</li>
-          </ul>
-        </div>
-        <div className="border rounded-lg p-4">
-          <h3 className="font-bold mb-3">Seguridad & Cumplimiento</h3>
-          <ul className="text-sm space-y-2">
-            <li>? Firma XAdES-BES</li>
-            <li>? Hash SHA256</li>
-            <li>? Certificado FNMT</li>
-            <li>? RD 1007/2023 compliant</li>
-          </ul>
-        </div>
-      </div>
-
-      <div className="mt-6 flex gap-4">
-        <button className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-          Generar FacturaE
-        </button>
-        <button className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
-          Firmar Digitalmente
-        </button>
-        <button className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700">
-          Enviar a VERI*FACTU
-        </button>
-      </div>
-    </div>
+      )}
+    </PageContainer>
   );
 }

@@ -13,6 +13,11 @@ public class Supplier : AuditableEntity
     public string? BankAccount { get; set; }
     public bool IsActive { get; set; } = true;
 
+    // Portal de subida de facturas de proveedor (ADR-0018 #39, mismo patrón que
+    // Company.PublicUploadToken/QrUploadEnabled para gastos)
+    public string PublicUploadToken { get; set; } = Guid.NewGuid().ToString("N");
+    public bool PublicUploadEnabled { get; set; } = true;
+
     public ICollection<ActivityLog> Activities { get; set; } = new List<ActivityLog>();
 
     // RGPD — derecho de supresión (pseudoanonimización)
